@@ -92,7 +92,7 @@ import {
   studioLabels,
   SHORT_CAPTION_EN,
 } from './fixtures';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 
 /**
  * The interactive half of the design showcase.
@@ -1159,3 +1159,12 @@ const SAMPLE_ROWS = [
     roleAr: 'محلل',
   },
 ];
+
+/**
+ * The component gallery's door to `FeatureCard`: the prototype components may
+ * be named in this file only (tests/unit/design-system.test.ts), so the gallery
+ * renders it through this wrapper.
+ */
+export function GalleryFeatureCard(props: ComponentProps<typeof FeatureCard>) {
+  return <FeatureCard {...props} />;
+}

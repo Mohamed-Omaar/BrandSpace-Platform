@@ -2,6 +2,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import importX from 'eslint-plugin-import-x';
+import { STYLE_SYNTAX_RULE, styleSyntaxPlugin } from './scripts/style/style-rules.mjs';
 
 /**
  * Module boundary matrix — docs/ARCHITECTURE.md §4.1.
@@ -385,6 +386,18 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': ['error', { paths: [], patterns: [] }],
     },
+  },
+
+  // --- Hard-coded style values: REPORT ONLY (design-system programme) ------
+  // Warnings, never errors, until step S6: the counts are held by the style
+  // ratchet (tests/unit/style-ratchet.test.ts), which fails only if one goes
+  // up. A second name for the core rule, so the `new Date()` error above keeps
+  // its severity — see scripts/style/style-rules.mjs.
+  {
+    files: ['apps/*/src/**/*.{ts,tsx}', 'packages/ui/src/**/*.{ts,tsx}'],
+    ignores: ['packages/ui/src/tokens.ts', '**/*.test.{ts,tsx}'],
+    plugins: { style: styleSyntaxPlugin },
+    rules: { 'style/no-restricted-syntax': STYLE_SYNTAX_RULE },
   },
 
   // --- Config, scripts and tests are allowed to be noisier ----------------
