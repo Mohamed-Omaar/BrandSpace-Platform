@@ -276,6 +276,30 @@ describe('the retired legacy blue is defined but never used', () => {
   });
 });
 
+describe('no stylesheet consumes the retired legacy blue', () => {
+  /**
+   * D-61, for the stylesheets. Since S3 the stylesheets reference tokens rather
+   * than literals, and `--bs-brand-blue-ink` happens to be white: a codemod
+   * matching by value alone once picked it for 154 white declarations. Only
+   * tokens.css's own `:root` definitions may name the family.
+   */
+  const SHEETS = [
+    'packages/ui/src/tokens.css',
+    'packages/ui/src/prototype.css',
+    'packages/ui/src/entry.css',
+    'packages/ui/src/content-studio.css',
+    'packages/ui/src/brand-brain.css',
+  ];
+
+  it.each(SHEETS)('%s uses no --bs-brand-blue* token', (file) => {
+    expect(read(file).match(/var\(--bs-brand-blue[a-z-]*\)/g) ?? []).toEqual([]);
+  });
+
+  it('the family is still defined, so the decisions that name it stay readable', () => {
+    expect(read('packages/ui/src/tokens.css')).toMatch(/--bs-brand-blue: #00adee;/);
+  });
+});
+
 describe('every form control carries the class that makes it visible', () => {
   const controlPattern = /<(input|textarea|select)\b((?:[^<>]|\{[^{}]*\})*?)\/?>/gs;
 

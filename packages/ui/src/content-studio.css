@@ -126,7 +126,7 @@
 }
 
 .cs-tabs button.selected {
-  background: var(--bs-brand-blue-ink);
+  background: var(--bs-surface);
   box-shadow: 0 var(--bsp-px-5) var(--bsp-px-14) var(--bs-lit-000000-a05);
 }
 
@@ -156,12 +156,12 @@
 
 .cs-primary-button {
   background: var(--cs-purple);
-  color: var(--bs-brand-blue-ink);
+  color: var(--bs-surface);
 }
 
 .cs-dark-button {
   background: var(--cs-ink);
-  color: var(--bs-brand-blue-ink);
+  color: var(--bs-surface);
 }
 
 .cs-ghost-button {
@@ -269,13 +269,13 @@
   background:
     radial-gradient(circle at 75% 18%, var(--bs-lit-ffdd15-a7) 0 15%, transparent 16%),
     linear-gradient(145deg, var(--bs-lit-15121b), var(--bs-brand-purple) 78%);
-  color: var(--bs-brand-blue-ink);
+  color: var(--bs-surface);
 }
 
 .cs-gradient-c {
   background:
     radial-gradient(circle at 25% 76%, var(--bs-brand-yellow) 0 21%, transparent 22%),
-    linear-gradient(145deg, var(--bs-brand-blue-ink), var(--bs-lit-f0e5ff));
+    linear-gradient(145deg, var(--bs-surface), var(--bs-lit-f0e5ff));
 }
 
 .cs-gradient-d {
@@ -394,7 +394,7 @@
 
 .cs-channel.selected {
   background: var(--cs-ink);
-  color: var(--bs-brand-blue-ink);
+  color: var(--bs-surface);
 }
 
 .cs-form-actions {
@@ -680,7 +680,7 @@
 
 .cs-lifecycle li.current {
   background: var(--cs-purple);
-  color: var(--bs-brand-blue-ink);
+  color: var(--bs-surface);
 }
 
 .cs-draft-facts {

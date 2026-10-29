@@ -1067,7 +1067,7 @@ h4 {
  * the prototype's own and is not sticky; it is untouched.
  */
 .bs-topbar:not(.bsp-header) {
-  background: var(--bs-brand-blue-ink);
+  background: var(--bs-surface);
 }
 /*
  * Whatever scrolls under the sticky bar — the panel on a desktop, the page on
@@ -1084,7 +1084,7 @@ html:has(.bs-topbar:not(.bsp-header)) {
   inset-inline: 0;
   inset-block-start: 100%;
   block-size: var(--bsp-rem-0-75);
-  background: linear-gradient(to bottom, var(--bs-brand-blue-ink), var(--bs-lit-ffffff-a0));
+  background: linear-gradient(to bottom, var(--bs-surface), var(--bs-lit-ffffff-a0));
   pointer-events: none;
 }
 

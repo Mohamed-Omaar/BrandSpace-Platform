@@ -142,6 +142,9 @@ export function safeTokenMap(sources: Record<string, string>): Map<string, strin
   const redefined = redefinedNames(sources);
   const tokens = rootTokens(sources['packages/ui/src/tokens.css']!)
     .filter((t) => t.name.startsWith('--bs-') && !redefined.has(t.name))
+    // D-61: the legacy blue family is retired and nothing may consume it, even
+    // where its value (white, for `--bs-brand-blue-ink`) matches.
+    .filter((t) => !t.name.startsWith('--bs-brand-blue'))
     .filter((t) => colourKey(t.value) !== undefined && t.value.match(COLOUR)?.[0] === t.value);
   const map = new Map<string, string>();
   const sorted = [...tokens].sort((a, b) => rank(a.name) - rank(b.name));

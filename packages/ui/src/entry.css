@@ -549,7 +549,7 @@
   inset-inline-end: var(--bsp-px-7) !important;
   transform: none !important;
   border: 0 !important;
-  background: var(--bs-brand-blue-ink) !important;
+  background: var(--bs-surface) !important;
   border-radius: var(--bsp-px-10) !important;
   padding: 0 var(--bsp-px-12) !important;
   min-block-size: 0 !important;
@@ -586,7 +586,7 @@
   font-size: var(--bsp-fs-15) !important;
   font-weight: 800 !important;
   background: var(--bs-text-primary) !important;
-  color: var(--bs-brand-blue-ink) !important;
+  color: var(--bs-surface) !important;
   min-block-size: var(--bsp-px-56) !important;
   box-shadow: none !important;
 }
