@@ -147,7 +147,9 @@ function formRow({
             <bdi>{name}</bdi>
           </span>
           {caption ? (
-            <span style={{ fontSize: 'var(--bsp-fs-11)', color: '#8a8a92' }}>{caption}</span>
+            <span style={{ fontSize: 'var(--bsp-fs-11)', color: 'var(--bsp-faint)' }}>
+              {caption}
+            </span>
           ) : null}
         </span>
         {current ? (
@@ -413,7 +415,7 @@ export function PrototypeUserCard({
         {email ? (
           <span
             className="bsp-ltr"
-            style={{ fontSize: 'var(--bsp-fs-11)', color: '#8a8a92', textAlign: 'start' }}
+            style={{ fontSize: 'var(--bsp-fs-11)', color: 'var(--bsp-faint)', textAlign: 'start' }}
           >
             {email}
           </span>

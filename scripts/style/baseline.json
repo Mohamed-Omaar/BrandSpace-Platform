@@ -1,21 +1,18 @@
 {
   "css": {
     "packages/ui/src/brand-brain.css": {
-      "blur": 2,
       "border-width": 13,
-      "duration": 1,
       "font-size": 1,
       "letter-spacing": 8,
-      "lit-token": 82,
+      "lit-token": 71,
       "size": 4,
-      "spacing": 2,
-      "z-index": 4
+      "spacing": 2
     },
     "packages/ui/src/content-studio.css": {
       "border-width": 7,
       "font-size": 1,
       "letter-spacing": 3,
-      "lit-token": 7,
+      "lit-token": 6,
       "size": 3,
       "spacing": 1
     },
@@ -27,30 +24,23 @@
       "size": 4
     },
     "packages/ui/src/prototype.css": {
-      "blur": 8,
       "border-width": 196,
-      "duration": 57,
-      "easing": 49,
       "font-family": 3,
       "letter-spacing": 37,
-      "lit-token": 524,
+      "lit-token": 463,
       "radius": 1,
-      "shadow": 25,
+      "shadow": 23,
       "size": 53,
-      "spacing": 3,
-      "z-index": 36
+      "spacing": 3
     },
     "packages/ui/src/tokens.css": {
-      "blur": 8,
+      "blur": 3,
       "border-width": 12,
-      "easing": 1,
       "font-size": 2,
-      "lit-token": 11,
+      "lit-token": 7,
       "radius": 2,
-      "shadow": 3,
       "size": 42,
-      "spacing": 9,
-      "z-index": 5
+      "spacing": 9
     }
   },
   "ts": {
@@ -79,7 +69,7 @@
       "length": 1
     },
     "apps/admin/src/app/[locale]/console/configuration/page.tsx": {
-      "baked-token": 2,
+      "baked-token": 1,
       "inline-style": 24,
       "length": 3
     },
@@ -149,17 +139,14 @@
       "inline-style": 8
     },
     "apps/admin/src/components/simple-ui.tsx": {
-      "baked-token": 1,
       "inline-style": 14,
       "length": 1
     },
     "apps/admin/src/components/simple/ai.tsx": {
-      "baked-token": 1,
       "inline-style": 37,
       "length": 4
     },
     "apps/admin/src/components/simple/area.tsx": {
-      "baked-token": 1,
       "inline-style": 74,
       "length": 13
     },
@@ -229,7 +216,6 @@
       "inline-style": 5
     },
     "apps/dashboard/src/app/[locale]/assets/asset-library-view.tsx": {
-      "baked-token": 1,
       "inline-style": 71
     },
     "apps/dashboard/src/app/[locale]/automations/automation-form.tsx": {
@@ -319,7 +305,6 @@
       "inline-style": 1
     },
     "apps/dashboard/src/app/[locale]/creative/page.tsx": {
-      "baked-token": 1,
       "inline-style": 12,
       "numeric-style": 1
     },
@@ -327,17 +312,14 @@
       "inline-style": 6
     },
     "apps/dashboard/src/app/[locale]/design-system/components/components-client.tsx": {
-      "baked-token": 2,
       "inline-style": 83,
       "length": 1
     },
     "apps/dashboard/src/app/[locale]/design-system/components/page.tsx": {
-      "baked-token": 1,
       "inline-style": 5,
       "length": 1
     },
     "apps/dashboard/src/app/[locale]/design-system/page.tsx": {
-      "baked-token": 2,
       "inline-style": 12,
       "length": 1
     },
@@ -345,7 +327,7 @@
       "inline-style": 25
     },
     "apps/dashboard/src/app/[locale]/design-system/tokens/page.tsx": {
-      "baked-token": 4,
+      "baked-token": 1,
       "inline-style": 49,
       "length": 3
     },
@@ -395,7 +377,6 @@
       "numeric-style": 1
     },
     "apps/dashboard/src/app/[locale]/plan/page.tsx": {
-      "baked-token": 1,
       "inline-style": 58
     },
     "apps/dashboard/src/app/[locale]/publishing/page.tsx": {
@@ -443,7 +424,6 @@
       "length": 1
     },
     "apps/dashboard/src/components/notes-panel.tsx": {
-      "baked-token": 1,
       "inline-style": 29
     },
     "apps/dashboard/src/components/notes-popover.tsx": {
@@ -467,7 +447,6 @@
       "numeric-style": 1
     },
     "apps/web/src/components/app-shell.tsx": {
-      "baked-token": 1,
       "inline-style": 3,
       "length": 1
     },
@@ -478,7 +457,7 @@
       "inline-style": 3
     },
     "packages/ui/src/app-shell.tsx": {
-      "baked-token": 2,
+      "baked-token": 1,
       "colour": 4,
       "inline-style": 36,
       "length": 7
@@ -491,7 +470,6 @@
       "numeric-style": 1
     },
     "packages/ui/src/charts.tsx": {
-      "baked-token": 1,
       "inline-style": 19
     },
     "packages/ui/src/composer.tsx": {
@@ -508,12 +486,10 @@
       "inline-style": 14
     },
     "packages/ui/src/data.tsx": {
-      "baked-token": 2,
       "inline-style": 30,
       "length": 4
     },
     "packages/ui/src/design-studio.tsx": {
-      "baked-token": 1,
       "colour": 1,
       "inline-style": 42,
       "length": 4,
@@ -560,7 +536,7 @@
       "length": 1
     },
     "packages/ui/src/post-detail-drawer.tsx": {
-      "baked-token": 3,
+      "baked-token": 2,
       "colour": 1,
       "inline-style": 11
     },
@@ -568,7 +544,6 @@
       "inline-style": 1
     },
     "packages/ui/src/primitives.tsx": {
-      "baked-token": 1,
       "inline-style": 15,
       "numeric-style": 1
     },
@@ -579,12 +554,12 @@
       "inline-style": 1
     },
     "packages/ui/src/prototype-rail.tsx": {
-      "colour": 12,
+      "colour": 10,
       "inline-style": 18,
       "numeric-style": 3
     },
     "packages/ui/src/save-bar.tsx": {
-      "baked-token": 2,
+      "baked-token": 1,
       "inline-style": 5
     },
     "packages/ui/src/searchable-select.tsx": {
@@ -597,7 +572,6 @@
       "numeric-style": 6
     },
     "packages/ui/src/surfaces.tsx": {
-      "baked-token": 1,
       "inline-style": 34,
       "length": 1
     },

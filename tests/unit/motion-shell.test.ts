@@ -109,7 +109,7 @@ describe('MO4 — segmented pills', () => {
   });
 
   it('slides with clip-path only — the width/height exception is MO2’s alone', () => {
-    expect(pill).toContain('clip-path ${motionMs.seg}ms var(--bs-ease-out)');
+    expect(pill).toContain('clip-path ${scaledMs(motionMs.seg)}ms var(--bs-ease-out)');
     expect(pill).not.toMatch(/style\.(width|height)\s*=/);
     expect(pill).not.toMatch(/transition[^;]*\b(width|height)\b/);
   });

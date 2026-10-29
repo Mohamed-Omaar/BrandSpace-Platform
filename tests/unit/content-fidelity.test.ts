@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { canonicalHex, resolveColourTokens } from '../support/style-tokens';
+import {
+  canonicalDuration,
+  canonicalHex,
+  resolveColourTokens,
+  resolveS4Tokens,
+} from '../support/style-tokens';
 
 /**
  * The Content Studio stylesheet is a TRANSCRIPTION of the approved demo.
@@ -58,8 +63,12 @@ function prototypeUnits(text: string): string {
 }
 
 function normalise(text: string): string {
-  // S3: a colour token is read back as its exact colour, like a size token.
-  return canonicalHex(resolveColourTokens(prototypeUnits(text)))
+  // S3: a colour token is read back as its exact colour, like a size token;
+  // S4: so are the motion, z-index, shadow and radius-scale tokens, and a
+  // duration is compared in one unit.
+  return canonicalDuration(
+    canonicalHex(resolveColourTokens(prototypeUnits(resolveS4Tokens(text, { easings: true })))),
+  )
     .toLowerCase()
     .replace(/(^|[^0-9])\.(?=[0-9])/g, '$10.')
     .replace(/\s+/g, '');

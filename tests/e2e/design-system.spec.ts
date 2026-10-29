@@ -815,11 +815,12 @@ test.describe('the shell reproduces the demo geometry', () => {
     const shell = page.locator('.bs-shell');
     // D-468, prototype-2026-09-27 (measured from Main.dc.html at 1440×900):
     // the frame is 1400px wide, `border-radius: 34px; background:
-    // rgba(255,255,255,.93); backdrop-filter: blur(30px)`.
+    // rgba(255,255,255,.93); backdrop-filter: blur(30px)` — D-575 removed the
+    // blur (owner, S4); the translucent white stays.
     // D-484: every length below is the prototype's at 0.88 (`scale.ts`).
     await expect(shell).toHaveCSS('border-radius', `${scaled(34)}px`);
     await expect(shell).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.93)');
-    await expect(shell).toHaveCSS('backdrop-filter', 'blur(30px)');
+    await expect(shell).toHaveCSS('backdrop-filter', 'none');
     // D-484: the frame fills the window less its two margins.
     expect((await shell.boundingBox())?.width).toBe(1440 - 2 * scaled(20));
 

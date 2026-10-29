@@ -23,10 +23,9 @@ const COLOUR = String.raw`/^\s*(#[0-9a-fA-F]{3,8}|(rgba?|hsla?)\()/`;
 const LENGTH = String.raw`/^-?\d*\.?\d+(px|rem|em|ch|vw|vh)$/`;
 const NUMERIC_STYLE = '/^(zIndex|fontSize|borderRadius|letterSpacing|lineHeight)$/';
 // Since S2, colorTokens, shadowTokens and motionTokens return var(--bs-…), so
-// they follow tokens.css. What is still baked: the z-index and font objects,
-// and the three colours kept literal until S4 (LITERAL_UNTIL_S4 in tokens.ts).
+// they follow tokens.css (since S4 every colour, the three D-55 ones included).
+// What is still baked: the z-index and font objects.
 const BAKED = '/^(zIndexTokens|fontTokens)$/';
-const BAKED_COLOURS = '/^(controlBorder|hairline|cardBorder)$/';
 
 export const STYLE_SYNTAX_SELECTORS = [
   {
@@ -48,10 +47,6 @@ export const STYLE_SYNTAX_SELECTORS = [
   {
     selector: "JSXAttribute[name.name='style']",
     message: '[inline-style] An inline style. Prefer a class from the shared component set.',
-  },
-  {
-    selector: `MemberExpression[object.name='colorTokens'][property.name=${BAKED_COLOURS}]`,
-    message: '[baked-token] This token object holds literal values that do not follow tokens.css.',
   },
   {
     selector: `MemberExpression[object.name=${BAKED}]`,

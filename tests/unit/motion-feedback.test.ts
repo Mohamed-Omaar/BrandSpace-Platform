@@ -104,7 +104,7 @@ describe('MO8 — the toast', () => {
     const host = read('packages/ui/src/toast-host.tsx');
     expect(host).toContain("{ opacity: 0, translate: '0 -14px' }");
     expect(host).toContain("[{ filter: 'blur(0)' }, { filter: 'blur(6px)' }]");
-    expect(host).toContain('duration: motionMs.toastOut');
+    expect(host).toContain('duration: scaledMs(motionMs.toastOut)');
     expect(host).toContain('usePresence(current !== null, toastRef, toastExit)');
   });
 });

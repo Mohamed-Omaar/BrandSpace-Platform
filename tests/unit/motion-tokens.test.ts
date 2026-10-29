@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { resolveS4Tokens } from '../support/style-tokens';
 import { describe, expect, it } from 'vitest';
 import { motionMs } from '../../packages/ui/src/tokens';
 
@@ -8,7 +9,8 @@ import { motionMs } from '../../packages/ui/src/tokens';
  * lift and the loading loops exactly as §8 writes them.
  */
 
-const css = readFileSync('packages/ui/src/tokens.css', 'utf8');
+// S4: tokens that replaced literals, and the motion scale (1), are read back as values.
+const css = resolveS4Tokens(readFileSync('packages/ui/src/tokens.css', 'utf8'));
 const kebab = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
 /** The body of the first rule for `selector`. */

@@ -1,7 +1,7 @@
 'use client';
 
 import { useLayoutEffect, useRef } from 'react';
-import { prefersReducedMotion } from './motion';
+import { prefersReducedMotion, scaledMs } from './motion';
 import { motionMs } from './tokens';
 
 /**
@@ -63,7 +63,9 @@ export function SegmentPill({ selector }: { readonly selector: string }) {
       const right = box.clientWidth - left - inner.width;
       const bottom = box.clientHeight - top - inner.height;
       const glide = mayGlide && current !== null && current !== selected && !prefersReducedMotion();
-      clip.style.transition = glide ? `clip-path ${motionMs.seg}ms var(--bs-ease-out)` : 'none';
+      clip.style.transition = glide
+        ? `clip-path ${scaledMs(motionMs.seg)}ms var(--bs-ease-out)`
+        : 'none';
       clip.style.clipPath = `inset(${top}px ${right}px ${bottom}px ${left}px round ${radius})`;
       current = selected;
       box.setAttribute('data-seg', 'placed');

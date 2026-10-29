@@ -24,7 +24,7 @@ import {
   zIndexTokens,
   motionMs,
 } from './tokens';
-import { prefersReducedMotion } from './motion';
+import { prefersReducedMotion, scaledMs } from './motion';
 import { usePresence } from './motion-hooks';
 import { AmbientBackground } from './ambient';
 import { ChevronEndIcon, ChevronStartIcon, CloseIcon, MenuIcon } from './icons';
@@ -353,7 +353,7 @@ function useNavPill(
       pill.style.transition =
         glide && !prefersReducedMotion()
           ? ['transform', 'width', 'height']
-              .map((property) => `${property} ${motionMs.pill}ms var(--bs-ease-out)`)
+              .map((property) => `${property} ${scaledMs(motionMs.pill)}ms var(--bs-ease-out)`)
               .join(', ')
           : 'none';
       pill.style.transform = `translate(${at.x}px, ${at.y}px)`;
@@ -660,7 +660,7 @@ export function AppShell({
     const settle = () => {
       motionTimer.current = window.setTimeout(
         () => setSidebarMotion(false),
-        Math.max(motionMs.collapse, motionMs.labelInDelay + motionMs.labelIn) + 50,
+        scaledMs(Math.max(motionMs.collapse, motionMs.labelInDelay + motionMs.labelIn)) + 50,
       );
     };
     if (next) {
@@ -668,7 +668,7 @@ export function AppShell({
       motionTimer.current = window.setTimeout(() => {
         setFadingOut(false);
         settle();
-      }, motionMs.labelOut);
+      }, scaledMs(motionMs.labelOut));
     } else {
       setFadingOut(false);
       settle();

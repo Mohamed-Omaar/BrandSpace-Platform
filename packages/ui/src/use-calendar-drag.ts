@@ -9,7 +9,7 @@ import {
   travelled,
   type DropState,
 } from './calendar-drag';
-import { prefersReducedMotion } from './motion';
+import { prefersReducedMotion, scaledMs } from './motion';
 import { motionMs, zIndexTokens } from './tokens';
 
 /**
@@ -185,7 +185,7 @@ export function useCalendarDrag(
       copy.classList.remove('bs-drag-lifted');
       copy
         .animate([{ translate: copy.style.translate || '0 0' }, { translate: '0 0' }], {
-          duration: motionMs.settle,
+          duration: scaledMs(motionMs.settle),
           easing: EASE_OUT,
           fill: 'forwards',
         })
@@ -210,7 +210,7 @@ export function useCalendarDrag(
               const dy = was.top - now.top;
               if (Math.abs(dx) + Math.abs(dy) < 1) continue;
               element.animate([{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], {
-                duration: motionMs.settle,
+                duration: scaledMs(motionMs.settle),
                 easing: EASE_OUT,
               });
             }
@@ -234,7 +234,7 @@ export function useCalendarDrag(
                 { translate: copy.style.translate || '0 0' },
                 { translate: `${target.left - origin.left}px ${target.top - origin.top}px` },
               ],
-              { duration: motionMs.drop, easing: OVERSHOOT, fill: 'forwards' },
+              { duration: scaledMs(motionMs.drop), easing: OVERSHOOT, fill: 'forwards' },
             )
             .finished.then(finish, finish);
         }),

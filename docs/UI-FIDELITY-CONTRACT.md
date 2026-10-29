@@ -2488,3 +2488,17 @@ draft alike.
   Media shows the brand's count; Generate with AI its credit quote and only where image generation is
   available; Upload only with `assets.upload`. Each opens the D-285 drawer on its tab; the media list and
   "Add media" stay below.
+
+### 6.3.72 Design-system programme S4 — the frame without its backdrop blur, one field border (D-575)
+
+- **The frame's backdrop blur is gone (owner, D-575).** The prototype's `.app-shell` draws
+  `backdrop-filter: blur(30px)` over the ambient orbs; the customer frame (`.bs-shell.bsp-frame`) and
+  the Control Center frame (`.bs-shell`) no longer do. The translucent white (`rgba(255,255,255,.93)`,
+  now `--bsp-frame-surface`) stays, so the orbs still tint the frame faintly. Blur stays on the small
+  floating elements the prototype also blurs: the top-bar pill, the Copilot button, the Studio save bar,
+  drawers, the dialog veil, dropdowns and listboxes.
+- **Every customer field has one border (D-2, D-575).** `#e4e4e8` / hover `#c9c9d1`, through
+  `--bs-control-border-customer`; the two Brand Brain fields that drew `#ececef` (`.bsp-bb-in` and the
+  chat panel's fields) now draw `#e4e4e8`. Under `prefers-contrast: more` it is the 3:1 contrast border.
+- **The 11px faint grey is `#6a6a72` (L-28, D-575):** the business switcher's caption, the account
+  menu's e-mail and the Settings → Notifications header, which drew `#8a8a92` (3.43:1).

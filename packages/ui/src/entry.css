@@ -383,7 +383,7 @@
   inline-size: min(var(--bsp-px-540), 100%);
   box-sizing: border-box;
   background: var(--bs-surface-glass);
-  border-radius: var(--bsp-px-36);
+  border-radius: calc(var(--bsp-px-36) * var(--bs-radius-scale));
   padding: var(--bsp-px-42) var(--bsp-px-44) var(--bsp-px-34);
   box-shadow: 0 var(--bsp-px-40) var(--bsp-px-100) var(--bs-lit-141023-a14);
   display: flex;
@@ -410,7 +410,7 @@
   min-inline-size: var(--bsp-px-44);
   padding: 0;
   border: 0;
-  border-radius: var(--bsp-px-12);
+  border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   background: var(--bs-lit-f4f4f5);
   color: var(--bs-text-primary);
   font-size: var(--bsp-fs-13);
@@ -488,7 +488,7 @@
   box-sizing: border-box;
   border: 1px solid transparent !important;
   background: var(--bs-lit-f4f4f5) !important;
-  border-radius: var(--bsp-px-14) !important;
+  border-radius: calc(var(--bsp-px-14) * var(--bs-radius-scale)) !important;
   padding: var(--bsp-px-14) var(--bsp-px-18) !important;
   font-size: var(--bsp-fs-15-5) !important;
   min-block-size: var(--bsp-px-58) !important;
@@ -550,7 +550,7 @@
   transform: none !important;
   border: 0 !important;
   background: var(--bs-surface) !important;
-  border-radius: var(--bsp-px-10) !important;
+  border-radius: calc(var(--bsp-px-10) * var(--bs-radius-scale)) !important;
   padding: 0 var(--bsp-px-12) !important;
   min-block-size: 0 !important;
   font-size: var(--bsp-fs-13) !important;
@@ -562,7 +562,7 @@
 .bsp-auth-trial {
   margin: 0;
   background: var(--bs-lit-f6f3ff);
-  border-radius: var(--bsp-px-12);
+  border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-10) var(--bsp-px-12);
   font-size: var(--bsp-fs-12-5);
   color: var(--bs-brand-purple-pressed);
@@ -581,7 +581,7 @@
   gap: var(--bsp-px-8);
   inline-size: 100%;
   border: 0 !important;
-  border-radius: var(--bsp-px-14) !important;
+  border-radius: calc(var(--bsp-px-14) * var(--bs-radius-scale)) !important;
   padding: var(--bsp-px-12) var(--bsp-px-20) !important;
   font-size: var(--bsp-fs-15) !important;
   font-weight: 800 !important;
@@ -645,7 +645,7 @@
   }
   .bsp-auth-card {
     padding: var(--bsp-px-28) var(--bsp-px-22) var(--bsp-px-24);
-    border-radius: var(--bsp-px-28);
+    border-radius: calc(var(--bsp-px-28) * var(--bs-radius-scale));
   }
   .bsp-auth-head > h1 {
     font-size: var(--bsp-fs-32);

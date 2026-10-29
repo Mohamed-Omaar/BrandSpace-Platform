@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef } from 'react';
 import { easeOutCubic, formatCount, parseCount } from './count-up-format';
-import { prefersReducedMotion } from './motion';
+import { prefersReducedMotion, scaledMs } from './motion';
 import { motionMs } from './tokens';
 
 /**
@@ -31,7 +31,7 @@ export function CountUp({ value }: { readonly value: string }) {
     element.setAttribute('data-counting', '');
     let frame = 0;
     const tick = (now: number) => {
-      const progress = Math.min(1, (now - started) / motionMs.count);
+      const progress = Math.min(1, (now - started) / scaledMs(motionMs.count));
       if (progress >= 1) {
         stop();
         return;

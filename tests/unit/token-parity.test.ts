@@ -25,7 +25,12 @@ const rootBlock = css.slice(rootStart, css.indexOf('\n}', rootStart));
 const definitions = new Map(
   [...rootBlock.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)].map((m) => [
     m[1]!,
-    m[2]!.replace(/\s+/g, ' ').trim(),
+    m[2]!
+      .replace(/\s+/g, ' ')
+      .trim()
+      // S4: a duration is `calc(<ms> * var(--bs-motion-scale))`; the scale is 1,
+      // so its TypeScript twin is the <ms> inside.
+      .replace(/^calc\((.+) \* var\(--bs-motion-scale\)\)$/, '$1'),
   ]),
 );
 
