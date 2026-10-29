@@ -13,7 +13,7 @@ import {
 } from './toast-bus';
 import { Avatar } from './media';
 import { TOAST_RESUME_MS, toastDuration } from './toast-timing';
-import { EASE_OUT } from './motion';
+import { EASE_OUT, scaledMs } from './motion';
 import { usePresence } from './motion-hooks';
 
 /**
@@ -40,7 +40,7 @@ import { usePresence } from './motion-hooks';
  */
 function toastExit(element: HTMLElement): Animation[] {
   const timing: KeyframeAnimationOptions = {
-    duration: motionMs.toastOut,
+    duration: scaledMs(motionMs.toastOut),
     easing: EASE_OUT,
     fill: 'forwards',
   };

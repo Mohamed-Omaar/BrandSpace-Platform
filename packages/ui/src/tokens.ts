@@ -646,16 +646,13 @@ function asVariables<T extends Record<string, string>>(
 }
 
 /**
- * Three colours stay LITERAL for now: tokens.css redefines them inside
- * `prefers-contrast: more` and `forced-colors` (D-55). As variables, every
- * inline style using them would start following those restorations — right,
- * but a visual change, and S2 makes none. They become variables in S4 with D-2.
+ * Since S4 (with D-2) nothing stays literal: `controlBorder`, `hairline` and
+ * `cardBorder`, which tokens.css redefines inside `prefers-contrast: more` and
+ * `forced-colors` (D-55), are variables too, so the contrast restorations now
+ * reach every inline style that uses them. Kept as an empty set so a future
+ * exception has one documented place.
  */
-export const LITERAL_UNTIL_S4: ReadonlySet<string> = new Set([
-  'controlBorder',
-  'hairline',
-  'cardBorder',
-]);
+export const LITERAL_UNTIL_S4: ReadonlySet<string> = new Set();
 
 export const colorTokens = asVariables(colorValues, cssVariableName.color, LITERAL_UNTIL_S4);
 export const shadowTokens = asVariables(shadowValues, cssVariableName.shadow);
@@ -1014,6 +1011,17 @@ export const platformBrandTokens = {
   x: '#000000',
   tiktok: '#000000',
 } as const;
+
+/**
+ * S4: every duration is `calc(<ms>ms * var(--bs-motion-scale))`. The scale is
+ * the motion LEVEL (full 1, reduced 0.5, off 0.001 — never 0, so a transitionend
+ * still fires) times the SPEED (calm, normal 1, quick), both 1 by default, so
+ * nothing moves differently until the Look & feel page changes them.
+ * `prefers-reduced-motion` keeps its own block in tokens.css and always wins.
+ */
+export function scaledDuration(duration: string): string {
+  return `calc(${duration} * var(--bs-motion-scale))`;
+}
 
 /**
  * THE `:root` BLOCK OF tokens.css, in order (design-system programme, S2).
@@ -1411,10 +1419,10 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-radius-shell', value: '2.125rem' },
   { name: '--bs-radius-full', value: '9999px' },
   { blank: true },
-  { name: '--bs-duration-instant', value: motionValues.instant },
-  { name: '--bs-duration-fast', value: motionValues.fast },
-  { name: '--bs-duration-base', value: motionValues.base },
-  { name: '--bs-duration-slow', value: motionValues.slow },
+  { name: '--bs-duration-instant', value: scaledDuration(motionValues.instant) },
+  { name: '--bs-duration-fast', value: scaledDuration(motionValues.fast) },
+  { name: '--bs-duration-base', value: scaledDuration(motionValues.base) },
+  { name: '--bs-duration-slow', value: scaledDuration(motionValues.slow) },
   { name: '--bs-ease-out', value: motionValues.easeOut },
   { name: '--bs-ease-in-out', value: motionValues.easeInOut },
   { blank: true },
@@ -1422,44 +1430,96 @@ export const cssRootTokens: readonly CssRootEntry[] = [
     comment:
       '  /*\n   * §8 MOTION (prototype v105, Phase 2B-2b). Named for WHAT moves, so a\n   * component asks for "the menu\'s rows" rather than for a number, and the\n   * numbers are §8\'s exactly. `tokens.ts` mirrors them for the Web Animations\n   * API; `motion-tokens.test.ts` keeps the two equal.\n   */',
   },
-  { name: '--bs-motion-page', value: '440ms', note: '/* MO1 a block entering */' },
-  { name: '--bs-motion-page-late', value: '300ms', note: '/* MO1 blocks after the 7th */' },
-  { name: '--bs-motion-page-step', value: '45ms', note: '/* MO1 stagger */' },
-  { name: '--bs-motion-pill', value: '440ms', note: '/* MO2 the sidebar pill */' },
-  { name: '--bs-motion-collapse', value: '380ms', note: '/* MO3 the sidebar column */' },
-  { name: '--bs-motion-label-out', value: '110ms', note: '/* MO3 labels fade out */' },
-  { name: '--bs-motion-label-in', value: '220ms', note: '/* MO3 labels fade in */' },
-  { name: '--bs-motion-label-in-delay', value: '150ms', note: '/* MO3 … after the width */' },
-  { name: '--bs-motion-seg', value: '380ms', note: '/* MO4 the segmented pill */' },
+  { name: '--bs-motion-page', value: scaledDuration('440ms'), note: '/* MO1 a block entering */' },
+  {
+    name: '--bs-motion-page-late',
+    value: scaledDuration('300ms'),
+    note: '/* MO1 blocks after the 7th */',
+  },
+  { name: '--bs-motion-page-step', value: scaledDuration('45ms'), note: '/* MO1 stagger */' },
+  { name: '--bs-motion-pill', value: scaledDuration('440ms'), note: '/* MO2 the sidebar pill */' },
+  {
+    name: '--bs-motion-collapse',
+    value: scaledDuration('380ms'),
+    note: '/* MO3 the sidebar column */',
+  },
+  {
+    name: '--bs-motion-label-out',
+    value: scaledDuration('110ms'),
+    note: '/* MO3 labels fade out */',
+  },
+  {
+    name: '--bs-motion-label-in',
+    value: scaledDuration('220ms'),
+    note: '/* MO3 labels fade in */',
+  },
+  {
+    name: '--bs-motion-label-in-delay',
+    value: scaledDuration('150ms'),
+    note: '/* MO3 … after the width */',
+  },
+  { name: '--bs-motion-seg', value: scaledDuration('380ms'), note: '/* MO4 the segmented pill */' },
   {
     name: '--bs-motion-menu-in',
     value: '200ms',
     note: '/* MO5 a menu, listbox, popover or sheet opens */',
   },
-  { name: '--bs-motion-menu-row', value: '220ms', note: '/* MO5 its rows */' },
-  { name: '--bs-motion-menu-row-step', value: '22ms', note: '/* MO5 row stagger */' },
-  { name: '--bs-motion-menu-out', value: '180ms', note: '/* MO5 it closes */' },
-  { name: '--bs-motion-dialog', value: '300ms', note: '/* MO6 the dialog */' },
-  { name: '--bs-motion-veil', value: '260ms', note: '/* MO6 its veil */' },
-  { name: '--bs-motion-copilot', value: '340ms', note: '/* MO7 the Copilot panel */' },
+  { name: '--bs-motion-menu-row', value: scaledDuration('220ms'), note: '/* MO5 its rows */' },
+  {
+    name: '--bs-motion-menu-row-step',
+    value: scaledDuration('22ms'),
+    note: '/* MO5 row stagger */',
+  },
+  { name: '--bs-motion-menu-out', value: scaledDuration('180ms'), note: '/* MO5 it closes */' },
+  { name: '--bs-motion-dialog', value: scaledDuration('300ms'), note: '/* MO6 the dialog */' },
+  { name: '--bs-motion-veil', value: scaledDuration('260ms'), note: '/* MO6 its veil */' },
+  {
+    name: '--bs-motion-copilot',
+    value: scaledDuration('340ms'),
+    note: '/* MO7 the Copilot panel */',
+  },
   {
     name: '--bs-motion-toast-in',
     value: '420ms',
     note: '/* MO8 a toast enters; its check draws */',
   },
-  { name: '--bs-motion-toast-step', value: '50ms', note: '/* MO8 content stagger */' },
-  { name: '--bs-motion-toast-check-delay', value: '160ms', note: '/* MO8 */' },
-  { name: '--bs-motion-toast-out', value: '280ms', note: '/* MO8 a toast leaves */' },
-  { name: '--bs-motion-bar', value: '800ms', note: '/* MO11 a bar grows */' },
-  { name: '--bs-motion-bar-step', value: '35ms', note: '/* MO11 bar stagger */' },
-  { name: '--bs-motion-line', value: '1000ms', note: '/* MO11 a line draws */' },
-  { name: '--bs-motion-dot', value: '360ms', note: '/* MO11 dots and labels pop */' },
-  { name: '--bs-motion-dot-step', value: '40ms', note: '/* MO11 dot stagger */' },
-  { name: '--bs-motion-count', value: '650ms', note: '/* MO12 a KPI counts up */' },
-  { name: '--bs-motion-loop', value: '1600ms', note: '/* MO13 shimmer and pulse */' },
-  { name: '--bs-motion-hover', value: '220ms', note: '/* MO14 a card lifts */' },
-  { name: '--bs-motion-drag-lift', value: '180ms', note: '/* §8.2 a post lifts */' },
-  { name: '--bs-motion-drop', value: '360ms', note: '/* §8.2 it flies into place */' },
+  {
+    name: '--bs-motion-toast-step',
+    value: scaledDuration('50ms'),
+    note: '/* MO8 content stagger */',
+  },
+  { name: '--bs-motion-toast-check-delay', value: scaledDuration('160ms'), note: '/* MO8 */' },
+  {
+    name: '--bs-motion-toast-out',
+    value: scaledDuration('280ms'),
+    note: '/* MO8 a toast leaves */',
+  },
+  { name: '--bs-motion-bar', value: scaledDuration('800ms'), note: '/* MO11 a bar grows */' },
+  { name: '--bs-motion-bar-step', value: scaledDuration('35ms'), note: '/* MO11 bar stagger */' },
+  { name: '--bs-motion-line', value: scaledDuration('1000ms'), note: '/* MO11 a line draws */' },
+  {
+    name: '--bs-motion-dot',
+    value: scaledDuration('360ms'),
+    note: '/* MO11 dots and labels pop */',
+  },
+  { name: '--bs-motion-dot-step', value: scaledDuration('40ms'), note: '/* MO11 dot stagger */' },
+  { name: '--bs-motion-count', value: scaledDuration('650ms'), note: '/* MO12 a KPI counts up */' },
+  {
+    name: '--bs-motion-loop',
+    value: scaledDuration('1600ms'),
+    note: '/* MO13 shimmer and pulse */',
+  },
+  { name: '--bs-motion-hover', value: scaledDuration('220ms'), note: '/* MO14 a card lifts */' },
+  {
+    name: '--bs-motion-drag-lift',
+    value: scaledDuration('180ms'),
+    note: '/* §8.2 a post lifts */',
+  },
+  {
+    name: '--bs-motion-drop',
+    value: scaledDuration('360ms'),
+    note: '/* §8.2 it flies into place */',
+  },
   {
     name: '--bs-motion-settle',
     value: '300ms',
@@ -1749,4 +1809,221 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-lit-ffffff-a92', value: 'rgba(255, 255, 255, 0.92)' },
   { name: '--bs-lit-ffffff-a93', value: 'rgba(255, 255, 255, 0.93)' },
   { name: '--bs-lit-ffffff-a94', value: 'rgba(255, 255, 255, 0.94)' },
+  { blank: true },
+  {
+    comment:
+      '  /*\\n   * S4: the switches the Look & feel page will set, all at their neutral value,\\n   * and the motion, z-index, backdrop and shadow values the stylesheets wrote\\n   * literally, as tokens. Value-named ones are transitional, like --bs-lit-*.\\n   */',
+  },
+  { name: '--bs-motion-level', value: '1' },
+  { name: '--bs-motion-speed', value: '1' },
+  { name: '--bs-motion-scale', value: 'calc(var(--bs-motion-level) * var(--bs-motion-speed))' },
+  { name: '--bs-radius-scale', value: '1' },
+  // D-2: the customer app's field border, one token (D-55 restores it to 3:1 under prefers-contrast).
+  { name: '--bs-control-border-customer', value: '#e4e4e8' },
+  { name: '--bs-control-border-customer-hover', value: '#c9c9d1' },
+  // The customer rail's widths, and the frame's content width (none: fill the window, D-484).
+  { name: '--bsp-sidebar-expanded', value: 'var(--bsp-px-250)' },
+  { name: '--bsp-sidebar-collapsed', value: 'var(--bsp-px-76)' },
+  { name: '--bsp-frame-max-inline', value: 'none' },
+  { name: '--bs-dur-110', value: 'calc(110ms * var(--bs-motion-scale))' },
+  { name: '--bs-dur-120', value: 'calc(120ms * var(--bs-motion-scale))' },
+  { name: '--bs-dur-150', value: 'calc(150ms * var(--bs-motion-scale))' },
+  { name: '--bs-dur-180', value: 'calc(180ms * var(--bs-motion-scale))' },
+  { name: '--bs-dur-200', value: 'calc(200ms * var(--bs-motion-scale))' },
+  { name: '--bs-dur-220', value: 'calc(220ms * var(--bs-motion-scale))' },
+  { name: '--bs-dur-260', value: 'calc(260ms * var(--bs-motion-scale))' },
+  { name: '--bs-dur-320', value: 'calc(320ms * var(--bs-motion-scale))' },
+  { name: '--bs-dur-380', value: 'calc(380ms * var(--bs-motion-scale))' },
+  { name: '--bs-dur-440', value: 'calc(440ms * var(--bs-motion-scale))' },
+  { name: '--bs-dur-600', value: 'calc(600ms * var(--bs-motion-scale))' },
+  { name: '--bs-ease-02-08-02-1', value: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+  { name: '--bs-ease-css', value: 'ease' },
+  { name: '--bs-ease-css-out', value: 'ease-out' },
+  { name: '--bs-ease-linear', value: 'linear' },
+  { name: '--bs-fx-backdrop-18', value: 'blur(18px)' },
+  { name: '--bs-fx-backdrop-18-sat-170', value: 'blur(18px) saturate(170%)' },
+  { name: '--bs-fx-backdrop-22-sat-180', value: 'blur(22px) saturate(180%)' },
+  { name: '--bs-fx-backdrop-24', value: 'blur(24px)' },
+  { name: '--bs-fx-backdrop-3', value: 'blur(3px)' },
+  { name: '--bs-fx-backdrop-30', value: 'blur(30px)' },
+  { name: '--bs-fx-backdrop-8', value: 'blur(8px)' },
+  { name: '--bs-shadow-lit-1', value: '0 14px 36px var(--bs-lit-111114-a14)' },
+  {
+    name: '--bs-shadow-lit-2',
+    value: '0 22px 55px var(--bs-lit-28145a-a14), 0 0 0 1px var(--bs-lit-141023-a05)',
+  },
+  { name: '--bs-shadow-lit-3', value: '0 0 0 10px var(--bs-lit-7935fe-a0)' },
+  { name: '--bs-shadow-lit-4', value: '0 12px 28px var(--bs-lit-141023-a18)' },
+  { name: '--bs-shadow-lit-5', value: '0 8px 20px var(--bs-lit-141023-a06)' },
+  { name: '--bs-z-0', value: '0' },
+  { name: '--bs-z-1', value: '1' },
+  { name: '--bs-z-10', value: '10' },
+  { name: '--bs-z-12', value: '12' },
+  { name: '--bs-z-2', value: '2' },
+  { name: '--bs-z-20', value: '20' },
+  { name: '--bs-z-25', value: '25' },
+  { name: '--bs-z-3', value: '3' },
+  { name: '--bs-z-30', value: '30' },
+  { name: '--bs-z-36', value: '36' },
+  { name: '--bs-z-4', value: '4' },
+  { name: '--bs-z-5', value: '5' },
+  { name: '--bs-z-6', value: '6' },
+  { name: '--bs-z-60', value: '60' },
+  { name: '--bs-z-7', value: '7' },
+  { name: '--bs-z-70', value: '70' },
+  { name: '--bs-z-neg-1', value: '-1' },
+  // S4: the decorative gradients (scripts/style/codemod-gradients.ts), so gradients can be switched off.
+  {
+    name: '--bs-gradient-lit-1',
+    value:
+      'linear-gradient(\n    90deg,\n    var(--bs-surface-sunken) 0%,\n    var(--bs-surface-muted) 50%,\n    var(--bs-surface-sunken) 100%\n  )',
+  },
+  {
+    name: '--bs-gradient-lit-2',
+    value:
+      'linear-gradient(\n    135deg,\n    var(--bs-lit-fff1c2) 0%,\n    var(--bs-lit-fde8ec) 55%,\n    var(--bs-lit-ece6ff) 100%\n  )',
+  },
+  {
+    name: '--bs-gradient-lit-3',
+    value:
+      'linear-gradient(\n    135deg,\n    var(--bs-lit-9b6bff),\n    var(--bs-brand-purple-pressed)\n  )',
+  },
+  {
+    name: '--bs-gradient-lit-4',
+    value:
+      'linear-gradient(\n    160deg,\n    var(--bs-lit-f4e3c8),\n    var(--bs-lit-d9a066) 60%,\n    var(--bs-lit-8a5534)\n  )',
+  },
+  {
+    name: '--bs-gradient-lit-5',
+    value: 'linear-gradient(145deg, var(--bs-lit-eee6ff), var(--bs-lit-fff9d7))',
+  },
+  {
+    name: '--bs-gradient-lit-6',
+    value: 'linear-gradient(90deg, var(--bs-brand-purple), var(--bs-lit-ffd60a))',
+  },
+  {
+    name: '--bs-gradient-lit-7',
+    value:
+      'linear-gradient(\n    160deg,\n    var(--bs-lit-3a2a4f),\n    var(--bs-brand-purple) 70%,\n    var(--bs-lit-c6a8ff)\n  )',
+  },
+  {
+    name: '--bs-gradient-lit-8',
+    value: 'linear-gradient(90deg, var(--bs-brand-purple), var(--bs-lit-b58cff))',
+  },
+  {
+    name: '--bs-gradient-lit-9',
+    value: 'linear-gradient(270deg, var(--bs-brand-purple), var(--bs-lit-ffd60a))',
+  },
+  {
+    name: '--bs-gradient-lit-10',
+    value: 'linear-gradient(135deg, var(--bs-lit-efe7ff), var(--bs-lit-fff4c7))',
+  },
+  {
+    name: '--bs-gradient-lit-11',
+    value: 'linear-gradient(135deg, var(--bs-lit-faf7ff), var(--bs-lit-fffdf4))',
+  },
+  {
+    name: '--bs-gradient-lit-12',
+    value: 'linear-gradient(90deg, var(--bs-brand-purple), var(--bs-lit-9b6bff))',
+  },
+  {
+    name: '--bs-gradient-lit-13',
+    value: 'linear-gradient(135deg, var(--bs-lit-e7ddff) 0%, var(--bs-lit-c9b3ff) 100%)',
+  },
+  {
+    name: '--bs-gradient-lit-14',
+    value: 'linear-gradient(135deg, var(--bs-lit-fff4c2) 0%, var(--bs-lit-ffd60a) 100%)',
+  },
+  {
+    name: '--bs-gradient-lit-15',
+    value: 'linear-gradient(145deg, var(--bs-lit-8f5bff), var(--bs-lit-5b1fd6))',
+  },
+  {
+    name: '--bs-gradient-lit-16',
+    value:
+      'linear-gradient(\n    145deg,\n    var(--bs-lit-fff5b0),\n    var(--bs-brand-yellow),\n    var(--bs-ambient-blush)\n  )',
+  },
+  {
+    name: '--bs-gradient-lit-17',
+    value:
+      'radial-gradient(\n    circle at 30% 26%,\n    var(--bs-lit-55555e) 0,\n    var(--bs-text-primary) 52%,\n    var(--bs-lit-020203) 100%\n  )',
+  },
+  {
+    name: '--bs-gradient-lit-18',
+    value:
+      'radial-gradient(\n    circle at 30% 26%,\n    var(--bs-lit-c49dff) 0,\n    var(--bs-brand-purple) 46%,\n    var(--bs-lit-40139f) 100%\n  )',
+  },
+  {
+    name: '--bs-gradient-lit-19',
+    value:
+      'radial-gradient(\n    circle at 30% 26%,\n    var(--bs-lit-fff7a8) 0,\n    var(--bs-brand-yellow) 48%,\n    var(--bs-lit-d4a900) 100%\n  )',
+  },
+  {
+    name: '--bs-gradient-lit-20',
+    value:
+      'linear-gradient(\n    155deg,\n    var(--bs-lit-17171d) 0,\n    var(--bs-lit-0b0b0f) 62%,\n    var(--bs-lit-151020) 100%\n  )',
+  },
+  // S4: the customer frame's glass, so glass can be switched off.
+  { name: '--bsp-frame-surface', value: 'var(--bs-lit-ffffff-a93)' },
 ];
+
+/**
+ * THE "OFF" VALUES OF THE THREE EFFECT SWITCHES (design-system programme, S4).
+ *
+ * The Look & feel page applies a look by writing CSS variables only. Switching
+ * an effect off is therefore a set of variable values, kept here so the page,
+ * its preview and its tests use the same list:
+ *
+ *   blur       every overlay backdrop (`--bs-fx-backdrop-*`) becomes `none`;
+ *   glass      every translucent surface becomes the same colour, opaque;
+ *   gradients  every decorative gradient becomes a flat fill of its first
+ *              colour, so a surface keeps its colour and its text its contrast.
+ *
+ * All three are ON by default: nothing here is applied until the page does it.
+ */
+function opaque(colour: string): string {
+  const m = /^rgba\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*[0-9.]+\s*\)$/.exec(colour);
+  return m ? `rgb(${m[1]}, ${m[2]}, ${m[3]})` : colour;
+}
+
+function rootValues(match: RegExp): [string, string][] {
+  return cssRootTokens.flatMap((entry) =>
+    'name' in entry && match.test(entry.name)
+      ? [[entry.name, entry.value] as [string, string]]
+      : [],
+  );
+}
+
+const GLASS_TOKENS = [
+  '--bs-shell-alpha',
+  '--bs-shell-sidebar-alpha',
+  '--bs-metric-alpha',
+  '--bs-surface-card-alpha',
+  '--bs-float-card-alpha',
+  '--bs-drawer-alpha',
+  '--bs-auth-card-alpha',
+  '--bs-preview-panel-alpha',
+  '--bs-surface-glass',
+];
+
+export const effectOffValues: {
+  readonly blur: Readonly<Record<string, string>>;
+  readonly glass: Readonly<Record<string, string>>;
+  readonly gradients: Readonly<Record<string, string>>;
+} = {
+  blur: Object.fromEntries(rootValues(/^--bs-fx-backdrop-/).map(([name]) => [name, 'none'])),
+  glass: {
+    ...Object.fromEntries(
+      rootValues(/^--bs-/)
+        .filter(([name]) => GLASS_TOKENS.includes(name))
+        .map(([name, value]) => [name, opaque(value)]),
+    ),
+    '--bsp-frame-surface': 'var(--bs-surface)',
+  },
+  gradients: Object.fromEntries(
+    rootValues(/^--bs-gradient-lit-/).map(([name, value]) => {
+      const first = /var\(--bs-[a-z0-9-]+\)/.exec(value)?.[0] ?? 'transparent';
+      return [name, `linear-gradient(${first}, ${first})`];
+    }),
+  ),
+};

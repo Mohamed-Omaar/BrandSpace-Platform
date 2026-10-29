@@ -27,9 +27,9 @@ describe('tokens.css :root is generated from tokens.ts', () => {
 });
 
 describe('the token objects name CSS variables', () => {
-  it('every colour token is var(--bs-…) except the three D-55 restorations', () => {
+  it('every colour token is var(--bs-…), the three D-55 restorations included since S4', () => {
     const literal = Object.entries(colorTokens).filter(([, v]) => !v.startsWith('var(--bs-'));
-    expect(literal.map(([k]) => k).sort()).toEqual(['cardBorder', 'controlBorder', 'hairline']);
+    expect(literal.map(([k]) => k).sort()).toEqual([]);
   });
 
   it('every shadow and motion token is var(--bs-…)', () => {

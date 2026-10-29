@@ -24,7 +24,7 @@ import {
   type AppShellLabels,
 } from './app-shell';
 import { CloseIcon, MenuIcon } from './icons';
-import { prefersReducedMotion } from './motion';
+import { prefersReducedMotion, scaledMs } from './motion';
 import { usePresence } from './motion-hooks';
 import { Tooltip, useOverlayBehaviour } from './overlays';
 import { LinkPendingMark, usePrefetchOnIntent } from './prefetch-link';
@@ -619,7 +619,7 @@ function useSidebarCollapse(): SidebarCollapse {
     const settle = () => {
       motionTimer.current = window.setTimeout(
         () => setSidebarMotion(false),
-        Math.max(motionMs.collapse, motionMs.labelInDelay + motionMs.labelIn) + 50,
+        scaledMs(Math.max(motionMs.collapse, motionMs.labelInDelay + motionMs.labelIn)) + 50,
       );
     };
     if (next) {
@@ -627,7 +627,7 @@ function useSidebarCollapse(): SidebarCollapse {
       motionTimer.current = window.setTimeout(() => {
         setFadingOut(false);
         settle();
-      }, motionMs.labelOut);
+      }, scaledMs(motionMs.labelOut));
     } else {
       setFadingOut(false);
       settle();
@@ -736,7 +736,9 @@ function CustomerFrame({
 }) {
   const on = rail !== null;
   // `sbW = s.sbMin ? 'var(--bsp-px-76)' : 'var(--bsp-px-250)'`.
-  const sidebarWidth = collapse.layoutCollapsed ? 'var(--bsp-px-76)' : 'var(--bsp-px-250)';
+  const sidebarWidth = collapse.layoutCollapsed
+    ? 'var(--bsp-sidebar-collapsed)'
+    : 'var(--bsp-sidebar-expanded)';
   return (
     <div
       className={on ? 'bs-ambient-host' : 'bs-frame-pass'}

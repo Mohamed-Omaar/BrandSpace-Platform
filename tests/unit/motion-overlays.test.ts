@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { resolveS4Tokens } from '../support/style-tokens';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -8,7 +9,8 @@ import { describe, expect, it } from 'vitest';
  */
 
 const read = (file: string) => readFileSync(file, 'utf8');
-const css = read('packages/ui/src/tokens.css');
+// S4: tokens that replaced literals are read back as the values they hold.
+const css = resolveS4Tokens(read('packages/ui/src/tokens.css'));
 const motion = read('packages/ui/src/motion-hooks.ts');
 
 function keyframes(name: string): string {
@@ -71,7 +73,7 @@ describe('MO5 — closing', () => {
   it('fades with a 4 px lift over 180 ms while the rows blur to 4 px, then unmounts', () => {
     expect(motion).toContain("{ opacity: 0, translate: '0 -4px' }");
     expect(motion).toContain("[{ filter: 'blur(0)' }, { filter: 'blur(4px)' }]");
-    expect(motion).toContain('duration: motionMs.menuOut');
+    expect(motion).toContain('duration: scaledMs(motionMs.menuOut)');
   });
 
   it('the close is immediate: a leaving surface is inert and hidden, and reduced motion skips it', () => {

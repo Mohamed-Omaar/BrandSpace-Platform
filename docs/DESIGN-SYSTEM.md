@@ -552,6 +552,29 @@ severity). Step S6 turns both into errors.
 **Parity** — `tests/unit/token-parity.test.ts` compares every colour, shadow, z-index, font and
 motion token in tokens.ts with its tokens.css twin, and pins the list of tokens that have no twin yet.
 
+### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
+
+- **`tokens.ts` is the source.** tokens.css's `:root` block is generated from `cssRootTokens`
+  (`pnpm style:tokens`; a hand edit fails `tests/unit/style-tokens-css.test.ts`). `colorTokens`,
+  `shadowTokens` and `motionTokens` return `var(--bs-…)`; the literal values are `colorValues`,
+  `shadowValues` and `motionValues`, for contrast arithmetic, a native colour input and e-mail.
+- **Every stylesheet value is a token** — colours (S3), durations, easings, z-index, overlay backdrops,
+  shadows and decorative gradients (S4). Value-named tokens (`--bs-lit-*`, `--bs-dur-*`, `--bs-z-<n>`,
+  `--bs-shadow-lit-*`, `--bs-gradient-lit-*`) are transitional: S5 folds them into semantic names as
+  each component is unified, and the ratchet counts every use of `--bs-lit-*`.
+- **The switches** (all neutral by default, so nothing looks different until the page sets them):
+
+  | Setting                | Variables                                                                                       |
+  | ---------------------- | ----------------------------------------------------------------------------------------------- |
+  | Motion level, speed    | `--bs-motion-level` (full 1, reduced 0.5, off 0.001), `--bs-motion-speed`; JS uses `scaledMs()` |
+  | Radius                 | `--bs-radius-scale` (every radius is multiplied by it; pills never scale)                       |
+  | Field border           | `--bs-control-border-customer`, `-hover` (customer); `--bs-control-border` (Control Center)     |
+  | Sidebar width          | `--bsp-sidebar-expanded`, `--bsp-sidebar-collapsed`; `--bs-sidebar-expanded` (Control Center)   |
+  | Content width          | `--bsp-frame-max-inline` (none: fill the window); `--bs-shell-max-width` (Control Center)       |
+  | Blur, glass, gradients | `effectOffValues` in tokens.ts: the variable values that switch each one off                    |
+
+- **No full-window backdrop blur** (D-575): the frames are translucent white without it.
+
 ---
 
 ## 11. What remains for Phase 2C-B

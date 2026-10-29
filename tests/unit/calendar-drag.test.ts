@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { resolveS4Tokens } from '../support/style-tokens';
 import { describe, expect, it } from 'vitest';
 import {
   DROP_STRIP_DAYS,
@@ -234,8 +235,8 @@ describe('the engine: only a committed drop calls anything', () => {
   it('Escape puts it back; reduced motion keeps the drag and drops the animation', () => {
     expect(engine).toMatch(/event\.key === 'Escape' && gesture\?\.lifted[\s\S]*?end\(false\);/);
     expect(engine).toContain('const still = () => prefersReducedMotion();');
-    expect(engine).toContain('duration: motionMs.drop, easing: OVERSHOOT');
-    expect(engine).toContain('duration: motionMs.settle');
+    expect(engine).toContain('duration: scaledMs(motionMs.drop), easing: OVERSHOOT');
+    expect(engine).toContain('duration: scaledMs(motionMs.settle)');
   });
 
   it('native drag and drop is gone from the calendar', () => {
@@ -264,7 +265,8 @@ describe('who can drag what', () => {
 });
 
 describe('the looks', () => {
-  const css = read('packages/ui/src/tokens.css');
+  // S4: tokens that replaced literals are read back as the values they hold.
+  const css = resolveS4Tokens(read('packages/ui/src/tokens.css'));
 
   it('lift: scale 1.04, rotate −1.5°, a deeper shadow, 180 ms — and translate is never eased', () => {
     expect(css).toMatch(/\.bs-drag-copy\.bs-drag-lifted \{\s*scale: 1\.04;\s*rotate: -1\.5deg;/);

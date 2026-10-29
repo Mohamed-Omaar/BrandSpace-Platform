@@ -2,7 +2,12 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { canonicalHex, resolveColourTokens } from '../support/style-tokens';
+import {
+  canonicalDuration,
+  canonicalHex,
+  resolveColourTokens,
+  resolveS4Tokens,
+} from '../support/style-tokens';
 import { brandBrainTokens } from '@brandspace/ui';
 
 /**
@@ -214,8 +219,12 @@ describe('the Brand Brain stylesheet is a transcription of the snapshot', () => 
   }
 
   function normalise(text: string): string {
-    // S3: a colour token is read back as its exact colour, like a size token.
-    return canonicalHex(resolveColourTokens(prototypeUnits(text)))
+    // S3: a colour token is read back as its exact colour, like a size token;
+    // S4: so are the motion, z-index, shadow and radius-scale tokens, and a
+    // duration is compared in one unit.
+    return canonicalDuration(
+      canonicalHex(resolveColourTokens(prototypeUnits(resolveS4Tokens(text)))),
+    )
       .toLowerCase()
       .replace(/(^|[^0-9])\.(?=[0-9])/g, '$10.')
       .replace(/\s+/g, '');
@@ -320,7 +329,7 @@ describe('the Brand Brain stylesheet is a transcription of the snapshot', () => 
   const ALLOWED_OMISSIONS: Record<string, readonly string[]> = {
     '.bb-progress i': ['width:82%'],
     // D-348: the demo's 0.2 s lift, replaced by §8 MO14's 220 ms (above).
-    '.bb-card': ['transition:transform0.2s,box-shadow0.2s'],
+    '.bb-card': ['transition:transform200ms,box-shadow200ms'],
   };
 
   it.each(SELECTORS)('%s keeps every declaration the demo gives it', (selector) => {

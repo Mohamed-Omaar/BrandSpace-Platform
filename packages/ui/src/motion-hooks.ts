@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type RefObject } from 'react';
-import { EASE_OUT, prefersReducedMotion } from './motion';
+import { EASE_OUT, prefersReducedMotion, scaledMs } from './motion';
 import { motionMs } from './tokens';
 
 /**
@@ -20,7 +20,7 @@ export type ExitMotion = (element: HTMLElement) => Animation[];
 /** MO5: the container fades with a 4 px lift while its rows blur to 4 px (180 ms). */
 function menuExit(element: HTMLElement): Animation[] {
   const timing: KeyframeAnimationOptions = {
-    duration: motionMs.menuOut,
+    duration: scaledMs(motionMs.menuOut),
     easing: EASE_OUT,
     fill: 'forwards',
   };
@@ -84,7 +84,7 @@ export function useOpening(open: boolean): boolean {
   useEffect(() => {
     if (!open) return undefined;
     setOpening(true);
-    const settle = motionMs.menuIn + motionMs.menuRowStep * 5 + motionMs.menuRow;
+    const settle = scaledMs(motionMs.menuIn + motionMs.menuRowStep * 5 + motionMs.menuRow);
     const timer = window.setTimeout(() => setOpening(false), settle);
     return () => window.clearTimeout(timer);
   }, [open]);
