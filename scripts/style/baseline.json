@@ -147,7 +147,7 @@
       "length": 4
     },
     "apps/admin/src/components/simple/area.tsx": {
-      "inline-style": 71,
+      "inline-style": 67,
       "length": 13
     },
     "apps/admin/src/components/simple/customers.tsx": {
@@ -216,10 +216,10 @@
       "inline-style": 5
     },
     "apps/dashboard/src/app/[locale]/assets/asset-library-view.tsx": {
-      "inline-style": 71
+      "inline-style": 59
     },
     "apps/dashboard/src/app/[locale]/automations/automation-form.tsx": {
-      "inline-style": 37
+      "inline-style": 33
     },
     "apps/dashboard/src/app/[locale]/billing/actions.tsx": {
       "inline-style": 10
@@ -235,7 +235,7 @@
       "inline-style": 32
     },
     "apps/dashboard/src/app/[locale]/billing/page.tsx": {
-      "inline-style": 18
+      "inline-style": 16
     },
     "apps/dashboard/src/app/[locale]/brand-brain/area-drawer.tsx": {
       "inline-style": 1
@@ -260,7 +260,7 @@
       "numeric-style": 1
     },
     "apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx": {
-      "inline-style": 22
+      "inline-style": 17
     },
     "apps/dashboard/src/app/[locale]/calendar/prototype-calendar.tsx": {
       "inline-style": 9
@@ -275,7 +275,7 @@
       "inline-style": 1
     },
     "apps/dashboard/src/app/[locale]/content/compose/create-entry.tsx": {
-      "inline-style": 14
+      "inline-style": 13
     },
     "apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx": {
       "inline-style": 2
@@ -296,7 +296,7 @@
       "inline-style": 7
     },
     "apps/dashboard/src/app/[locale]/content/post-menu.tsx": {
-      "inline-style": 7
+      "inline-style": 5
     },
     "apps/dashboard/src/app/[locale]/copilot/copilot-view.tsx": {
       "inline-style": 32
@@ -312,7 +312,7 @@
       "inline-style": 6
     },
     "apps/dashboard/src/app/[locale]/design-system/components/components-client.tsx": {
-      "inline-style": 79,
+      "inline-style": 61,
       "length": 1
     },
     "apps/dashboard/src/app/[locale]/design-system/components/page.tsx": {
@@ -324,7 +324,7 @@
       "length": 1
     },
     "apps/dashboard/src/app/[locale]/design-system/showcase-client.tsx": {
-      "inline-style": 25
+      "inline-style": 19
     },
     "apps/dashboard/src/app/[locale]/design-system/tokens/page.tsx": {
       "baked-token": 1,
@@ -338,7 +338,7 @@
       "inline-style": 23
     },
     "apps/dashboard/src/app/[locale]/intelligence/page.tsx": {
-      "inline-style": 22
+      "inline-style": 21
     },
     "apps/dashboard/src/app/[locale]/invitations/[token]/page.tsx": {
       "inline-style": 15
@@ -383,16 +383,16 @@
       "inline-style": 7
     },
     "apps/dashboard/src/app/[locale]/settings/brand/page.tsx": {
-      "inline-style": 19
+      "inline-style": 12
     },
     "apps/dashboard/src/app/[locale]/settings/general-fields.tsx": {
-      "inline-style": 5
+      "inline-style": 2
     },
     "apps/dashboard/src/app/[locale]/settings/page.tsx": {
       "inline-style": 2
     },
     "apps/dashboard/src/app/[locale]/settings/publishing/page.tsx": {
-      "inline-style": 20
+      "inline-style": 16
     },
     "apps/dashboard/src/app/[locale]/strategy/page.tsx": {
       "inline-style": 6
@@ -412,19 +412,16 @@
     "apps/dashboard/src/components/global-copilot.tsx": {
       "inline-style": 1
     },
-    "apps/dashboard/src/components/industry-field.tsx": {
-      "inline-style": 4
-    },
     "apps/dashboard/src/components/mention-field.tsx": {
       "baked-token": 1,
-      "inline-style": 5
+      "inline-style": 3
     },
     "apps/dashboard/src/components/mfa-enrolment.tsx": {
-      "inline-style": 7,
+      "inline-style": 6,
       "length": 1
     },
     "apps/dashboard/src/components/notes-panel.tsx": {
-      "inline-style": 29
+      "inline-style": 26
     },
     "apps/dashboard/src/components/notes-popover.tsx": {
       "inline-style": 1
@@ -472,7 +469,7 @@
       "inline-style": 19
     },
     "packages/ui/src/composer.tsx": {
-      "inline-style": 28
+      "inline-style": 21
     },
     "packages/ui/src/copilot-shell.tsx": {
       "baked-token": 2,
@@ -487,7 +484,7 @@
     },
     "packages/ui/src/design-studio.tsx": {
       "colour": 1,
-      "inline-style": 42,
+      "inline-style": 39,
       "length": 4,
       "numeric-style": 1
     },
@@ -538,8 +535,7 @@
       "inline-style": 1
     },
     "packages/ui/src/primitives.tsx": {
-      "inline-style": 15,
-      "numeric-style": 1
+      "inline-style": 15
     },
     "packages/ui/src/prototype-hero-canvas.tsx": {
       "colour": 5

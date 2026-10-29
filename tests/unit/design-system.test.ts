@@ -16,6 +16,7 @@ import {
   webfontHref,
   zIndexTokens,
 } from '@brandspace/ui';
+import { FIELD_CLASS, TEXTAREA_CLASS } from '../../packages/ui/src/primitives';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -337,6 +338,11 @@ describe('every form control carries the class that makes it visible', () => {
     ...collectSourceFiles('packages/ui/src'),
   ].filter((file) => file.endsWith('.tsx'));
 
+  it('the S5 field constants are bs-control plus geometry, never instead of it', () => {
+    expect(FIELD_CLASS.split(' ')).toEqual(['bs-control', 'bs-field']);
+    expect(TEXTAREA_CLASS.split(' ')).toEqual(['bs-control', 'bs-field', 'bs-field-multiline']);
+  });
+
   it('scans a meaningful number of files', () => {
     expect(sources.length).toBeGreaterThan(20);
   });
@@ -364,7 +370,9 @@ describe('every form control carries the class that makes it visible', () => {
         const attributes = match[2] ?? '';
         if (EXEMPT_TYPES.some((type) => attributes.includes(type))) continue;
         scanned += 1;
-        if (attributes.includes('bs-control') || attributes.includes('CONTROL_CLASS')) continue;
+        // S5: FIELD_CLASS and TEXTAREA_CLASS are `bs-control` plus the field's
+        // geometry (asserted below), so they carry the class too.
+        if (/bs-control|\b(CONTROL|FIELD|TEXTAREA)_CLASS\b/.test(attributes)) continue;
         /*
          * THE PORTED CONTROLS ARE FILLED BY THE PORT, not by `.bs-control`.
          *

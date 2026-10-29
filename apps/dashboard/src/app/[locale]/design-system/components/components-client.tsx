@@ -37,11 +37,9 @@ import {
   buttonClass,
   cardStyle,
   colorTokens,
-  inputStyle,
   menuItemStyle,
   radiusTokens,
   spacingTokens,
-  textareaStyle,
   tdStyle,
   thStyle,
   typographyTokens,
@@ -300,16 +298,16 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                 <Field label={c('Default', 'افتراضي')} htmlFor={id('default')}>
                   <input
                     id={id('default')}
-                    className="bs-control"
-                    style={inputStyle()}
+                    className="bs-control bs-field"
+
                     placeholder={c('Placeholder text', 'نص إرشادي')}
                   />
                 </Field>
                 <Field label={c('With value', 'بقيمة')} htmlFor={id('value')}>
                   <input
                     id={id('value')}
-                    className="bs-control"
-                    style={inputStyle()}
+                    className="bs-control bs-field"
+
                     defaultValue={c('Sample Brand', 'متجر نموذجي')}
                   />
                 </Field>
@@ -319,20 +317,20 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                   hint={c('Shown under the field', 'يظهر أسفل الحقل')}
                   required
                 >
-                  <input id={id('hint')} className="bs-control" style={inputStyle()} />
+                  <input id={id('hint')} className="bs-control bs-field" />
                 </Field>
                 <Field
                   label={c('Optional', 'اختياري')}
                   htmlFor={id('optional')}
                   optionalLabel={c('optional', 'اختياري')}
                 >
-                  <input id={id('optional')} className="bs-control" style={inputStyle()} />
+                  <input id={id('optional')} className="bs-control bs-field" />
                 </Field>
                 <Field label={c('Disabled', 'معطّل')} htmlFor={id('disabled')}>
                   <input
                     id={id('disabled')}
-                    className="bs-control"
-                    style={inputStyle()}
+                    className="bs-control bs-field"
+
                     disabled
                     defaultValue={c('Not editable', 'غير قابل للتعديل')}
                   />
@@ -340,8 +338,8 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                 <Field label={c('Read only', 'للقراءة فقط')} htmlFor={id('readonly')}>
                   <input
                     id={id('readonly')}
-                    className="bs-control"
-                    style={inputStyle()}
+                    className="bs-control bs-field"
+
                     readOnly
                     defaultValue={c('Read only value', 'قيمة للقراءة فقط')}
                   />
@@ -353,8 +351,8 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                 >
                   <input
                     id={id('error')}
-                    className="bs-control"
-                    style={inputStyle({ tone: 'error' })}
+                    className="bs-control bs-field"
+                    data-tone="error"
                     aria-invalid="true"
                     defaultValue="not-an-address"
                   />
@@ -366,16 +364,16 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                 >
                   <input
                     id={id('success')}
-                    className="bs-control"
-                    style={inputStyle({ tone: 'success' })}
+                    className="bs-control bs-field"
+                    data-tone="success"
                     defaultValue="owner@example.test"
                   />
                 </Field>
                 <Field label={c('Long value', 'قيمة طويلة')} htmlFor={id('long')}>
                   <input
                     id={id('long')}
-                    className="bs-control"
-                    style={inputStyle()}
+                    className="bs-control bs-field"
+
                     defaultValue={long}
                   />
                 </Field>
@@ -389,24 +387,24 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                 <Field label={c('Textarea', 'منطقة نص')} htmlFor={id('ta')}>
                   <textarea
                     id={id('ta')}
-                    className="bs-control"
-                    style={textareaStyle()}
+                    className="bs-control bs-field bs-field-multiline"
+
                     placeholder={c('Write something', 'اكتب شيئًا')}
                   />
                 </Field>
                 <Field label={c('Textarea with long text', 'نص طويل')} htmlFor={id('ta-long')}>
                   <textarea
                     id={id('ta-long')}
-                    className="bs-control"
-                    style={textareaStyle()}
+                    className="bs-control bs-field bs-field-multiline"
+
                     defaultValue={`${long} ${long}`}
                   />
                 </Field>
                 <Field label={c('Textarea disabled', 'معطّل')} htmlFor={id('ta-disabled')}>
                   <textarea
                     id={id('ta-disabled')}
-                    className="bs-control"
-                    style={textareaStyle()}
+                    className="bs-control bs-field bs-field-multiline"
+
                     disabled
                     defaultValue={c('Not editable', 'غير قابل للتعديل')}
                   />
@@ -418,8 +416,8 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                 >
                   <textarea
                     id={id('ta-error')}
-                    className="bs-control"
-                    style={textareaStyle({ tone: 'error' })}
+                    className="bs-control bs-field bs-field-multiline"
+                    data-tone="error"
                     aria-invalid="true"
                     defaultValue="x"
                   />
@@ -443,8 +441,8 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                 <Field label={c('Default', 'افتراضي')} htmlFor={`sel-default-${look}`}>
                   <select
                     id={`sel-default-${look}`}
-                    className="bs-control"
-                    style={inputStyle()}
+                    className="bs-control bs-field"
+
                     defaultValue="b"
                   >
                     {options.map((o) => (
@@ -457,8 +455,8 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                 <Field label={c('Disabled', 'معطّل')} htmlFor={`sel-disabled-${look}`}>
                   <select
                     id={`sel-disabled-${look}`}
-                    className="bs-control"
-                    style={inputStyle()}
+                    className="bs-control bs-field"
+
                     disabled
                   >
                     <option>{c('Not available', 'غير متاح')}</option>
@@ -471,8 +469,8 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                 >
                   <select
                     id={`sel-error-${look}`}
-                    className="bs-control"
-                    style={inputStyle({ tone: 'error' })}
+                    className="bs-control bs-field"
+                    data-tone="error"
                     aria-invalid="true"
                   >
                     <option>{c('Select…', 'اختر…')}</option>
@@ -481,8 +479,8 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                 <Field label={c('Long option', 'خيار طويل')} htmlFor={`sel-long-${look}`}>
                   <select
                     id={`sel-long-${look}`}
-                    className="bs-control"
-                    style={inputStyle()}
+                    className="bs-control bs-field"
+
                     defaultValue="c"
                   >
                     {options.map((o) => (
@@ -1172,8 +1170,8 @@ function DialogSection({ locale }: { readonly locale: string }) {
                   <Field label={c('Name', 'الاسم')} htmlFor={`dialog-name-${look}`}>
                     <input
                       id={`dialog-name-${look}`}
-                      className="bs-control"
-                      style={inputStyle()}
+                      className="bs-control bs-field"
+
                       defaultValue={long}
                     />
                   </Field>

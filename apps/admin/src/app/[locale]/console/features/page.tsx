@@ -294,7 +294,7 @@ export default async function FeaturesPage({
             >
               <Field label={isArabic ? 'الخطة' : 'Plan'} htmlFor="grant-plan">
                 <select
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="grant-plan"
                   name="planKey"
                   style={inputStyle()}
@@ -309,7 +309,7 @@ export default async function FeaturesPage({
               </Field>
               <Field label={isArabic ? 'الميزة' : 'Feature'} htmlFor="grant-feature">
                 <select
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="grant-feature"
                   name="featureKey"
                   style={inputStyle()}
@@ -324,7 +324,7 @@ export default async function FeaturesPage({
               </Field>
               <Field label={isArabic ? 'مُفعّل' : 'Enabled'} htmlFor="grant-enabled">
                 <select
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="grant-enabled"
                   name="enabled"
                   defaultValue="true"
@@ -341,7 +341,7 @@ export default async function FeaturesPage({
                 hint={isArabic ? 'فارغ = غير محدود' : 'blank = unlimited'}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="grant-limit"
                   name="limitValue"
                   type="number"
@@ -351,7 +351,7 @@ export default async function FeaturesPage({
               </Field>
               <Field label={isArabic ? 'النافذة' : 'Period'} htmlFor="grant-period">
                 <select
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="grant-period"
                   name="limitPeriod"
                   defaultValue=""
@@ -366,7 +366,7 @@ export default async function FeaturesPage({
               </Field>
               <Field label={isArabic ? 'قيمة التعداد' : 'Enum value'} htmlFor="grant-enum">
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="grant-enum"
                   name="enumValue"
                   style={inputStyle()}
@@ -405,7 +405,7 @@ export default async function FeaturesPage({
             >
               <Field label={isArabic ? 'المفتاح' : 'Key'} htmlFor="feature-key">
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="feature-key"
                   name="key"
                   required
@@ -416,7 +416,7 @@ export default async function FeaturesPage({
               </Field>
               <Field label={isArabic ? 'الاسم (عربي)' : 'Name (Arabic)'} htmlFor="feature-name-ar">
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="feature-name-ar"
                   name="name.ar"
                   defaultValue={editing?.nameAr ?? ''}
@@ -428,7 +428,7 @@ export default async function FeaturesPage({
                 htmlFor="feature-name-en"
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="feature-name-en"
                   name="name.en"
                   defaultValue={editing?.nameEn ?? ''}
@@ -437,7 +437,7 @@ export default async function FeaturesPage({
               </Field>
               <Field label={isArabic ? 'الفئة' : 'Category'} htmlFor="feature-category">
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="feature-category"
                   name="category"
                   defaultValue={editing?.category ?? 'general'}
@@ -446,7 +446,7 @@ export default async function FeaturesPage({
               </Field>
               <Field label={isArabic ? 'النوع' : 'Value type'} htmlFor="feature-type">
                 <select
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="feature-type"
                   name="valueType"
                   defaultValue={editing?.valueType ?? 'boolean'}
@@ -464,7 +464,7 @@ export default async function FeaturesPage({
                 hint={isArabic ? 'فارغ = لا شيء' : 'blank = none'}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="feature-default"
                   name="defaultValue"
                   defaultValue={
@@ -481,7 +481,7 @@ export default async function FeaturesPage({
                 hint={isArabic ? 'مفصولة بفواصل' : 'comma separated'}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="feature-enum"
                   name="enumValues"
                   defaultValue={editing?.enumValues.join(', ') ?? ''}
@@ -494,7 +494,7 @@ export default async function FeaturesPage({
                 hint={isArabic ? 'مفصولة بفواصل' : 'comma separated'}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="feature-depends"
                   name="dependsOn"
                   defaultValue={editing?.dependsOn.join(', ') ?? ''}
@@ -504,7 +504,7 @@ export default async function FeaturesPage({
               </Field>
               <Field label={isArabic ? 'الحالة' : 'Status'} htmlFor="feature-status">
                 <select
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="feature-status"
                   name="status"
                   defaultValue={editing?.status ?? 'active'}

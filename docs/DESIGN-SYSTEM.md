@@ -576,6 +576,14 @@ One component per family, used by both apps; a family's PR deletes the CSS it re
     danger → `--bs-control-surface-hover`; and the shared disabled state.
     `buttonClass('accent')` adds `bsp-accent`, which only the console look draws (yellow).
     `tests/unit/button.test.ts` pins both sets.
+- **Input** (`FIELD_CLASS` / `TEXTAREA_CLASS` in `packages/ui/src/primitives.tsx`, rules in
+  `tokens.css`). The geometry `inputStyle()` and `textareaStyle()` painted inline is the `.bs-field`
+  class: the prototype's form field, `9px 12px`, radius 12, 14px, as `--bs-control-*` variables. A
+  multi-line field adds `bs-field-multiline` (7rem, vertical resize, `10px 12px`, line height 1.5).
+  An error or success border is `data-tone="error" | "success"`. `.bs-control` keeps only the fill,
+  border and states, so a field that draws its own size (a compact filter select) keeps it. The
+  Control Center's `inputStyle()` and the customer `customerInputStyle()` now set only a form width
+  (28rem, 24rem). `tests/unit/field.test.ts` pins the values.
 
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 

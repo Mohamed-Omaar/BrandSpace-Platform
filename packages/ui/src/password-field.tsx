@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
-import { Field, inputStyle, CONTROL_CLASS } from './primitives';
+import { Field, FIELD_CLASS } from './primitives';
 import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
 
 /**
@@ -209,14 +209,14 @@ export function PasswordField({
 
   const wrapper: CSSProperties = { position: 'relative' };
   // Room for the toggle, on the trailing edge, logically.
-  const field: CSSProperties = { ...inputStyle(), paddingInlineEnd: 'var(--bsp-rem-4-5)' };
+  const field: CSSProperties = { paddingInlineEnd: 'var(--bsp-rem-4-5)' };
 
   return (
     <>
       <Field label={labels.label} htmlFor={id} required={required} {...(error ? { error } : {})}>
         <div style={wrapper}>
           <input
-            className={CONTROL_CLASS}
+            className={FIELD_CLASS}
             id={id}
             name={name}
             type={shown ? 'text' : 'password'}
@@ -307,7 +307,7 @@ export function PasswordField({
           <div style={wrapper}>
             <input
               ref={confirmRef}
-              className={CONTROL_CLASS}
+              className={FIELD_CLASS}
               id={confirmId}
               /*
                * DELIBERATELY UNNAMED — it is not submitted at all.

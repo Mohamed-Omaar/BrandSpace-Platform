@@ -11,7 +11,7 @@ import {
   zIndexTokens,
 } from './tokens';
 import { AlertIcon, CheckIcon, CloseIcon, PaperclipIcon, SendIcon, SparkIcon } from './icons';
-import { Button, CONTROL_CLASS, IconButton, textareaStyle } from './primitives';
+import { Button, IconButton, TEXTAREA_CLASS } from './primitives';
 import { Banner, Skeleton } from './feedback';
 import { useOverlayBehaviour } from './overlays';
 import { Avatar } from './media';
@@ -774,7 +774,7 @@ export function CopilotBody({
             disabled={live ? false : disabled}
             placeholder={labels.promptPlaceholder}
             aria-describedby={!live && disabled ? `${promptId}-notice` : undefined}
-            className={CONTROL_CLASS}
+            className={TEXTAREA_CLASS}
             {...(composer
               ? {
                   value: composer.value,
@@ -791,7 +791,6 @@ export function CopilotBody({
                 }
               : {})}
             style={{
-              ...textareaStyle(),
               background: 'transparent',
               boxShadow: 'none',
               color: !live && disabled ? colorTokens.textMuted : colorTokens.textPrimary,

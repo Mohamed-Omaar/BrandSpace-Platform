@@ -19,6 +19,7 @@ import {
   Button,
   Card,
   CONTROL_CLASS,
+  FIELD_CLASS,
   Dialog,
   Field,
   IconTile,
@@ -34,7 +35,6 @@ import {
   StateMessage,
   buttonClass,
   colorTokens,
-  inputStyle,
   radiusTokens,
   spacingTokens,
   typographyTokens,
@@ -561,8 +561,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                         {t('assets.filter.context')}
                       </span>
                       <select
-                        className={`${CONTROL_CLASS} bs-select`}
-                        style={inputStyle()}
+                        className={`${FIELD_CLASS} bs-select`}
                         value={filters.scope ?? ''}
                         onChange={(event) =>
                           router.push(
@@ -961,8 +960,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                     <select
                       id={`${bulkFormId}-op`}
                       name="operation"
-                      className={CONTROL_CLASS}
-                      style={inputStyle({ size: 'sm' })}
+                      className={FIELD_CLASS}
+
                       data-testid="assets-bulk-operation"
                     >
                       {can.edit ? <option value="tag">{t('assets.bulk.tag')}</option> : null}
@@ -977,20 +976,15 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                       <input
                         id={`${bulkFormId}-tag`}
                         name="tag"
-                        className={CONTROL_CLASS}
-                        style={inputStyle({ size: 'sm' })}
+                        className={FIELD_CLASS}
+
                         data-testid="assets-bulk-tag"
                       />
                     </Field>
                   ) : null}
                   {can.edit && props.folders.length > 0 ? (
                     <Field htmlFor={`${bulkFormId}-folder`} label={t('assets.bulk.folder')}>
-                      <select
-                        id={`${bulkFormId}-folder`}
-                        name="folderId"
-                        className={CONTROL_CLASS}
-                        style={inputStyle({ size: 'sm' })}
-                      >
+                      <select id={`${bulkFormId}-folder`} name="folderId" className={FIELD_CLASS}>
                         <option value="">{t('assets.allFiles')}</option>
                         {props.folders.map((folder) => (
                           <option key={folder.id} value={folder.id}>
@@ -1182,12 +1176,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           <Stack gap={spacingTokens.md}>
             {props.brands.length > 0 ? (
               <Field htmlFor={`${uploadFieldId}-brand`} label={t('assets.uploadBrand')}>
-                <select
-                  id={`${uploadFieldId}-brand`}
-                  name="brandId"
-                  className={CONTROL_CLASS}
-                  style={inputStyle()}
-                >
+                <select id={`${uploadFieldId}-brand`} name="brandId" className={FIELD_CLASS}>
                   {/* A workspace-level asset is the DEFAULT, because the shared
                       logo pack and the contract templates are the files most
                       often uploaded without a brand in mind. The select files
@@ -1296,8 +1285,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 id={`${folderFieldId}-parent`}
                 name="parentFolderId"
                 defaultValue={filters.folder ?? ''}
-                className={`${CONTROL_CLASS} bs-select`}
-                style={inputStyle()}
+                className={`${FIELD_CLASS} bs-select`}
                 data-testid="assets-folder-parent"
               >
                 <option value="">{t('assets.folderRoot')}</option>
@@ -1315,8 +1303,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 type="text"
                 required
                 maxLength={120}
-                className={CONTROL_CLASS}
-                style={inputStyle()}
+                className={FIELD_CLASS}
+
                 data-testid="assets-folder-name"
               />
             </Field>
@@ -1831,8 +1819,8 @@ function AssetDetail({
                   name="tags"
                   type="text"
                   defaultValue={asset.tags.join(', ')}
-                  className={CONTROL_CLASS}
-                  style={inputStyle()}
+                  className={FIELD_CLASS}
+
                   data-testid="asset-tags-input"
                 />
               </Field>
@@ -1842,8 +1830,8 @@ function AssetDetail({
                     id={`${fieldId}-folder`}
                     name="folderId"
                     defaultValue={asset.folderId ?? ''}
-                    className={CONTROL_CLASS}
-                    style={inputStyle()}
+                    className={FIELD_CLASS}
+
                     data-testid="asset-folder-select"
                   >
                     <option value="">{t('assets.allFiles')}</option>
@@ -1861,8 +1849,8 @@ function AssetDetail({
                   name="license"
                   type="text"
                   defaultValue={asset.license ?? ''}
-                  className={CONTROL_CLASS}
-                  style={inputStyle()}
+                  className={FIELD_CLASS}
+
                   data-testid="asset-license-input"
                 />
               </Field>
@@ -1876,8 +1864,8 @@ function AssetDetail({
                   name="rightsExpiryAt"
                   type="date"
                   defaultValue={asset.rightsExpiryAt ? asset.rightsExpiryAt.slice(0, 10) : ''}
-                  className={CONTROL_CLASS}
-                  style={inputStyle()}
+                  className={FIELD_CLASS}
+
                   data-testid="asset-rights-input"
                 />
               </Field>
@@ -1932,8 +1920,8 @@ function AssetDetail({
                   id={`${fieldId}-version`}
                   name="file"
                   required
-                  className={CONTROL_CLASS}
-                  style={inputStyle()}
+                  className={FIELD_CLASS}
+
                   data-testid="asset-version-input"
                 />
               </Field>

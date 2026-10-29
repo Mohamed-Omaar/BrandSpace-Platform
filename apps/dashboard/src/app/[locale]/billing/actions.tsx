@@ -360,7 +360,7 @@ export function CancelSubscriptionForm({
       <label style={{ display: 'grid', gap: spacingTokens.xs, ...typographyTokens.bodySm }}>
         {reasonLabel}
         <input
-          className="bs-control"
+          className="bs-control bs-field"
           name="reason"
           required
           minLength={4}

@@ -14,7 +14,6 @@ import {
   SideSheet,
   StateMessage,
   colorTokens,
-  inputStyle,
   spacingTokens,
   typographyTokens,
   showToast,
@@ -969,14 +968,13 @@ export function CalendarView({
 
             <Field label={t['calendar.scheduleDraft'] ?? ''} htmlFor="schedule-item">
               <select
-                className="bs-control"
+                className="bs-control bs-field"
                 id="schedule-item"
                 name="contentItemId"
                 required
                 value={scheduleItem}
                 onChange={(event) => setScheduleItem(event.target.value)}
                 data-testid="schedule-item"
-                style={inputStyle()}
               >
                 {drafts.map((draft) => (
                   <option key={draft.id} value={draft.id}>
@@ -995,7 +993,7 @@ export function CalendarView({
             <div className="bs-form-row">
               <Field label={t['calendar.scheduleDate'] ?? ''} htmlFor="schedule-date">
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="schedule-date"
                   name="date"
                   type="date"
@@ -1004,12 +1002,11 @@ export function CalendarView({
                   onChange={(event) => chooseScheduleDate(event.target.value)}
                   {...(today ? { min: today } : {})}
                   data-testid="schedule-date"
-                  style={inputStyle()}
                 />
               </Field>
               <Field label={t['calendar.scheduleTime'] ?? ''} htmlFor="schedule-time">
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="schedule-time"
                   name="time"
                   type="time"
@@ -1017,7 +1014,6 @@ export function CalendarView({
                   value={scheduleTime}
                   onChange={(event) => setScheduleTime(event.target.value)}
                   data-testid="schedule-time"
-                  style={inputStyle()}
                 />
               </Field>
             </div>
@@ -1208,7 +1204,7 @@ export function CalendarView({
                 <div className="bs-form-row">
                   <Field label={t['calendar.scheduleDate'] ?? ''} htmlFor="reschedule-date">
                     <input
-                      className="bs-control"
+                      className="bs-control bs-field"
                       id="reschedule-date"
                       name="date"
                       type="date"
@@ -1216,19 +1212,17 @@ export function CalendarView({
                       defaultValue={openSlot.date}
                       {...(today ? { min: today } : {})}
                       data-testid="reschedule-date"
-                      style={inputStyle()}
                     />
                   </Field>
                   <Field label={t['calendar.scheduleTime'] ?? ''} htmlFor="reschedule-time">
                     <input
-                      className="bs-control"
+                      className="bs-control bs-field"
                       id="reschedule-time"
                       name="time"
                       type="time"
                       required
                       defaultValue={openSlot.time}
                       data-testid="reschedule-time"
-                      style={inputStyle()}
                     />
                   </Field>
                 </div>

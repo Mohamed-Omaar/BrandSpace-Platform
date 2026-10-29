@@ -155,7 +155,7 @@ export default async function SecretsPage({
               {isArabic ? 'الاسم' : 'Name'}
             </label>
             <input
-              className="bs-control"
+              className="bs-control bs-field"
               id="name"
               name="name"
               required
@@ -168,7 +168,7 @@ export default async function SecretsPage({
               {isArabic ? 'الفئة' : 'Category'}
             </label>
             <select
-              className="bs-control"
+              className="bs-control bs-field"
               id="category"
               name="category"
               required
@@ -187,7 +187,7 @@ export default async function SecretsPage({
               {isArabic ? 'المزود' : 'Provider'}
             </label>
             <input
-              className="bs-control"
+              className="bs-control bs-field"
               id="provider"
               name="provider"
               required
@@ -202,7 +202,7 @@ export default async function SecretsPage({
             {/* type=password so it is not shoulder-readable; autoComplete off so a
               browser never stores a platform credential. */}
             <input
-              className="bs-control"
+              className="bs-control bs-field"
               id="value"
               name="value"
               type="password"
@@ -247,7 +247,7 @@ export default async function SecretsPage({
             {t('secrets.search')}
           </label>
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="secret-search"
             name="q"
             type="search"
@@ -261,7 +261,7 @@ export default async function SecretsPage({
             {t('secrets.category')}
           </label>
           <select
-            className="bs-control"
+            className="bs-control bs-field"
             id="secret-filter-category"
             name="category"
             defaultValue={category}
@@ -281,7 +281,7 @@ export default async function SecretsPage({
             {t('secrets.perPage')}
           </label>
           <select
-            className="bs-control"
+            className="bs-control bs-field"
             id="secret-page-size"
             name="size"
             defaultValue={String(listing.pageSize)}
@@ -389,7 +389,7 @@ export default async function SecretsPage({
                         <input type="hidden" name="locale" value={locale} />
                         <input type="hidden" name="secretId" value={secret.id} />
                         <input
-                          className="bs-control"
+                          className="bs-control bs-field"
                           type="password"
                           name="value"
                           required
@@ -400,7 +400,7 @@ export default async function SecretsPage({
                           style={smallInput}
                         />
                         <input
-                          className="bs-control"
+                          className="bs-control bs-field"
                           type="text"
                           name="reason"
                           required
@@ -424,7 +424,7 @@ export default async function SecretsPage({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="secretId" value={secret.id} />
                           <input
-                            className="bs-control"
+                            className="bs-control bs-field"
                             type="text"
                             name="reason"
                             required

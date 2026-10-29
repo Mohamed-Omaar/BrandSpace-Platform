@@ -14,7 +14,6 @@ import {
   buttonClass,
   colorTokens,
   initialsFrom,
-  inputStyle,
   radiusTokens,
   spacingTokens,
   statusTone,
@@ -172,8 +171,8 @@ export async function SimpleCustomers({
             type="search"
             defaultValue={search}
             placeholder={copy('cust.search')}
-            className="bs-control"
-            style={{ ...inputStyle(), inlineSize: 'min(22rem, 100%)' }}
+            className="bs-control bs-field"
+            style={{ inlineSize: 'min(22rem, 100%)' }}
             data-testid="customer-search"
           />
           <button type="submit" className={buttonClass('neutral')}>
@@ -502,12 +501,12 @@ export async function SimpleCustomerDetail({
   const reasonField = (id: string) => (
     <Field label={copy('common.reason')} htmlFor={id} hint={copy('common.reasonHint')}>
       <input
-        className="bs-control"
+        className="bs-control bs-field"
         id={id}
         name="reason"
         required
         minLength={8}
-        style={{ ...inputStyle(), maxInlineSize: '28rem' }}
+        style={{ maxInlineSize: '28rem' }}
         data-testid={id}
       />
     </Field>
@@ -769,8 +768,8 @@ export async function SimpleCustomerDetail({
                       id="simple-plan"
                       name="planKey"
                       defaultValue={workspace.planKey ?? ''}
-                      className="bs-control"
-                      style={{ ...inputStyle(), maxInlineSize: '28rem' }}
+                      className="bs-control bs-field"
+                      style={{ maxInlineSize: '28rem' }}
                       data-testid="simple-plan"
                     >
                       {catalogue.plans
@@ -818,8 +817,8 @@ export async function SimpleCustomerDetail({
                       type="number"
                       step={1}
                       required
-                      className="bs-control"
-                      style={{ ...inputStyle(), maxInlineSize: '12rem' }}
+                      className="bs-control bs-field"
+                      style={{ maxInlineSize: '12rem' }}
                       data-testid="simple-credits"
                     />
                   </Field>

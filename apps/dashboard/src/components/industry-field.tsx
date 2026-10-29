@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Field, inputStyle, type SearchableOption } from '@brandspace/ui';
+import { Field, type SearchableOption } from '@brandspace/ui';
 
 /**
  * THE INDUSTRY FIELD — the activated catalogue plus "Something else" (G6,
@@ -70,14 +70,13 @@ export function IndustryField({
         {choice === OTHER ? (
           <span className="bsp-ind-other">
             <input
-              className="bs-control"
+              className="bs-control bs-field"
               id={otherId}
               data-testid={`${testIdPrefix}-industry-other`}
               value={other}
               maxLength={120}
               aria-label={labels.industryOtherLabel}
               onChange={(event) => setOther(event.target.value)}
-              style={inputStyle()}
             />
             <button
               type="button"
@@ -90,12 +89,11 @@ export function IndustryField({
           </span>
         ) : (
           <select
-            className="bs-control bs-select bsp-chevron"
+            className="bs-control bs-field bs-select bsp-chevron"
             id={choiceId}
             data-testid={`${testIdPrefix}-industry`}
             value={choice}
             onChange={(event) => setChoice(event.target.value)}
-            style={inputStyle()}
           >
             <option value="">{labels.industryNone}</option>
             {industries.map((option) => (
@@ -116,12 +114,11 @@ export function IndustryField({
       {industries.length > 0 ? (
         <Field label={labels.industry} htmlFor={choiceId} hint={labels.industryHint}>
           <select
-            className="bs-control bs-select"
+            className="bs-control bs-field bs-select"
             id={choiceId}
             data-testid={`${testIdPrefix}-industry`}
             value={choice}
             onChange={(event) => setChoice(event.target.value)}
-            style={inputStyle()}
           >
             <option value="">{labels.industryNone}</option>
             {industries.map((option) => (
@@ -140,7 +137,7 @@ export function IndustryField({
           hint={industries.length === 0 ? labels.industryHint : undefined}
         >
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id={otherId}
             data-testid={`${testIdPrefix}-industry-other`}
             value={other}
@@ -149,7 +146,6 @@ export function IndustryField({
               setOther(event.target.value);
               if (industries.length === 0) setChoice(OTHER);
             }}
-            style={inputStyle()}
           />
         </Field>
       ) : null}

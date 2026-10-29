@@ -187,50 +187,26 @@ export function IconButton({
 export type ControlTone = 'default' | 'error' | 'success';
 
 /**
- * Input, select and textarea styling.
+ * Input, select and textarea styling: the CLASS `bs-control` (tokens.css).
  *
- * The resting border is TRANSPARENT and the fill does the identifying. An
- * error or success state is the one place a control keeps a real 3:1 boundary,
- * because there the edge carries meaning rather than decoration — and it is
- * never the only signal: `Field` also renders an icon and a sentence.
+ * S5: the geometry `inputStyle()` used to paint inline — the prototype's
+ * `9px 12px`, radius 12, 14px — is the class `bs-field` (`FIELD_CLASS`), as
+ * `--bs-control-*` variables,
+ * so a look can set it and an inline style no longer blocks the field's own
+ * states. The resting border is the look's; an error or success state is
+ * `data-tone="error" | "success"`, the one place a control keeps a real 3:1
+ * boundary — and never the only signal: `Field` also renders an icon and a
+ * sentence. A textarea gets its room and vertical resize from
+ * `TEXTAREA_CLASS`.
  */
-export function inputStyle(
-  options: { tone?: ControlTone; size?: ControlSize } = {},
-): CSSProperties {
-  const { tone = 'default' } = options;
-  const toneBorder =
-    tone === 'error' ? colorTokens.danger : tone === 'success' ? colorTokens.success : undefined;
-  // The prototype's form field (round 4): `9px 12px`, radius 12, 14px, and no
-  // stated height — its padding and one line, as measured; a select is the
-  // dropdown trigger's 40px (`prototype.css`). The fill and the `#e4e4e8`
-  // border come from `.bs-control` in `prototype.css`. `size` no longer
-  // shrinks a field.
-  return {
-    inlineSize: '100%',
-    boxSizing: 'border-box',
-    paddingInline: 'var(--bsp-px-12)',
-    paddingBlock: 'var(--bsp-px-9)',
-    borderRadius: 'var(--bsp-px-12)',
-    ...(toneBorder ? { border: `1px solid ${toneBorder}` } : {}),
-    color: colorTokens.textPrimary,
-    fontFamily: 'inherit',
-    fontSize: 'var(--bsp-fs-14)',
-    lineHeight: 'normal',
-  };
-}
-
 /** The class every input, select and textarea must carry. */
 export const CONTROL_CLASS = 'bs-control';
 
-export function textareaStyle(options: { tone?: ControlTone } = {}): CSSProperties {
-  return {
-    ...inputStyle(options),
-    minBlockSize: 'var(--bsp-rem-7)',
-    resize: 'vertical',
-    paddingBlock: 'var(--bsp-px-10)',
-    lineHeight: 1.5,
-  };
-}
+/** S5: a design-system field — the control AND the field's geometry (what `inputStyle()` painted). */
+export const FIELD_CLASS = 'bs-control bs-field';
+
+/** S5: a multi-line field — what `textareaStyle()` painted. */
+export const TEXTAREA_CLASS = 'bs-control bs-field bs-field-multiline';
 
 /**
  * A labelled form control.

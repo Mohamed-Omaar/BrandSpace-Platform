@@ -20,7 +20,6 @@ import {
   buttonClass,
   colorTokens,
   fontTokens,
-  inputStyle,
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
@@ -581,13 +580,13 @@ export async function SimpleIntegrationSetup({
                   hint={field.helpEn ? (locale === 'ar' ? field.helpAr : field.helpEn) : undefined}
                 >
                   <input
-                    className="bs-control"
+                    className="bs-control bs-field"
                     id={`simple-setting-${field.key}`}
                     name={`setting.${field.key}`}
                     type={field.kind === 'url' ? 'url' : 'text'}
                     required={field.required}
                     defaultValue={view.settings[field.key] ?? ''}
-                    style={{ ...inputStyle(), maxInlineSize: '28rem' }}
+                    style={{ maxInlineSize: '28rem' }}
                     data-testid={`setting-${field.key}`}
                   />
                 </Field>
@@ -608,13 +607,13 @@ export async function SimpleIntegrationSetup({
                     {/* WRITE-ONLY: no defaultValue, and none is possible —
                         nothing in this product can read a stored secret back. */}
                     <input
-                      className="bs-control"
+                      className="bs-control bs-field"
                       id={`simple-credential-${field.key}`}
                       name={`credential.${field.key}`}
                       type="password"
                       autoComplete="new-password"
                       required={field.required && status?.present !== true}
-                      style={{ ...inputStyle(), maxInlineSize: '28rem' }}
+                      style={{ maxInlineSize: '28rem' }}
                       data-testid={`credential-input-${field.key}`}
                     />
                   </Field>
@@ -626,12 +625,12 @@ export async function SimpleIntegrationSetup({
                 hint={copy('common.reasonHint')}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="simple-save-reason"
                   name="reason"
                   required
                   minLength={8}
-                  style={{ ...inputStyle(), maxInlineSize: '28rem' }}
+                  style={{ maxInlineSize: '28rem' }}
                   data-testid="save-reason"
                 />
               </Field>
@@ -722,12 +721,12 @@ export async function SimpleIntegrationSetup({
                 hint={copy('common.reasonHint')}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="simple-state-reason"
                   name="reason"
                   required
                   minLength={8}
-                  style={{ ...inputStyle(), maxInlineSize: '28rem' }}
+                  style={{ maxInlineSize: '28rem' }}
                   data-testid="integration-reason"
                 />
               </Field>

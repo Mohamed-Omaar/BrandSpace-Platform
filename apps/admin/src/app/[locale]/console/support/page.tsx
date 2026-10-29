@@ -172,7 +172,7 @@ export default async function SupportModePage({
               <input type="hidden" name="locale" value={locale} />
               <Field label={locale === 'ar' ? 'مساحة العمل' : 'Workspace'} htmlFor="workspaceId">
                 <select
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="workspaceId"
                   name="workspaceId"
                   style={inputStyle()}
@@ -190,7 +190,7 @@ export default async function SupportModePage({
                 hint={locale === 'ar' ? '8 أحرف على الأقل.' : 'At least 8 characters.'}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="support-reason-input"
                   name="reason"
                   required
@@ -200,7 +200,7 @@ export default async function SupportModePage({
               </Field>
               <Field label={t('support.ticket')} htmlFor="ticketRef">
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="ticketRef"
                   name="ticketRef"
                   style={inputStyle()}

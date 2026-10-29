@@ -588,7 +588,7 @@ function PlanForm({
       <div style={grid}>
         <Field label={isArabic ? 'المفتاح' : 'Key'} htmlFor="plan-key">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-key"
             name="key"
             defaultValue={plan?.key ?? ''}
@@ -599,7 +599,7 @@ function PlanForm({
         </Field>
         <Field label={isArabic ? 'الاسم (عربي)' : 'Name (Arabic)'} htmlFor="plan-name-ar">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-name-ar"
             name="name.ar"
             defaultValue={plan?.nameAr ?? ''}
@@ -608,7 +608,7 @@ function PlanForm({
         </Field>
         <Field label={isArabic ? 'الاسم (إنجليزي)' : 'Name (English)'} htmlFor="plan-name-en">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-name-en"
             name="name.en"
             defaultValue={plan?.nameEn ?? ''}
@@ -617,7 +617,7 @@ function PlanForm({
         </Field>
         <Field label={isArabic ? 'الوصف (عربي)' : 'Description (Arabic)'} htmlFor="plan-desc-ar">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-desc-ar"
             name="description.ar"
             defaultValue={plan?.descriptionAr ?? ''}
@@ -629,7 +629,7 @@ function PlanForm({
           htmlFor="plan-desc-en"
         >
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-desc-en"
             name="description.en"
             defaultValue={plan?.descriptionEn ?? ''}
@@ -638,7 +638,7 @@ function PlanForm({
         </Field>
         <Field label={isArabic ? 'المستوى' : 'Tier'} htmlFor="plan-tier">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-tier"
             name="tier"
             type="number"
@@ -649,7 +649,7 @@ function PlanForm({
         </Field>
         <Field label={isArabic ? 'الظهور' : 'Visibility'} htmlFor="plan-visibility">
           <select
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-visibility"
             name="visibility"
             defaultValue={plan?.visibility ?? 'private'}
@@ -662,7 +662,7 @@ function PlanForm({
         </Field>
         <Field label={isArabic ? 'الحالة' : 'Status'} htmlFor="plan-status">
           <select
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-status"
             name="status"
             defaultValue={plan?.status ?? 'draft'}
@@ -677,7 +677,7 @@ function PlanForm({
         </Field>
         <Field label={isArabic ? 'الترتيب' : 'Sort order'} htmlFor="plan-sort">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-sort"
             name="sortOrder"
             type="number"
@@ -705,7 +705,7 @@ function PlanForm({
                 htmlFor={`p-${currency}-m`}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id={`p-${currency}-m`}
                   name={`price.${currency}.monthly`}
                   type="number"
@@ -720,7 +720,7 @@ function PlanForm({
                 htmlFor={`p-${currency}-a`}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id={`p-${currency}-a`}
                   name={`price.${currency}.annual`}
                   type="number"
@@ -739,7 +739,7 @@ function PlanForm({
       <div style={grid}>
         <Field label={isArabic ? 'أيام التجربة' : 'Trial days'} htmlFor="plan-trial-days">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-trial-days"
             name="trialDays"
             type="number"
@@ -751,7 +751,7 @@ function PlanForm({
         </Field>
         <Field label={isArabic ? 'رصيد التجربة' : 'Trial credits'} htmlFor="plan-trial-credits">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-trial-credits"
             name="trialCredits"
             type="number"
@@ -766,7 +766,7 @@ function PlanForm({
           htmlFor="plan-trial-card"
         >
           <select
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-trial-card"
             name="trialRequiresCard"
             defaultValue={plan?.trialRequiresCard ? 'yes' : 'no'}
@@ -778,7 +778,7 @@ function PlanForm({
         </Field>
         <Field label={isArabic ? 'الرصيد الشهري' : 'Monthly credits'} htmlFor="plan-credits">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-credits"
             name="monthlyCredits"
             type="number"
@@ -790,7 +790,7 @@ function PlanForm({
         </Field>
         <Field label={isArabic ? 'سياسة الترحيل' : 'Rollover policy'} htmlFor="plan-rollover">
           <select
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-rollover"
             name="rollover.policy"
             defaultValue={plan?.rolloverPolicy ?? 'none'}
@@ -807,7 +807,7 @@ function PlanForm({
           htmlFor="plan-rollover-cap"
         >
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-rollover-cap"
             name="rollover.capMultiplier"
             type="number"
@@ -844,7 +844,7 @@ function PlanForm({
         ).map(([field, label]) => (
           <Field key={field} label={label} htmlFor={`quota-${field}`}>
             <input
-              className="bs-control"
+              className="bs-control bs-field"
               id={`quota-${field}`}
               name={`quota.${field}`}
               type="number"
@@ -882,7 +882,7 @@ function PlanForm({
             <div key={field} style={{ display: 'grid', gap: spacingTokens.xs }}>
               <Field label={label} htmlFor={`aicap-${field}-kind`}>
                 <select
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id={`aicap-${field}-kind`}
                   name={`aiCap.${field}.kind`}
                   defaultValue={cap === null ? '' : cap.kind}
@@ -899,7 +899,7 @@ function PlanForm({
                 htmlFor={`aicap-${field}-value`}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id={`aicap-${field}-value`}
                   name={`aiCap.${field}.value`}
                   type="number"
@@ -926,7 +926,7 @@ function PlanForm({
           }
         >
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="plan-reason"
             name="reason"
             defaultValue=""

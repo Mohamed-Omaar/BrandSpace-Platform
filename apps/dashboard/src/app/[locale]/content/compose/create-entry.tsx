@@ -5,7 +5,6 @@ import {
   StatusBadge,
   buttonClass,
   colorTokens,
-  inputStyle,
   radiusTokens,
   spacingTokens,
   statusTone,
@@ -136,8 +135,7 @@ export function RepurposePicker({
           name="q"
           defaultValue={search}
           placeholder={t('content.search')}
-          className="bs-control"
-          style={inputStyle({ size: 'sm' })}
+          className="bs-control bs-field"
         />
         <button type="submit" className={buttonClass('neutral', 'sm')}>
           {t('content.filter.apply')}

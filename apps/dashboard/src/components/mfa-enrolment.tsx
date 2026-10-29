@@ -1,13 +1,6 @@
 import QRCode from 'qrcode';
 import { CopyTextButton } from './copy-text-button';
-import {
-  Field,
-  colorTokens,
-  inputStyle,
-  spacingTokens,
-  typographyTokens,
-  buttonClass,
-} from '@brandspace/ui';
+import { Field, colorTokens, spacingTokens, typographyTokens, buttonClass } from '@brandspace/ui';
 
 /**
  * SETTING UP AN AUTHENTICATOR (G4 / Q23, prototype v94 Phase 2B-1, D-333).
@@ -100,7 +93,7 @@ export async function MfaEnrolmentPanel({
       </div>
       <Field label={labels.code} htmlFor={`${testId}-code`}>
         <input
-          className="bs-control"
+          className="bs-control bs-field"
           id={`${testId}-code`}
           name="code"
           inputMode="numeric"
@@ -108,7 +101,6 @@ export async function MfaEnrolmentPanel({
           required
           maxLength={6}
           data-testid={`${testId}-code`}
-          style={inputStyle()}
         />
       </Field>
       <div>

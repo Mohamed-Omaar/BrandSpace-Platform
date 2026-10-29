@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { inputStyle, tdStyle, thStyle, typographyTokens } from '@brandspace/ui';
+import { tdStyle, thStyle, typographyTokens } from '@brandspace/ui';
 
 /**
  * The customer surfaces' shared style constants.
@@ -25,7 +25,7 @@ export const customerTableStyle = (): CSSProperties => ({
 });
 export const customerThStyle = thStyle;
 export const customerTdStyle = tdStyle;
+/** The customer form's field width; the field itself is `.bs-control` (S5). */
 export const customerInputStyle = (): CSSProperties => ({
-  ...inputStyle(),
   maxInlineSize: 'var(--bsp-rem-24)',
 });

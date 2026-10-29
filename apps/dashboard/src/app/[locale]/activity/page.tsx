@@ -1,13 +1,12 @@
 import Link from 'next/link';
 import {
   Card,
-  CONTROL_CLASS,
+  FIELD_CLASS,
   SectionHeader,
   Stack,
   StateMessage,
   StatusBadge,
   colorTokens,
-  inputStyle,
   spacingTokens,
   typographyTokens,
   buttonClass,
@@ -182,8 +181,8 @@ export default async function ActivityPage({
                     id="activity-action"
                     name="action"
                     defaultValue={action ?? ''}
-                    className={CONTROL_CLASS}
-                    style={{ ...inputStyle(), inlineSize: 'auto', maxInlineSize: '100%' }}
+                    className={FIELD_CLASS}
+                    style={{ inlineSize: 'auto', maxInlineSize: '100%' }}
                     data-testid="activity-filter"
                   >
                     <option value="">{t('activity.filterAll')}</option>

@@ -53,12 +53,10 @@ import {
   SettingsIcon,
   ShieldIcon,
   colorTokens,
-  inputStyle,
   menuItemStyle,
   radiusTokens,
   shadowTokens,
   spacingTokens,
-  textareaStyle,
   typographyTokens,
   type CopilotState,
   type CopilotSurface,
@@ -342,8 +340,8 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           <Field label={ar ? 'الاسم' : 'Name'} htmlFor="demo-name" required>
             <input
               id="demo-name"
-              className="bs-control"
-              style={inputStyle()}
+              className="bs-control bs-field"
+
               defaultValue={ar ? 'متجر نموذجي' : 'Sample Brand'}
             />
           </Field>
@@ -352,7 +350,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
             htmlFor="demo-email"
             hint={ar ? 'يُستخدم للإشعارات فقط.' : 'Used for notifications only.'}
           >
-            <input id="demo-email" type="email" className="bs-control" style={inputStyle()} />
+            <input id="demo-email" type="email" className="bs-control bs-field" />
           </Field>
           <Field
             label={ar ? 'المُعرّف' : 'Slug'}
@@ -361,8 +359,8 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           >
             <input
               id="demo-slug"
-              className="bs-control"
-              style={inputStyle({ tone: 'error' })}
+              className="bs-control bs-field"
+              data-tone="error"
               defaultValue="sample-brand"
             />
           </Field>
@@ -373,8 +371,8 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           >
             <input
               id="demo-ok"
-              className="bs-control"
-              style={inputStyle({ tone: 'success' })}
+              className="bs-control bs-field"
+              data-tone="success"
               defaultValue={ar ? 'متجر نموذجي' : 'Sample Brand'}
             />
           </Field>
@@ -383,7 +381,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
             htmlFor="demo-notes"
             optionalLabel={ar ? 'اختياري' : 'Optional'}
           >
-            <textarea id="demo-notes" className="bs-control" style={textareaStyle()} />
+            <textarea id="demo-notes" className="bs-control bs-field bs-field-multiline" />
           </Field>
         </div>
       </Card>
@@ -513,7 +511,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           }
         >
           <Field label={ar ? 'الاسم' : 'Name'} htmlFor="dialog-name">
-            <input id="dialog-name" className="bs-control" style={inputStyle()} />
+            <input id="dialog-name" className="bs-control bs-field" />
           </Field>
         </Dialog>
 

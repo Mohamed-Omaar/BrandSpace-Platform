@@ -2,7 +2,6 @@ import type { CSSProperties, ReactNode } from 'react';
 import {
   StateMessage,
   StatusBadge,
-  inputStyle as sharedInputStyle,
   scrollContainerStyle,
   statusTone,
   tdStyle as sharedTdStyle,
@@ -45,8 +44,13 @@ export function EmptyState({ message }: { message: string }) {
   return <StateMessage title={message} />;
 }
 
+/**
+ * The Control Center's field width. The field itself is `.bs-control` (S5: its
+ * geometry is the class's, no longer an inline style); a console form keeps
+ * its fields to a readable 28rem.
+ */
 export function inputStyle(): CSSProperties {
-  return { ...sharedInputStyle(), maxInlineSize: '28rem' };
+  return { maxInlineSize: '28rem' };
 }
 
 export function tableStyle(): CSSProperties {

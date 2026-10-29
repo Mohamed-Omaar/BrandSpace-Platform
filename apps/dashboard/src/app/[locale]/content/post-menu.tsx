@@ -2,14 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import {
-  Dialog,
-  Field,
-  inputStyle,
-  spacingTokens,
-  visuallyHiddenStyle,
-  buttonClass,
-} from '@brandspace/ui';
+import { Dialog, Field, spacingTokens, visuallyHiddenStyle, buttonClass } from '@brandspace/ui';
 
 /**
  * THE POSTS "…" MENU — PORTED FROM `prototype-2026-09-27` (D-468 batch 2,
@@ -412,7 +405,7 @@ export function PostMenu(props: PostMenuProps) {
             <div className="bs-form-row">
               <Field label={l('calendar.scheduleDate')} htmlFor={`move-date-${itemId}`}>
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id={`move-date-${itemId}`}
                   name="date"
                   type="date"
@@ -420,19 +413,17 @@ export function PostMenu(props: PostMenuProps) {
                   defaultValue={slot.date}
                   {...(props.today ? { min: props.today } : {})}
                   data-testid={`post-move-date-${itemId}`}
-                  style={inputStyle()}
                 />
               </Field>
               <Field label={l('calendar.scheduleTime')} htmlFor={`move-time-${itemId}`}>
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id={`move-time-${itemId}`}
                   name="time"
                   type="time"
                   required
                   defaultValue={slot.time}
                   data-testid={`post-move-time-${itemId}`}
-                  style={inputStyle()}
                 />
               </Field>
             </div>

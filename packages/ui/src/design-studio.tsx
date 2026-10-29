@@ -9,7 +9,7 @@ import {
   spacingTokens,
   typographyTokens,
 } from './tokens';
-import { Button, ButtonRow, CONTROL_CLASS, IconButton, IconTile, inputStyle } from './primitives';
+import { Button, ButtonRow, FIELD_CLASS, IconButton, IconTile } from './primitives';
 import { StatusBadge } from './data';
 import { PRESET_SIZES } from './studio-presets';
 import { AbstractMedia } from './media';
@@ -428,18 +428,8 @@ export function StudioProperties({ labels }: { readonly labels: StudioLabels }) 
 
   const pair = (a: string, b: string) => (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacingTokens.xs }}>
-      <input
-        aria-label={a}
-        className={CONTROL_CLASS}
-        defaultValue={a}
-        style={inputStyle({ size: 'sm' })}
-      />
-      <input
-        aria-label={b}
-        className={CONTROL_CLASS}
-        defaultValue={b}
-        style={inputStyle({ size: 'sm' })}
-      />
+      <input aria-label={a} className={FIELD_CLASS} defaultValue={a} />
+      <input aria-label={b} className={FIELD_CLASS} defaultValue={b} />
     </div>
   );
 
@@ -484,11 +474,7 @@ export function StudioProperties({ labels }: { readonly labels: StudioLabels }) 
       )}
       {section(
         labels.typographyLabel,
-        <select
-          aria-label={labels.typographyLabel}
-          className={CONTROL_CLASS}
-          style={inputStyle({ size: 'sm' })}
-        >
+        <select aria-label={labels.typographyLabel} className={FIELD_CLASS}>
           <option>Inter · Bold · 64</option>
           <option>Cairo · Bold · 64</option>
         </select>,
@@ -608,11 +594,10 @@ export function DesignStudio({
         <IconTile icon={<SparkIcon size={16} />} size="sm" />
         <input
           aria-label={labels.designName}
-          className={CONTROL_CLASS}
+          className={FIELD_CLASS}
           data-testid="studio-name"
           defaultValue={documentName}
           style={{
-            ...inputStyle({ size: 'sm' }),
             inlineSize: 'auto',
             maxInlineSize: 'var(--bsp-rem-14)',
           }}

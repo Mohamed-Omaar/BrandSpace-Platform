@@ -11,7 +11,6 @@ import {
 } from 'react';
 import { ChevronDownIcon } from './icons';
 import { colorTokens, spacingTokens, typographyTokens, zIndexTokens } from './tokens';
-import { inputStyle } from './primitives';
 import { useOpening, usePresence } from './motion-hooks';
 
 export interface SearchableOption {
@@ -137,7 +136,7 @@ export function SearchableSelect({
       <input type="hidden" name={name} value={value} />
       <input
         id={id}
-        className="bs-control"
+        className="bs-control bs-field"
         data-testid={testId}
         role="combobox"
         aria-expanded={open}
@@ -169,7 +168,6 @@ export function SearchableSelect({
         }}
         onKeyDown={onKeyDown}
         style={{
-          ...inputStyle({ size: 'lg' }),
           paddingInlineEnd: 'var(--bsp-rem-2-75)',
           ...style,
         }}
