@@ -10,7 +10,6 @@ import {
   StatusBadge,
   buttonClass,
   colorTokens,
-  inputStyle,
   radiusTokens,
   spacingTokens,
   typographyTokens,
@@ -370,8 +369,8 @@ export async function SimpleFeatures({
                 name="reason"
                 required
                 minLength={8}
-                className="bs-control"
-                style={{ ...inputStyle(), maxInlineSize: '28rem' }}
+                className="bs-control bs-field"
+                style={{ maxInlineSize: '28rem' }}
                 data-testid="feature-reason"
               />
             </Field>

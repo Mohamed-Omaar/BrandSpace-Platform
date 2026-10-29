@@ -331,7 +331,13 @@ export default async function WorkspacesPage({
           <form action={createWorkspaceAction}>
             <input type="hidden" name="locale" value={locale} />
             <Field label={t('ws.name')} htmlFor="name">
-              <input className="bs-control" id="name" name="name" required style={inputStyle()} />
+              <input
+                className="bs-control bs-field"
+                id="name"
+                name="name"
+                required
+                style={inputStyle()}
+              />
             </Field>
             <Field
               label={t('ws.slug')}
@@ -342,11 +348,17 @@ export default async function WorkspacesPage({
                   : '3–50 lower-case letters, digits or hyphens.'
               }
             >
-              <input className="bs-control" id="slug" name="slug" required style={inputStyle()} />
+              <input
+                className="bs-control bs-field"
+                id="slug"
+                name="slug"
+                required
+                style={inputStyle()}
+              />
             </Field>
             <Field label={t('ws.ownerEmail')} htmlFor="ownerEmail">
               <input
-                className="bs-control"
+                className="bs-control bs-field"
                 id="ownerEmail"
                 name="ownerEmail"
                 type="email"
@@ -355,11 +367,16 @@ export default async function WorkspacesPage({
               />
             </Field>
             <Field label={t('ws.ownerName')} htmlFor="ownerName">
-              <input className="bs-control" id="ownerName" name="ownerName" style={inputStyle()} />
+              <input
+                className="bs-control bs-field"
+                id="ownerName"
+                name="ownerName"
+                style={inputStyle()}
+              />
             </Field>
             <Field label={t('ws.type')} htmlFor="type">
               <select
-                className="bs-control"
+                className="bs-control bs-field"
                 id="type"
                 name="type"
                 defaultValue="STARTUP"
@@ -376,7 +393,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.locale')} htmlFor="defaultLocale">
               <select
-                className="bs-control"
+                className="bs-control bs-field"
                 id="defaultLocale"
                 name="defaultLocale"
                 defaultValue="AR"
@@ -388,7 +405,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.country')} htmlFor="country">
               <input
-                className="bs-control"
+                className="bs-control bs-field"
                 id="country"
                 name="country"
                 required
@@ -399,7 +416,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.timezone')} htmlFor="timezone">
               <input
-                className="bs-control"
+                className="bs-control bs-field"
                 id="timezone"
                 name="timezone"
                 required
@@ -409,7 +426,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.currency')} htmlFor="currency">
               <input
-                className="bs-control"
+                className="bs-control bs-field"
                 id="currency"
                 name="currency"
                 required
@@ -430,7 +447,7 @@ export default async function WorkspacesPage({
               }
             >
               <select
-                className="bs-control"
+                className="bs-control bs-field"
                 id="planKey"
                 name="planKey"
                 defaultValue=""
@@ -446,7 +463,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.trialDays')} htmlFor="trialDays">
               <input
-                className="bs-control"
+                className="bs-control bs-field"
                 id="trialDays"
                 name="trialDays"
                 type="number"

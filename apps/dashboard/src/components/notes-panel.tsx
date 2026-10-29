@@ -5,7 +5,6 @@ import {
   StatusBadge,
   buttonClass,
   colorTokens,
-  inputStyle,
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
@@ -436,8 +435,8 @@ async function NoteThread({
                 id={`assign-${threadId}`}
                 name="assignedToUserId"
                 defaultValue={thread.assignedToUserId ?? ''}
-                className="bs-control bs-select"
-                style={inputStyle({ size: 'sm' })}
+                className="bs-control bs-field bs-select"
+
                 data-testid={`note-assign-${threadId}`}
               >
                 <option value="">{t('notes.nobody')}</option>
@@ -461,8 +460,8 @@ async function NoteThread({
                 type="date"
                 name="dueAt"
                 defaultValue={thread.dueAt ? thread.dueAt.toISOString().slice(0, 10) : ''}
-                className="bs-control"
-                style={inputStyle({ size: 'sm' })}
+                className="bs-control bs-field"
+
                 data-testid={`note-due-input-${threadId}`}
               />
               <button
@@ -548,13 +547,12 @@ function MentionPicker({
         {t('notes.mentionLabel')}
       </label>
       <select
-        className="bs-control"
+        className="bs-control bs-field"
         id={id}
         name="mentionedUserIds"
         multiple
         size={Math.min(members.length, 4)}
         data-testid={`${id}-select`}
-        style={inputStyle({ size: 'sm' })}
       >
         {members.map((member) => (
           <option key={member.userId} value={member.userId}>

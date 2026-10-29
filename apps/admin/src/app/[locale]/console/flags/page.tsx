@@ -489,7 +489,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
       <div style={grid}>
         <Field label={isArabic ? 'مفتاح الميزة' : 'Feature key'} htmlFor="flag-feature">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-feature"
             name="featureKey"
             required
@@ -500,7 +500,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
         </Field>
         <Field label={isArabic ? 'مفتاح الإيقاف' : 'Kill switch'} htmlFor="flag-kill">
           <select
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-kill"
             name="killSwitch"
             defaultValue={flag?.killSwitch ? 'yes' : 'no'}
@@ -516,7 +516,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
           hint={isArabic ? 'فارغ = لا رأي' : 'blank = no opinion'}
         >
           <select
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-global"
             name="globalEnabled"
             defaultValue={flag?.globalEnabled === null ? '' : String(flag?.globalEnabled ?? '')}
@@ -529,7 +529,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
         </Field>
         <Field label={isArabic ? 'الخطط' : 'Plans'} htmlFor="flag-plans">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-plans"
             name="enabledForPlans"
             defaultValue={flag?.enabledForPlans.join(', ') ?? ''}
@@ -538,7 +538,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
         </Field>
         <Field label={isArabic ? 'سماح لمساحات عمل' : 'Allow workspaces'} htmlFor="flag-allow">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-allow"
             name="enabledForWorkspaces"
             defaultValue={flag?.enabledForWorkspaces.join(', ') ?? ''}
@@ -547,7 +547,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
         </Field>
         <Field label={isArabic ? 'منع مساحات عمل' : 'Deny workspaces'} htmlFor="flag-deny">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-deny"
             name="disabledForWorkspaces"
             defaultValue={flag?.disabledForWorkspaces.join(', ') ?? ''}
@@ -556,7 +556,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
         </Field>
         <Field label={isArabic ? 'مجموعات التجربة' : 'Beta cohorts'} htmlFor="flag-cohorts">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-cohorts"
             name="betaGroups"
             defaultValue={flag?.betaGroups.join(', ') ?? ''}
@@ -566,7 +566,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
         </Field>
         <Field label={isArabic ? 'الدول' : 'Countries'} htmlFor="flag-countries">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-countries"
             name="countries"
             defaultValue={flag?.countries.join(', ') ?? ''}
@@ -575,7 +575,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
         </Field>
         <Field label={isArabic ? 'يبدأ' : 'Active from'} htmlFor="flag-from">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-from"
             name="activeFrom"
             type="date"
@@ -585,7 +585,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
         </Field>
         <Field label={isArabic ? 'ينتهي' : 'Active until'} htmlFor="flag-until">
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-until"
             name="activeUntil"
             type="date"
@@ -603,7 +603,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
           }
         >
           <input
-            className="bs-control"
+            className="bs-control bs-field"
             id="flag-rollout"
             name="percentageRollout"
             type="number"

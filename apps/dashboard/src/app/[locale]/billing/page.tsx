@@ -11,13 +11,7 @@ import {
   type Money,
   mayReadCreditBalance,
 } from '@brandspace/shared';
-import {
-  buttonClass,
-  colorTokens,
-  inputStyle,
-  spacingTokens,
-  typographyTokens,
-} from '@brandspace/ui';
+import { buttonClass, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import {
   inWorkspace,
   memberDisplayName,
@@ -253,14 +247,13 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
               {t('billing.exportFrom')}
             </label>
             <input
-              className="bs-control"
+              className="bs-control bs-field"
               id="export-from"
               name="from"
               type="date"
               required
               defaultValue={defaultExportFrom}
               data-testid="export-from"
-              style={inputStyle()}
             />
           </div>
           <div style={{ display: 'grid', gap: spacingTokens.xs }}>
@@ -268,14 +261,13 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
               {t('billing.exportTo')}
             </label>
             <input
-              className="bs-control"
+              className="bs-control bs-field"
               id="export-to"
               name="to"
               type="date"
               required
               defaultValue={defaultExportTo}
               data-testid="export-to"
-              style={inputStyle()}
             />
           </div>
           {/*

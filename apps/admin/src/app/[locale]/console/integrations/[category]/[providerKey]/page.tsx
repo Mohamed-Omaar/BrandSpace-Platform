@@ -316,13 +316,13 @@ export default async function IntegrationDetailPage({
 
       {/*
         THE CONFIGURATION FORM — the Phase 10 correction.
- 
+
         GENERATED FROM THE REGISTRY, never written per provider. Every input
         below exists because this provider's definition declares the field; a
         provider that declares nothing gets no form, and a real adapter
         registered next year gets its own form on the day it is registered
         without anybody editing this file.
- 
+
         THE SECRET INPUTS ARE WRITE-ONLY. There is no `defaultValue` on any of
         them and there could not be: nothing in this product can read a stored
         secret back. An empty box means "leave this credential alone", which is
@@ -358,7 +358,7 @@ export default async function IntegrationDetailPage({
                     {field.required ? ' *' : ''}
                   </label>
                   <input
-                    className="bs-control"
+                    className="bs-control bs-field"
                     id={`setting-${field.key}`}
                     name={`setting.${field.key}`}
                     type={field.kind === 'url' ? 'url' : 'text'}
@@ -391,7 +391,7 @@ export default async function IntegrationDetailPage({
                       {field.required ? ' *' : ''}
                     </label>
                     <input
-                      className="bs-control"
+                      className="bs-control bs-field"
                       id={`credential-${field.key}`}
                       name={`credential.${field.key}`}
                       type="password"
@@ -431,7 +431,7 @@ export default async function IntegrationDetailPage({
                   {isArabic ? 'سبب التغيير' : 'Change reason'}
                 </label>
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="save-reason"
                   name="reason"
                   required
@@ -553,7 +553,7 @@ export default async function IntegrationDetailPage({
                 {isArabic ? 'سبب التغيير' : 'Change reason'}
               </label>
               <input
-                className="bs-control"
+                className="bs-control bs-field"
                 id="integration-reason"
                 name="reason"
                 required

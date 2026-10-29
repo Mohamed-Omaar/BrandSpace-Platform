@@ -9,7 +9,6 @@ import {
   StatusBadge,
   buttonClass,
   colorTokens,
-  inputStyle,
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
@@ -313,8 +312,8 @@ export default async function IntelligencePage({
                       name="objective"
                       required
                       maxLength={400}
-                      className="bs-control"
-                      style={inputStyle()}
+                      className="bs-control bs-field"
+
                       placeholder={t('intelligence.focusPlaceholder')}
                     />
                   </label>

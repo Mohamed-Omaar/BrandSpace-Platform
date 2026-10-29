@@ -5,7 +5,6 @@ import {
   Banner,
   Field,
   SearchableSelect,
-  inputStyle,
   spacingTokens,
   type SearchableOption,
 } from '@brandspace/ui';
@@ -154,14 +153,13 @@ export function GeneralFields({
     <div className="bsp-sg-grid">
       <Field label={labels.name} htmlFor="name">
         <input
-          className="bs-control"
+          className="bs-control bs-field"
           id="name"
           name="name"
           defaultValue={saved.name}
           required
           maxLength={120}
           aria-describedby="name-hint"
-          style={inputStyle()}
         />
         {/* Review of #67 — the prototype draws no line under this field; what it
             changes is still said, to assistive technology. */}
@@ -190,7 +188,7 @@ export function GeneralFields({
           <input type="hidden" name="brandId" value={brand.brandId} />
           <Field label={labels.website} htmlFor="websiteUrl">
             <input
-              className="bs-control"
+              className="bs-control bs-field"
               id="websiteUrl"
               name="websiteUrl"
               type="url"
@@ -199,7 +197,6 @@ export function GeneralFields({
               defaultValue={brand.websiteUrl ?? ''}
               maxLength={2048}
               aria-describedby="websiteUrl-hint"
-              style={inputStyle()}
             />
             <span id="websiteUrl-hint" className="bs-sr-only">
               {labels.websiteHint}
@@ -308,11 +305,10 @@ export function GeneralFields({
             ) : null}
             <Field label={labels.locale} htmlFor="defaultLocale" hint={labels.localeHint}>
               <select
-                className="bs-control bs-select bsp-chevron"
+                className="bs-control bs-field bs-select bsp-chevron"
                 id="defaultLocale"
                 name="defaultLocale"
                 defaultValue={saved.defaultLocale}
-                style={inputStyle()}
               >
                 <option value="AR">{labels.localeAr}</option>
                 <option value="EN">{labels.localeEn}</option>

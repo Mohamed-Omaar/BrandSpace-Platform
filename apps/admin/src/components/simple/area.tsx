@@ -7,10 +7,9 @@ import {
   Field,
   Stack,
   StatusBadge,
-  CONTROL_CLASS,
+  FIELD_CLASS,
   buttonClass,
   colorTokens,
-  inputStyle,
   radiusTokens,
   spacingTokens,
   typographyTokens,
@@ -820,7 +819,8 @@ function FieldControl({
   const label =
     labelOf(ctx, field.label) +
     (field.unit && field.kind === 'number' ? ` (${ctx.t(field.unit)})` : '');
-  const input = { ...inputStyle({ tone: error ? 'error' : 'default' }) };
+  // S5: the field is `.bs-control.bs-field`; an error is its `data-tone`.
+  const tone = error ? 'error' : undefined;
   const extra = (
     <>
       {now !== undefined ? (
@@ -913,8 +913,9 @@ function FieldControl({
                 dir="ltr"
                 name={fieldName(field.id, currency)}
                 defaultValue={minorToMajorInput(minor[currency] ?? 0, currency)}
-                className={CONTROL_CLASS}
-                style={{ ...input, maxInlineSize: '10rem' }}
+                className={FIELD_CLASS}
+                data-tone={tone}
+                style={{ maxInlineSize: '10rem' }}
                 data-testid={`field-${field.id}-${currency}`}
               />
             </label>
@@ -964,8 +965,8 @@ function FieldControl({
           id={idOf(field)}
           name={fieldName(field.id)}
           defaultValue={String(value ?? '')}
-          className={CONTROL_CLASS}
-          style={input}
+          className={FIELD_CLASS}
+          data-tone={tone}
           data-testid={`field-${field.id}`}
         >
           {(field.options ?? []).map((option) => (
@@ -990,8 +991,9 @@ function FieldControl({
             id={idOf(field)}
             name={fieldName(field.id)}
             defaultValue={value === null || value === undefined ? '' : String(value)}
-            className={CONTROL_CLASS}
-            style={{ ...input, maxInlineSize: '10rem' }}
+            className={FIELD_CLASS}
+            data-tone={tone}
+            style={{ maxInlineSize: '10rem' }}
             dir="ltr"
             data-testid={`field-${field.id}`}
           />
@@ -1031,8 +1033,8 @@ function FieldControl({
           defaultValue={Array.isArray(value) ? (value as readonly string[]).join(', ') : ''}
           placeholder="10:00, 16:00"
           dir="ltr"
-          className={CONTROL_CLASS}
-          style={input}
+          className={FIELD_CLASS}
+          data-tone={tone}
           data-testid={`field-${field.id}`}
         />
       );
@@ -1046,8 +1048,8 @@ function FieldControl({
           defaultValue={typeof value === 'string' ? value : ''}
           maxLength={field.maxLength}
           dir={field.dir}
-          className={CONTROL_CLASS}
-          style={input}
+          className={FIELD_CLASS}
+          data-tone={tone}
           data-testid={`field-${field.id}`}
         />
       );
@@ -1238,8 +1240,8 @@ function Confirm({
                   name="note"
                   maxLength={300}
                   placeholder={ctx.t('ui.notePlaceholder')}
-                  className={CONTROL_CLASS}
-                  style={inputStyle()}
+                  className={FIELD_CLASS}
+
                   data-testid={`${testId}-note`}
                 />
               </Field>

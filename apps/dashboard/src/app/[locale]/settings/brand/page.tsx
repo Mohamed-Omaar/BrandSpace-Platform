@@ -5,7 +5,6 @@ import {
   StateMessage,
   colorTokens,
   layoutTokens,
-  inputStyle,
   radiusTokens,
   spacingTokens,
   typographyTokens,
@@ -236,7 +235,7 @@ export default async function BrandProfilePage({
 
               <Field label={t('brandProfile.name')} htmlFor="brand-name">
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="brand-name"
                   name="name"
                   defaultValue={data.brand.name}
@@ -244,25 +243,23 @@ export default async function BrandProfilePage({
                   maxLength={120}
                   disabled={!mayManage}
                   data-testid="brand-profile-name"
-                  style={inputStyle()}
                 />
               </Field>
 
               <div className="bs-form-row">
                 <Field label={t('brandProfile.industry')} htmlFor="brand-industry">
                   <input
-                    className="bs-control"
+                    className="bs-control bs-field"
                     id="brand-industry"
                     name="industry"
                     defaultValue={data.brand.industry ?? ''}
                     maxLength={120}
                     disabled={!mayManage}
-                    style={inputStyle()}
                   />
                 </Field>
                 <Field label={t('brandProfile.website')} htmlFor="brand-website">
                   <input
-                    className="bs-control"
+                    className="bs-control bs-field"
                     id="brand-website"
                     name="websiteUrl"
                     type="url"
@@ -270,33 +267,31 @@ export default async function BrandProfilePage({
                     defaultValue={data.brand.websiteUrl ?? ''}
                     maxLength={2048}
                     disabled={!mayManage}
-                    style={inputStyle()}
                   />
                 </Field>
               </div>
 
               <Field label={t('brandProfile.description')} htmlFor="brand-description">
                 <textarea
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="brand-description"
                   name="description"
                   rows={4}
                   maxLength={2000}
                   defaultValue={data.brand.description ?? ''}
                   disabled={!mayManage}
-                  style={{ ...inputStyle(), resize: 'vertical' }}
+                  style={{ resize: 'vertical' }}
                 />
               </Field>
 
               <div className="bs-form-row">
                 <Field label={t('brandProfile.defaultLocale')} htmlFor="brand-locale">
                   <select
-                    className="bs-control"
+                    className="bs-control bs-field"
                     id="brand-locale"
                     name="defaultLocale"
                     defaultValue={data.brand.defaultLocale}
                     disabled={!mayManage}
-                    style={inputStyle()}
                   >
                     <option value="AR">{t('brandProfile.localeAr')}</option>
                     <option value="EN">{t('brandProfile.localeEn')}</option>
@@ -382,13 +377,12 @@ export default async function BrandProfilePage({
                 hint={t('brandProfile.paletteHint')}
               >
                 <input
-                  className="bs-control"
+                  className="bs-control bs-field"
                   id="brand-palette"
                   name="colorPalette"
                   defaultValue={palette.join(', ')}
                   disabled={!mayManage}
                   data-testid="brand-profile-palette"
-                  style={inputStyle()}
                 />
               </Field>
               {palette.length > 0 ? (
@@ -440,13 +434,12 @@ export default async function BrandProfilePage({
                   hint={t('brandProfile.logoHint')}
                 >
                   <select
-                    className="bs-control"
+                    className="bs-control bs-field"
                     id="brand-primary-logo"
                     name="primaryLogoAssetId"
                     defaultValue={data.brand.primaryLogoAssetId ?? ''}
                     disabled={!mayManage}
                     data-testid="brand-profile-primary-logo"
-                    style={inputStyle()}
                   >
                     <option value="">{t('brandProfile.noLogo')}</option>
                     {data.assets.map((asset) => (
@@ -460,12 +453,11 @@ export default async function BrandProfilePage({
                 </Field>
                 <Field label={t('brandProfile.secondaryLogo')} htmlFor="brand-secondary-logo">
                   <select
-                    className="bs-control"
+                    className="bs-control bs-field"
                     id="brand-secondary-logo"
                     name="secondaryLogoAssetId"
                     defaultValue={data.brand.secondaryLogoAssetId ?? ''}
                     disabled={!mayManage}
-                    style={inputStyle()}
                   >
                     <option value="">{t('brandProfile.noLogo')}</option>
                     {data.assets.map((asset) => (

@@ -7,7 +7,6 @@ import {
   colorTokens,
   initialsFrom,
   personInitials,
-  inputStyle,
   layoutTokens,
   spacingTokens,
   statusTone,
@@ -304,11 +303,11 @@ export default async function MembersPage({
           {t('members.changeRole')}
         </label>
         <select
-          className="bs-control"
+          className="bs-control bs-field"
           id={`role-${membershipId}`}
           name="roleId"
           defaultValue=""
-          style={{ ...inputStyle(), maxInlineSize: 'var(--bsp-rem-11)' }}
+          style={{ maxInlineSize: 'var(--bsp-rem-11)' }}
         >
           <option value="">{t('members.changeRole')}</option>
           {assignableRoles.map((r) => (

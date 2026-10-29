@@ -13,7 +13,6 @@ import {
   StatusBadge,
   buttonClass,
   colorTokens,
-  inputStyle,
   radiusTokens,
   spacingTokens,
   typographyTokens,
@@ -613,12 +612,12 @@ export async function SimpleAiProfile({
               hint={copy('common.reasonHint')}
             >
               <input
-                className="bs-control"
+                className="bs-control bs-field"
                 id="profile-reason"
                 name="reason"
                 required
                 minLength={8}
-                style={{ ...inputStyle(), maxInlineSize: '28rem' }}
+                style={{ maxInlineSize: '28rem' }}
                 data-testid="profile-reason"
               />
             </Field>

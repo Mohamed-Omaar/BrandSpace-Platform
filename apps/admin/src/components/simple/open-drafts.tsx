@@ -4,7 +4,6 @@ import {
   Field,
   buttonClass,
   colorTokens,
-  inputStyle,
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
@@ -84,8 +83,8 @@ export function OpenDraftNotice({
                 name="reason"
                 required
                 minLength={8}
-                className="bs-control"
-                style={{ ...inputStyle(), maxInlineSize: '28rem' }}
+                className="bs-control bs-field"
+                style={{ maxInlineSize: '28rem' }}
                 data-testid="open-draft-reason"
               />
             </Field>

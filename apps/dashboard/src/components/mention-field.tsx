@@ -4,11 +4,9 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
 import {
   colorTokens,
   showToast,
-  inputStyle,
   radiusTokens,
   shadowTokens,
   spacingTokens,
-  textareaStyle,
   typographyTokens,
   zIndexTokens,
   useOpening,
@@ -220,18 +218,18 @@ export function MentionField({
       {multiline ? (
         <textarea
           {...shared}
-          className="bs-control"
+          className="bs-control bs-field bs-field-multiline"
           ref={field}
           rows={3}
-          style={textareaStyle()}
+
           onChange={(event) => update(event.target.value, event.target.selectionStart)}
         />
       ) : (
         <input
           {...shared}
-          className="bs-control"
+          className="bs-control bs-field"
           ref={field}
-          style={inputStyle({ size: 'sm' })}
+
           onChange={(event) =>
             update(event.target.value, event.target.selectionStart ?? event.target.value.length)
           }

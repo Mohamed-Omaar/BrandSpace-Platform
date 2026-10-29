@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { colorTokens, inputStyle, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 
 /**
  * THE AUTOMATION AUTHORING FORM.
@@ -592,8 +592,8 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                   step={1}
                   required
                   defaultValue={initial?.threshold ?? undefined}
-                  className="bs-control"
-                  style={inputStyle()}
+                  className="bs-control bs-field"
+
                   data-testid="automation-threshold-value"
                 />
               </label>
@@ -605,8 +605,8 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                   min={1}
                   max={90}
                   defaultValue={initial?.windowDays ?? 7}
-                  className="bs-control"
-                  style={inputStyle()}
+                  className="bs-control bs-field"
+
                   data-testid="automation-window"
                 />
               </label>
@@ -760,8 +760,8 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                                 ? (savedDefault as string[]).join(', ')
                                 : undefined
                           }
-                          className="bs-control"
-                          style={inputStyle()}
+                          className="bs-control bs-field"
+
                           data-testid="automation-condition-value"
                         />
                       )}
@@ -953,8 +953,8 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                 step={1}
                 required
                 defaultValue={edited.offsetHours}
-                className="bs-control"
-                style={inputStyle()}
+                className="bs-control bs-field"
+
                 data-testid="automation-offset-hours"
               />
             </label>

@@ -9,7 +9,7 @@ import {
   spacingTokens,
   typographyTokens,
 } from './tokens';
-import { Button, ButtonRow, CONTROL_CLASS, Field, inputStyle, textareaStyle } from './primitives';
+import { Button, ButtonRow, TEXTAREA_CLASS, FIELD_CLASS, Field } from './primitives';
 import { Card } from './surfaces';
 import { AbstractMedia, Avatar, MediaChip } from './media';
 import { AlertIcon, PaperclipIcon } from './icons';
@@ -347,11 +347,11 @@ export function PostComposer({
               >
                 <textarea
                   id="composer-caption"
-                  className={CONTROL_CLASS}
+                  className={TEXTAREA_CLASS}
                   value={caption}
                   onChange={(event) => setCaption(event.target.value)}
                   placeholder={labels.captionPlaceholder}
-                  style={textareaStyle(over ? { tone: 'error' } : {})}
+                  data-tone={over ? 'error' : undefined}
                 />
               </Field>
 
@@ -362,18 +362,16 @@ export function PostComposer({
               >
                 <input
                   id="composer-hashtags"
-                  className={CONTROL_CLASS}
+                  className={FIELD_CLASS}
                   defaultValue="#brandspace #socialmedia #contentstrategy"
-                  style={inputStyle()}
                 />
               </Field>
 
               <Field label={labels.mentionsLabel} htmlFor="composer-mentions">
                 <input
                   id="composer-mentions"
-                  className={CONTROL_CLASS}
+                  className={FIELD_CLASS}
                   defaultValue="@brandspace.hq"
-                  style={inputStyle()}
                 />
               </Field>
             </EditorSection>
@@ -443,18 +441,13 @@ export function PostComposer({
                 htmlFor="composer-first-comment"
                 hint={labels.firstCommentHint}
               >
-                <input id="composer-first-comment" className={CONTROL_CLASS} style={inputStyle()} />
+                <input id="composer-first-comment" className={FIELD_CLASS} />
               </Field>
               <Field label={labels.locationLabel} htmlFor="composer-location">
-                <input
-                  id="composer-location"
-                  className={CONTROL_CLASS}
-                  defaultValue="Riyadh"
-                  style={inputStyle()}
-                />
+                <input id="composer-location" className={FIELD_CLASS} defaultValue="Riyadh" />
               </Field>
               <Field label={labels.campaignLabel} htmlFor="composer-campaign">
-                <select id="composer-campaign" className={CONTROL_CLASS} style={inputStyle()}>
+                <select id="composer-campaign" className={FIELD_CLASS}>
                   {campaigns.map((campaign) => (
                     <option key={campaign.id} value={campaign.id}>
                       {campaign.name}
@@ -463,7 +456,7 @@ export function PostComposer({
                 </select>
               </Field>
               <Field label={labels.approvalLabel} htmlFor="composer-approver">
-                <select id="composer-approver" className={CONTROL_CLASS} style={inputStyle()}>
+                <select id="composer-approver" className={FIELD_CLASS}>
                   {approvers.map((approver) => (
                     <option key={approver.id} value={approver.id}>
                       {approver.name}

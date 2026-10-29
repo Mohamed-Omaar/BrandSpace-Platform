@@ -9,7 +9,6 @@ import {
   StatusBadge,
   buttonClass,
   colorTokens,
-  inputStyle,
   layoutTokens,
   spacingTokens,
   typographyTokens,
@@ -504,24 +503,22 @@ export default async function PublishingDefaultsPage({
                       ) : null}
                       <Field label={t('templates.name')} htmlFor={`template-name-${brand.id}`}>
                         <input
-                          className="bs-control"
+                          className="bs-control bs-field"
                           id={`template-name-${brand.id}`}
                           name="name"
                           required
                           maxLength={80}
                           defaultValue={editing?.name ?? ''}
                           data-testid={`template-name-${brand.id}`}
-                          style={inputStyle()}
                         />
                       </Field>
                       <Field label={t('templates.format')} htmlFor={`template-format-${brand.id}`}>
                         <select
-                          className="bs-control bs-select"
+                          className="bs-control bs-field bs-select"
                           id={`template-format-${brand.id}`}
                           name="contentType"
                           defaultValue={editing?.contentType ?? 'POST'}
                           data-testid={`template-format-${brand.id}`}
-                          style={inputStyle()}
                         >
                           {CONTENT_TYPES.map((type) => (
                             <option key={type} value={type}>
@@ -559,7 +556,7 @@ export default async function PublishingDefaultsPage({
                         hint={t('templates.captionHint')}
                       >
                         <textarea
-                          className="bs-control"
+                          className="bs-control bs-field"
                           id={`template-body-${brand.id}`}
                           name="body"
                           maxLength={5000}
@@ -567,7 +564,7 @@ export default async function PublishingDefaultsPage({
                           dir="auto"
                           defaultValue={editing?.body ?? ''}
                           data-testid={`template-body-${brand.id}`}
-                          style={{ ...inputStyle(), minBlockSize: 'var(--bsp-rem-6)' }}
+                          style={{ minBlockSize: 'var(--bsp-rem-6)' }}
                         />
                       </Field>
                       <Field
@@ -576,13 +573,12 @@ export default async function PublishingDefaultsPage({
                         hint={t('templates.hashtagsHint')}
                       >
                         <input
-                          className="bs-control"
+                          className="bs-control bs-field"
                           id={`template-hashtags-${brand.id}`}
                           name="hashtags"
                           dir="auto"
                           defaultValue={editing?.hashtags.map((tag) => `#${tag}`).join(' ') ?? ''}
                           data-testid={`template-hashtags-${brand.id}`}
-                          style={inputStyle()}
                         />
                       </Field>
                       <Field
@@ -590,7 +586,7 @@ export default async function PublishingDefaultsPage({
                         htmlFor={`template-first-comment-${brand.id}`}
                       >
                         <textarea
-                          className="bs-control"
+                          className="bs-control bs-field"
                           id={`template-first-comment-${brand.id}`}
                           name="firstComment"
                           maxLength={2200}
@@ -598,7 +594,6 @@ export default async function PublishingDefaultsPage({
                           dir="auto"
                           defaultValue={editing?.firstComment ?? ''}
                           data-testid={`template-first-comment-${brand.id}`}
-                          style={inputStyle()}
                         />
                       </Field>
                       {editing ? null : (

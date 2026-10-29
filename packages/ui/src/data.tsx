@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
 import { scrollContainerStyle } from './a11y';
 import { ChevronEndIcon, ChevronStartIcon, SearchIcon } from './icons';
-import { CONTROL_CLASS, inputStyle } from './primitives';
+import { FIELD_CLASS } from './primitives';
 
 /**
  * Tabular data, badges, and the controls that sit above a table.
@@ -404,8 +404,8 @@ export function SearchField({
         type="search"
         defaultValue={defaultValue}
         placeholder={placeholder}
-        className={CONTROL_CLASS}
-        style={{ ...inputStyle(), paddingInlineStart: 'var(--bsp-rem-2-5)' }}
+        className={FIELD_CLASS}
+        style={{ paddingInlineStart: 'var(--bsp-rem-2-5)' }}
       />
     </div>
   );

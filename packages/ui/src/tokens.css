@@ -1385,6 +1385,54 @@ html:has(.bs-topbar:not(.bsp-header)) {
     box-shadow var(--bs-duration-fast) var(--bs-ease-out);
 }
 
+/*
+ * S5 — THE FIELD'S GEOMETRY, which `inputStyle()` used to paint inline: the
+ * prototype's form field, `9px 12px`, radius 12, 14px, no stated height. On
+ * `.bs-field` (`FIELD_CLASS` = `bs-control bs-field`), not on `.bs-control`:
+ * many fields carry `bs-control` for its fill and states but draw their own
+ * size (a compact filter select, the rule builder's inputs), and must keep it.
+ * As variables, so a look can set them; the fill and border are the look's.
+ */
+.bs-field {
+  --bs-control-pad-block: var(--bsp-px-9);
+  --bs-control-pad-inline: var(--bsp-px-12);
+  --bs-control-radius: var(--bsp-px-12);
+  --bs-control-font-size: var(--bsp-fs-14);
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding-block: var(--bs-control-pad-block);
+  padding-inline: var(--bs-control-pad-inline);
+  border-radius: calc(var(--bs-control-radius) * var(--bs-radius-scale));
+  color: var(--bs-text-primary);
+  font-family: inherit;
+  font-size: var(--bs-control-font-size);
+  line-height: normal;
+}
+
+/*
+ * An error or success keeps a real 3:1 boundary (never the only signal: `Field`
+ * adds an icon and a sentence). `!important` because it was an inline style,
+ * which beat the customer frame's resting and hover borders; it still must.
+ */
+.bs-control[data-tone='error'] {
+  border-color: var(--bs-danger) !important;
+}
+.bs-control[data-tone='success'] {
+  border-color: var(--bs-success) !important;
+}
+
+/*
+ * What `textareaStyle()` added (`TEXTAREA_CLASS`): room for a few lines, a
+ * vertical resize, the prototype's `10px 12px`. Three classes, because the
+ * inline style it replaces beat the customer frame's `min-block-size: auto`.
+ */
+.bs-control.bs-field.bs-field-multiline {
+  min-block-size: var(--bsp-rem-7);
+  resize: vertical;
+  padding-block: var(--bsp-px-10);
+  line-height: 1.5;
+}
+
 .bs-control:hover:not(:disabled):not([aria-disabled='true']) {
   background-color: var(--bs-control-surface-hover);
 }

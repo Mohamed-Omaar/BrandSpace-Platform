@@ -159,7 +159,7 @@ export default async function ConfigurationPage({
             hint={isArabic ? '8 أحرف على الأقل.' : 'At least 8 characters.'}
           >
             <input
-              className="bs-control"
+              className="bs-control bs-field"
               id="reason"
               name="reason"
               required
@@ -210,7 +210,7 @@ export default async function ConfigurationPage({
             }
           >
             <textarea
-              className="bs-control"
+              className="bs-control bs-field"
               id="payload"
               name="payload"
               required
@@ -414,7 +414,7 @@ export default async function ConfigurationPage({
                           <input type="hidden" name="versionId" value={version.id} />
                           <input type="hidden" name="domain" value={domain} />
                           <input
-                            className="bs-control"
+                            className="bs-control bs-field"
                             type="text"
                             name="reason"
                             required
