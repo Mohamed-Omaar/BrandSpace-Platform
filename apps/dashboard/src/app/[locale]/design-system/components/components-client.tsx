@@ -9,6 +9,7 @@ import {
   Card,
   Cell,
   ChipListbox,
+  Backdrop,
   ConfirmDialog,
   DataTable,
   Dialog,
@@ -1210,19 +1211,19 @@ function DialogSection({ locale }: { readonly locale: string }) {
 /* ------------------------------------------------------------ backdrop --- */
 
 /**
- * EVERY BACKDROP TREATMENT THAT EXISTS, none written as a literal here:
+ * THE ONE BACKDROP (S5, D-5): every drawer, sheet and dialog sits on `Backdrop`
+ * — one tint (`--bs-scrim`), one blur (`--bs-fx-backdrop-scrim`), the token
+ * z-index. Each group is a real user of it:
  *
- *   - the `rgba(12, 12, 14, .25)` scrim — the real SideSheet's (also the
- *     navigation drawer's and the post drawer's);
- *   - the `rgba(15, 23, 42, .45)` scrim with `.bs-veil`'s blur — the real
- *     Dialog's (also the Copilot sheet's `.bs-copilot-scrim`, whose class only
- *     decides WHEN it shows: `display: none` from 768px up);
- *   - the `rgba(17, 17, 20, .28)` veil — `.bsp-au-veil` and `.bsp-cp-veil`,
- *     classes in `prototype.css`, positioned absolutely inside the box instead
- *     of fixed to the window.
+ *   - the SideSheet (layer `drawer`; also the navigation and post drawers);
+ *   - the Dialog (layer `dialog`, with the MO6 fade);
+ *   - the rule-builder and campaign veils (`.bsp-au-veil`, `.bsp-cp-veil`:
+ *     their classes now only centre the card);
+ *   - the Copilot phone sheet's scrim (layer `overlay`; `.bs-copilot-scrim`
+ *     only decides WHEN it shows: `display: none` from 768px up).
  *
  * The first two are opened from a button because the shared components own
- * their scrim; the box is the containing block (see `Stage`).
+ * their backdrop; the box is the containing block (see `Stage`).
  */
 function BackdropSection({ locale }: { readonly locale: string }) {
   const ar = locale === 'ar';
@@ -1246,7 +1247,7 @@ function BackdropSection({ locale }: { readonly locale: string }) {
         );
         return (
           <>
-            <Group title={c('Scrim .25 (SideSheet)', 'حاجب .25 (لوحة جانبية)')}>
+            <Group title={c('Backdrop · drawer (SideSheet)', 'الخلفية · لوحة جانبية')}>
               <Stage testId={`gallery-backdrop-sheet-${look}`} height="12rem">
                 {behind}
                 <Button
@@ -1266,7 +1267,12 @@ function BackdropSection({ locale }: { readonly locale: string }) {
                 />
               </Stage>
             </Group>
-            <Group title={c('Scrim .45 + .bs-veil blur (Dialog)', 'حاجب .45 مع ضبابية (نافذة)')}>
+            <Group
+              title={c(
+                'Backdrop · dialog, with its fade (Dialog)',
+                'الخلفية · نافذة مع ظهورها التدريجي',
+              )}
+            >
               <Stage testId={`gallery-backdrop-dialog-${look}`} height="12rem">
                 {behind}
                 <Button
@@ -1286,35 +1292,44 @@ function BackdropSection({ locale }: { readonly locale: string }) {
                 />
               </Stage>
             </Group>
-            <Group title=".bsp-au-veil / .bsp-cp-veil (.28)">
+            <Group
+              title={c(
+                'Backdrop · the rule and campaign veils',
+                'الخلفية · نافذتا القاعدة والحملة',
+              )}
+            >
               <Stage testId={`gallery-backdrop-veil28-${look}`} height="12rem">
                 {behind}
-                <div className="bsp-au-veil" style={{ position: 'absolute' }}>
+                <Backdrop layer="dialog" className="bsp-au-veil">
                   <div
                     className="bsp-card"
                     style={{ padding: spacingTokens.md, maxInlineSize: '70%' }}
                   >
                     {c('Rule builder card', 'بطاقة منشئ القاعدة')}
                   </div>
-                </div>
+                </Backdrop>
               </Stage>
               <Stage testId={`gallery-backdrop-cpveil-${look}`} height="12rem">
                 {behind}
-                <div className="bsp-cp-veil" style={{ position: 'absolute' }}>
+                <Backdrop layer="dialog" className="bsp-cp-veil">
                   <div
                     className="bsp-card"
                     style={{ padding: spacingTokens.md, maxInlineSize: '70%' }}
                   >
                     {c('Campaign dialog card', 'بطاقة نافذة الحملة')}
                   </div>
-                </div>
+                </Backdrop>
               </Stage>
             </Group>
-            <Group title=".bs-veil / .bs-copilot-scrim (classes alone)">
+            <Group
+              title={c(
+                'Backdrop · overlay (Copilot phone sheet)',
+                'الخلفية · طبقة المساعد على الهاتف',
+              )}
+            >
               <Stage testId={`gallery-backdrop-classes-${look}`} height="12rem">
                 {behind}
-                <div className="bs-veil" style={{ position: 'absolute', inset: 0 }} />
-                <div className="bs-copilot-scrim" style={{ position: 'absolute', inset: 0 }} />
+                <Backdrop layer="overlay" className="bs-copilot-scrim" />
               </Stage>
             </Group>
           </>

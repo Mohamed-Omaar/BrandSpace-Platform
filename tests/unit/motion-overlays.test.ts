@@ -81,25 +81,35 @@ describe('MO5 — closing', () => {
     expect(css).toContain('[data-leaving] {\n  pointer-events: none;');
     for (const file of [
       'packages/ui/src/overlays.tsx',
-      'packages/ui/src/app-shell.tsx',
+      // S5: the navigation scrims' leaving state is the shared Backdrop's.
+      'packages/ui/src/backdrop.tsx',
       'packages/ui/src/searchable-select.tsx',
       'apps/dashboard/src/components/mention-field.tsx',
     ]) {
       expect(read(file), file).toMatch(/'data-leaving': '', 'aria-hidden': true, inert: true/);
     }
+    for (const file of ['packages/ui/src/app-shell.tsx', 'packages/ui/src/customer-shell.tsx']) {
+      expect(read(file), file).toContain('leaving={drawer.leaving}');
+    }
   });
 });
 
 describe('MO6 — modals', () => {
-  it('the dialog: opacity, .98 → 1, 8 px, 300 ms; the veil: a fade and blur 0 → 3 px, 260 ms', () => {
+  it('the dialog: opacity, .98 → 1, 8 px, 300 ms; the veil: a fade that brings the scrim blur in with it, 260 ms', () => {
     expect(keyframes('bs-dialog-in')).toMatch(/opacity: 0;\s*scale: 0\.98;\s*translate: 0 8px;/);
-    expect(keyframes('bs-veil-in')).toMatch(/opacity: 0;\s*backdrop-filter: blur\(0\);/);
+    // S5: opacity only; the blur is painted at the veil's opacity, so it fades in too.
+    expect(keyframes('bs-veil-in')).toMatch(/from \{\s*opacity: 0;\s*$/);
+    expect(keyframes('bs-veil-in')).not.toContain('backdrop-filter');
     expect(css).toContain('animation: bs-dialog-in var(--bs-motion-dialog)');
-    expect(css).toMatch(
-      /\.bs-veil \{\s*backdrop-filter: blur\(3px\);\s*animation: bs-veil-in var\(--bs-motion-veil\)/,
+    expect(css).toMatch(/\.bs-veil \{\s*animation: bs-veil-in var\(--bs-motion-veil\)/);
+    // S5 (D-5): the veil's blur is the one Backdrop's, from its token.
+    const raw = read('packages/ui/src/tokens.css');
+    expect(raw).toMatch(
+      /\.bs-backdrop \{[^}]*background: var\(--bs-scrim\);\s*backdrop-filter: var\(--bs-fx-backdrop-scrim\);/,
     );
     const overlays = read('packages/ui/src/overlays.tsx');
-    expect(overlays).toContain('className="bs-veil"');
+    expect(overlays).toMatch(/<Backdrop\s+layer="dialog"[^>]*\bfade\b/);
+    expect(read('packages/ui/src/backdrop.tsx')).toContain("fade ? 'bs-veil' : ''");
     expect(overlays).toContain('className="bs-dialog-in"');
   });
 });

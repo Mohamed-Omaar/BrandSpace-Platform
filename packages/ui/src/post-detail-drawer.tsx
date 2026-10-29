@@ -17,6 +17,7 @@ import { IconButton } from './primitives';
 import { CloseIcon } from './icons';
 import { useOverlayBehaviour } from './overlays';
 import type { PostCardLabels, PostRecord } from './post-card';
+import { Backdrop } from './backdrop';
 
 export interface PostDetailLabels {
   readonly title: string;
@@ -89,18 +90,7 @@ export function PostDetailDrawer({
   ];
 
   return (
-    <div
-      data-testid={`${testId}-scrim`}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: zIndexTokens.drawer,
-        background: 'rgba(12, 12, 14, 0.25)',
-      }}
-    >
+    <Backdrop layer="drawer" testId={`${testId}-scrim`} onDismiss={onClose}>
       <div
         ref={panelRef}
         role="dialog"
@@ -227,6 +217,6 @@ export function PostDetailDrawer({
           </div>
         ) : null}
       </div>
-    </div>
+    </Backdrop>
   );
 }

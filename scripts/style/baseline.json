@@ -27,7 +27,7 @@
       "border-width": 196,
       "font-family": 3,
       "letter-spacing": 37,
-      "lit-token": 463,
+      "lit-token": 461,
       "radius": 1,
       "shadow": 23,
       "size": 53,
@@ -312,7 +312,7 @@
       "inline-style": 6
     },
     "apps/dashboard/src/app/[locale]/design-system/components/components-client.tsx": {
-      "inline-style": 83,
+      "inline-style": 79,
       "length": 1
     },
     "apps/dashboard/src/app/[locale]/design-system/components/page.tsx": {
@@ -457,9 +457,8 @@
       "inline-style": 3
     },
     "packages/ui/src/app-shell.tsx": {
-      "baked-token": 1,
-      "colour": 4,
-      "inline-style": 36,
+      "colour": 3,
+      "inline-style": 35,
       "length": 7
     },
     "packages/ui/src/calendar.tsx": {
@@ -476,14 +475,11 @@
       "inline-style": 28
     },
     "packages/ui/src/copilot-shell.tsx": {
-      "baked-token": 4,
-      "colour": 2,
-      "inline-style": 64
+      "baked-token": 2,
+      "inline-style": 62
     },
     "packages/ui/src/customer-shell.tsx": {
-      "baked-token": 1,
-      "colour": 1,
-      "inline-style": 14
+      "inline-style": 13
     },
     "packages/ui/src/data.tsx": {
       "inline-style": 30,
@@ -515,9 +511,8 @@
       "length": 2
     },
     "packages/ui/src/overlays.tsx": {
-      "baked-token": 6,
-      "colour": 2,
-      "inline-style": 24,
+      "baked-token": 4,
+      "inline-style": 22,
       "length": 1
     },
     "packages/ui/src/overview-hero.tsx": {
@@ -536,9 +531,8 @@
       "length": 1
     },
     "packages/ui/src/post-detail-drawer.tsx": {
-      "baked-token": 2,
-      "colour": 1,
-      "inline-style": 11
+      "baked-token": 1,
+      "inline-style": 10
     },
     "packages/ui/src/prefetch-link.tsx": {
       "inline-style": 1
