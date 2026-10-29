@@ -15,16 +15,18 @@
  *   whose value states a colour, length, duration, easing, z-index, blur, font
  *   size or font family literally instead of through `var(--…)`. Custom
  *   property DEFINITIONS (`--bs-ink: #111114`) are the tokens themselves and are
- *   never counted. `0`, keywords and percentages are not values a theme would
+ *   never counted. A reference to the S3 transitional palette (`var(--bs-lit-…)`,
+ *   a token named for its own value) is counted as `lit-token`. `0`, keywords and percentages are not values a theme would
  *   change, so they are not counted either.
  *
  *   TS/TSX (apps/*\/src and packages/ui/src, tests excluded, and `tokens.ts` —
  *   the token source — excluded): colour strings, numeric `zIndex` /
  *   `fontSize` / `borderRadius` / `letterSpacing` / `lineHeight` style values,
  *   literal length strings in style objects, every inline `style=` attribute,
- *   and every reference to a token object whose values are baked literals
- *   (`colorTokens.*`, `shadowTokens.*`, `motionTokens.*`, `zIndexTokens.*`,
- *   `fontTokens.*`) — those do not follow a change to tokens.css.
+ *   and every reference to a token whose value is a baked literal
+ *   (`zIndexTokens.*`, `fontTokens.*`, and the three D-55 colours) — those do
+ *   not follow a change to tokens.css. Since S2 the other colour, shadow and
+ *   motion tokens are `var(--bs-…)` and are not counted.
  *
  * The TSX categories are found with the SAME selectors the ESLint
  * `style/no-restricted-syntax` rule reports in the editor (`style-rules.mjs`),
@@ -116,6 +118,9 @@ export function measureCss(source: string): Record<string, number> {
   rootNode.walkDecls((decl) => {
     if (decl.prop.startsWith('--')) return; // a token definition
     const prop = decl.prop.toLowerCase();
+    // The S3 transitional palette is named for its literal value: using it is
+    // still a literal, so it is counted and may only go down.
+    bump(out, 'lit-token', count(/var\(--bs-lit-/g, decl.value));
     const value = withoutVars(decl.value);
     // Inside a `@keyframes` step a colour or length is still a literal.
     bump(out, 'colour', count(HEX, value) + count(COLOUR_FN, value) + count(NAMED_COLOUR, value));

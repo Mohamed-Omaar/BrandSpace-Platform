@@ -9,7 +9,7 @@ import {
   UploadStatus,
   uploadTexts,
 } from '../../../components/upload-field';
-import { Button, CONTROL_CLASS, Dialog, colorTokens, visuallyHiddenStyle } from '@brandspace/ui';
+import { Button, CONTROL_CLASS, Dialog, colorValues, visuallyHiddenStyle } from '@brandspace/ui';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import {
   addBrandFontAction,
@@ -111,7 +111,7 @@ const MAX_COLOURS = 12;
 function sixDigit(hex: string): string {
   const match = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(hex);
   if (match) return `#${match[1]}${match[1]}${match[2]}${match[2]}${match[3]}${match[3]}`;
-  return /^#[0-9a-f]{6}$/i.test(hex) ? hex : colorTokens.brandPurple;
+  return /^#[0-9a-f]{6}$/i.test(hex) ? hex : colorValues.brandPurple;
 }
 
 const fallbackStack: Record<Language, string> = {
@@ -349,7 +349,7 @@ function Colours({
               <button
                 type="button"
                 className="bsp-lk-sw-add"
-                onClick={() => setColours((current) => [...current, colorTokens.brandPurple])}
+                onClick={() => setColours((current) => [...current, colorValues.brandPurple])}
                 aria-label={t('bb.look.colourAdd')}
                 data-testid="look-colour-add"
               >

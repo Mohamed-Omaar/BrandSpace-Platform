@@ -5,12 +5,13 @@ import {
   LanguageSwitcher,
   PageHeader,
   colorTokens,
+  colorValues,
   fontTokens,
   layoutTokens,
   motionMs,
-  motionTokens,
+  motionValues,
   radiusTokens,
-  shadowTokens,
+  shadowValues,
   spacingTokens,
   typographyTokens,
   zIndexTokens,
@@ -187,12 +188,12 @@ export default async function TokenGalleryPage({
 
         <Group id="colors" title={groups[0][1]}>
           <div style={grid('15rem')}>
-            {Object.entries(colorTokens)
+            {Object.entries(colorValues)
               .filter(([name]) => !/^brand[B]lue/.test(name))
               .map(([name, value]) => {
                 const variable = cssVariable(name);
-                const onWhite = contrast(value, colorTokens.surface);
-                const onInk = contrast(value, colorTokens.textPrimary);
+                const onWhite = contrast(value, colorValues.surface);
+                const onInk = contrast(value, colorValues.textPrimary);
                 return (
                   <div key={name} style={tile}>
                     <div
@@ -239,7 +240,7 @@ export default async function TokenGalleryPage({
 
         <Group id="shadows" title={groups[1][1]}>
           <div style={grid('14rem')}>
-            {Object.entries(shadowTokens).map(([name, value]) => (
+            {Object.entries(shadowValues).map(([name, value]) => (
               <div key={name} style={{ padding: spacingTokens.md }}>
                 <div
                   style={{
@@ -307,7 +308,7 @@ export default async function TokenGalleryPage({
           <div style={grid('18rem')}>
             <div style={tile}>
               <div style={{ padding: spacingTokens.sm }}>
-                {Object.entries(motionTokens).map(([name, value]) => (
+                {Object.entries(motionValues).map(([name, value]) => (
                   <div
                     key={name}
                     style={{

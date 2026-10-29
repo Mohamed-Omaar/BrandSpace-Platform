@@ -205,7 +205,8 @@ export function TrendChart({
               key={segment.slice(0, 32)}
               d={segment}
               fill="none"
-              stroke={colorTokens.brandPurple}
+              /* A class, not the attribute: an SVG attribute cannot take var(). */
+              className="bs-chart-series"
               strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -219,16 +220,20 @@ export function TrendChart({
               key={point.label}
               // MO11: dots pop in after the line, 40 ms apart.
               className="bs-chart-dot"
-              style={{ '--i': index } as CSSProperties}
+              style={
+                {
+                  '--i': index,
+                  fill: colorTokens.brandPurple,
+                  stroke: colorTokens.surface,
+                } as CSSProperties
+              }
               cx={xFor(index)}
               cy={yFor(point.value)}
               r={4}
-              fill={colorTokens.brandPurple}
               /*
                * A 2px SURFACE RING, so two points that land close together stay
                * two points rather than a smear.
                */
-              stroke={colorTokens.surface}
               strokeWidth={2}
             >
               {/*
@@ -260,12 +265,11 @@ export function TrendChart({
                 key={`label-${point.label}`}
                 // MO11: value labels pop in with their dots.
                 className="bs-chart-dot"
-                style={{ '--i': index } as CSSProperties}
+                style={{ '--i': index, fill: colorTokens.textSecondary } as CSSProperties}
                 x={x}
                 y={Math.max(PADDING.top - 4, yFor(point.value) - 10)}
                 textAnchor={x > PLOT_WIDTH / 2 ? 'end' : 'start'}
                 /* TEXT WEARS A TEXT TOKEN, never the series colour. */
-                fill={colorTokens.textSecondary}
                 fontSize={12}
               >
                 {point.formatted ?? point.value}

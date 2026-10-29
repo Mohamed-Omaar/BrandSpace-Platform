@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { canonicalHex, resolveColourTokens } from '../support/style-tokens';
 import { brandBrainTokens } from '@brandspace/ui';
 
 /**
@@ -213,7 +214,8 @@ describe('the Brand Brain stylesheet is a transcription of the snapshot', () => 
   }
 
   function normalise(text: string): string {
-    return prototypeUnits(text)
+    // S3: a colour token is read back as its exact colour, like a size token.
+    return canonicalHex(resolveColourTokens(prototypeUnits(text)))
       .toLowerCase()
       .replace(/(^|[^0-9])\.(?=[0-9])/g, '$10.')
       .replace(/\s+/g, '');

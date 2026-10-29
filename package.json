@@ -17,6 +17,7 @@
     "lint:style": "stylelint \"packages/ui/src/**/*.css\" \"apps/*/src/**/*.css\" --allow-empty-input",
     "style:ratchet": "tsx scripts/style/ratchet.ts",
     "style:gallery": "tsx scripts/style/gallery-console.ts",
+    "style:tokens": "tsx scripts/style/tokens-css.ts && tsx scripts/style/gallery-console.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "pnpm --filter @brandspace/database generate",

@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  colorTokens,
+  colorValues,
   fontTokens,
-  motionTokens,
-  shadowTokens,
+  motionValues,
+  shadowValues,
   zIndexTokens,
 } from '../../packages/ui/src/tokens';
 
@@ -38,25 +38,16 @@ const kebab = (key: string) =>
 const GROUPS = [
   {
     name: 'colorTokens',
-    tokens: colorTokens as Record<string, string>,
+    tokens: colorValues as Record<string, string>,
     variable: (k: string) => `--bs-${kebab(k)}`,
-    // Translucency factors used only by inline styles; they have no CSS twin.
-    withoutTwin: [
-      'shellAlpha',
-      'shellSidebarAlpha',
-      'metricAlpha',
-      'surfaceCardAlpha',
-      'floatCardAlpha',
-      'drawerAlpha',
-      'authCardAlpha',
-      'previewPanelAlpha',
-    ],
+    // Since S2 every colour has a CSS twin (tokens.css :root is generated).
+    withoutTwin: [],
   },
   {
     name: 'shadowTokens',
-    tokens: shadowTokens as Record<string, string>,
+    tokens: shadowValues as Record<string, string>,
     variable: (k: string) => `--bs-shadow-${kebab(k)}`,
-    withoutTwin: ['authCard', 'float', 'drawer', 'commandDialog', 'focus'],
+    withoutTwin: [],
   },
   {
     name: 'zIndexTokens',
@@ -72,7 +63,7 @@ const GROUPS = [
   },
   {
     name: 'motionTokens',
-    tokens: motionTokens as Record<string, string>,
+    tokens: motionValues as Record<string, string>,
     variable: (k: string) =>
       k.startsWith('ease') ? `--bs-${kebab(k)}` : `--bs-duration-${kebab(k)}`,
     withoutTwin: [],
@@ -108,7 +99,7 @@ describe.each(GROUPS)('$name: every token with a CSS twin has the same value', (
 
 describe('the comparison itself', () => {
   it('reads the :root block, not a later rule', () => {
-    expect(definitions.get('--bs-brand-purple')).toBe(colorTokens.brandPurple.toLowerCase());
+    expect(definitions.get('--bs-brand-purple')).toBe(colorValues.brandPurple.toLowerCase());
     expect(definitions.size).toBeGreaterThan(300);
   });
 });

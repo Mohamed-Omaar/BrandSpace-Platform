@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { colorTokens } from '@brandspace/ui';
+import { colorValues } from '@brandspace/ui';
 
 /**
  * WCAG contrast assertions for every documented token pairing.
@@ -47,20 +47,20 @@ describe('the contrast helper is correct', () => {
 
 describe('text on the light surface meets AA', () => {
   it.each([
-    ['textPrimary', colorTokens.textPrimary],
-    ['textSecondary', colorTokens.textSecondary],
-    ['brandBlueText', colorTokens.brandBlueText],
-    ['brandYellowText', colorTokens.brandYellowText],
-    ['danger', colorTokens.danger],
-    ['warning', colorTokens.warning],
-    ['success', colorTokens.success],
+    ['textPrimary', colorValues.textPrimary],
+    ['textSecondary', colorValues.textSecondary],
+    ['brandBlueText', colorValues.brandBlueText],
+    ['brandYellowText', colorValues.brandYellowText],
+    ['danger', colorValues.danger],
+    ['warning', colorValues.warning],
+    ['success', colorValues.success],
   ])('%s reaches 4.5:1 on the surface', (_name, color) => {
-    expect(contrastRatio(color, colorTokens.surface)).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(contrastRatio(color, colorValues.surface)).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 
   it('brandBlueText also works on the muted surface', () => {
     expect(
-      contrastRatio(colorTokens.brandBlueText, colorTokens.surfaceMuted),
+      contrastRatio(colorValues.brandBlueText, colorValues.surfaceMuted),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 });
@@ -70,13 +70,13 @@ describe('filled controls meet AA', () => {
     // The original token set paired white with #00ADEE at 2.56:1 — a button
     // nobody with low vision could read.
     expect(
-      contrastRatio(colorTokens.brandBlueInk, colorTokens.brandBlueSurface),
+      contrastRatio(colorValues.brandBlueInk, colorValues.brandBlueSurface),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 
   it('brandYellowInk on brandYellow reaches 4.5:1', () => {
     expect(
-      contrastRatio(colorTokens.brandYellowInk, colorTokens.brandYellow),
+      contrastRatio(colorValues.brandYellowInk, colorValues.brandYellow),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 });
@@ -85,24 +85,24 @@ describe('identity colours are documented as unsafe for text', () => {
   it('brandBlue genuinely fails as text, which is why brandBlueText exists', () => {
     // If this ever passes, the brand colour changed and the guidance in
     // tokens.ts should be revisited rather than silently left stale.
-    expect(contrastRatio(colorTokens.brandBlue, colorTokens.surface)).toBeLessThan(AA_LARGE);
+    expect(contrastRatio(colorValues.brandBlue, colorValues.surface)).toBeLessThan(AA_LARGE);
   });
 
   it('brandYellow genuinely fails as text, which is why brandYellowText exists', () => {
-    expect(contrastRatio(colorTokens.brandYellow, colorTokens.surface)).toBeLessThan(AA_LARGE);
+    expect(contrastRatio(colorValues.brandYellow, colorValues.surface)).toBeLessThan(AA_LARGE);
   });
 });
 
 describe('non-text UI meets the 3:1 threshold', () => {
   it('the border is distinguishable against both surfaces', () => {
     // Borders and focus rings are "non-text contrast" under WCAG 2.2 (1.4.11).
-    expect(contrastRatio(colorTokens.textSecondary, colorTokens.surface)).toBeGreaterThanOrEqual(
+    expect(contrastRatio(colorValues.textSecondary, colorValues.surface)).toBeGreaterThanOrEqual(
       AA_NON_TEXT,
     );
   });
 
   it('the focus ring colour is visible against the surface', () => {
-    expect(contrastRatio(colorTokens.brandBlueText, colorTokens.surface)).toBeGreaterThanOrEqual(
+    expect(contrastRatio(colorValues.brandBlueText, colorValues.surface)).toBeGreaterThanOrEqual(
       AA_NON_TEXT,
     );
   });
@@ -120,44 +120,44 @@ describe('non-text UI meets the 3:1 threshold', () => {
 describe('the Phase 2B application palette meets AA', () => {
   it('purple is legible as text on every light surface we use', () => {
     for (const bg of [
-      colorTokens.surface,
-      colorTokens.appBackground,
-      colorTokens.brandPurpleTint,
+      colorValues.surface,
+      colorValues.appBackground,
+      colorValues.brandPurpleTint,
     ]) {
-      expect(contrastRatio(colorTokens.brandPurple, bg)).toBeGreaterThanOrEqual(AA_NORMAL);
+      expect(contrastRatio(colorValues.brandPurple, bg)).toBeGreaterThanOrEqual(AA_NORMAL);
     }
   });
 
   it('white text on the purple surface meets AA', () => {
     expect(
-      contrastRatio(colorTokens.brandPurpleInk, colorTokens.brandPurple),
+      contrastRatio(colorValues.brandPurpleInk, colorValues.brandPurple),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
     expect(
-      contrastRatio(colorTokens.brandPurpleInk, colorTokens.brandPurpleHover),
+      contrastRatio(colorValues.brandPurpleInk, colorValues.brandPurpleHover),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 
   it('body text stays legible on the application background', () => {
     expect(
-      contrastRatio(colorTokens.textPrimary, colorTokens.appBackground),
+      contrastRatio(colorValues.textPrimary, colorValues.appBackground),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
     expect(
-      contrastRatio(colorTokens.textSecondary, colorTokens.appBackground),
+      contrastRatio(colorValues.textSecondary, colorValues.appBackground),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
     expect(
-      contrastRatio(colorTokens.textPrimary, colorTokens.brandPurpleTint),
+      contrastRatio(colorValues.textPrimary, colorValues.brandPurpleTint),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 
   it('the card border is a non-text boundary, not a text colour', () => {
     // Asserted so nobody later uses it for a label: it is deliberately subtle.
-    expect(contrastRatio(colorTokens.cardBorder, colorTokens.surface)).toBeLessThan(AA_NORMAL);
+    expect(contrastRatio(colorValues.cardBorder, colorValues.surface)).toBeLessThan(AA_NORMAL);
   });
 
   it('yellow remains an accent and never carries text on white', () => {
-    expect(contrastRatio(colorTokens.brandYellow, colorTokens.surface)).toBeLessThan(AA_LARGE);
+    expect(contrastRatio(colorValues.brandYellow, colorValues.surface)).toBeLessThan(AA_LARGE);
     expect(
-      contrastRatio(colorTokens.brandYellowInk, colorTokens.brandYellow),
+      contrastRatio(colorValues.brandYellowInk, colorValues.brandYellow),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 });
@@ -174,15 +174,15 @@ describe('the Phase 2B application palette meets AA', () => {
 describe('the Phase 2C foundation meets AA', () => {
   it('every text tone is legible on white, which is now the page ground too', () => {
     for (const [name, color] of [
-      ['textPrimary', colorTokens.textPrimary],
-      ['textSecondary', colorTokens.textSecondary],
-      ['textMuted', colorTokens.textMuted],
+      ['textPrimary', colorValues.textPrimary],
+      ['textSecondary', colorValues.textSecondary],
+      ['textMuted', colorValues.textMuted],
     ] as const) {
       expect(
-        contrastRatio(color, colorTokens.appBackground),
+        contrastRatio(color, colorValues.appBackground),
         `${name} on the application ground`,
       ).toBeGreaterThanOrEqual(AA_NORMAL);
-      expect(contrastRatio(color, colorTokens.surface), `${name} on a card`).toBeGreaterThanOrEqual(
+      expect(contrastRatio(color, colorValues.surface), `${name} on a card`).toBeGreaterThanOrEqual(
         AA_NORMAL,
       );
     }
@@ -205,25 +205,25 @@ describe('the Phase 2C foundation meets AA', () => {
      * ground ever goes white again, the shell's shadow has nothing to fall on
      * and every surface boundary in the product disappears at once.
      */
-    expect(colorTokens.appBackground).not.toBe(colorTokens.surface);
-    expect(colorTokens.shellSurface).not.toBe(colorTokens.appBackground);
+    expect(colorValues.appBackground).not.toBe(colorValues.surface);
+    expect(colorValues.shellSurface).not.toBe(colorValues.appBackground);
 
     // The shell must be LIGHTER than the ground it floats on — a shell darker
     // than its ground reads as a hole rather than as a raised surface.
-    expect(relativeLuminance(colorTokens.shellSurface)).toBeGreaterThan(
-      relativeLuminance(colorTokens.appBackground),
+    expect(relativeLuminance(colorValues.shellSurface)).toBeGreaterThan(
+      relativeLuminance(colorValues.appBackground),
     );
   });
 
   it('the focus ring is visible on every surface it can land on', () => {
     for (const [name, background] of [
-      ['surface', colorTokens.surface],
-      ['surfaceMuted', colorTokens.surfaceMuted],
-      ['surfaceSunken', colorTokens.surfaceSunken],
-      ['brandPurpleTint', colorTokens.brandPurpleTint],
+      ['surface', colorValues.surface],
+      ['surfaceMuted', colorValues.surfaceMuted],
+      ['surfaceSunken', colorValues.surfaceSunken],
+      ['brandPurpleTint', colorValues.brandPurpleTint],
     ] as const) {
       expect(
-        contrastRatio(colorTokens.focusRing, background),
+        contrastRatio(colorValues.focusRing, background),
         `focus ring on ${name}`,
       ).toBeGreaterThanOrEqual(AA_NON_TEXT);
     }
@@ -232,18 +232,18 @@ describe('the Phase 2C foundation meets AA', () => {
   it('a control boundary reaches the 3:1 non-text threshold (WCAG 1.4.11)', () => {
     // `borderStrong` exists precisely because `border` does NOT reach it: an
     // input outlined at 1.4:1 is invisible to a lot of people.
-    expect(contrastRatio(colorTokens.borderStrong, colorTokens.surface)).toBeGreaterThanOrEqual(
+    expect(contrastRatio(colorValues.borderStrong, colorValues.surface)).toBeGreaterThanOrEqual(
       AA_NON_TEXT,
     );
-    expect(contrastRatio(colorTokens.border, colorTokens.surface)).toBeLessThan(AA_NON_TEXT);
+    expect(contrastRatio(colorValues.border, colorValues.surface)).toBeLessThan(AA_NON_TEXT);
   });
 
   it('every semantic tone is legible on its own tint', () => {
     for (const [name, ink, tint] of [
-      ['success', colorTokens.success, colorTokens.successTint],
-      ['warning', colorTokens.warning, colorTokens.warningTint],
-      ['danger', colorTokens.danger, colorTokens.dangerTint],
-      ['info', colorTokens.info, colorTokens.infoTint],
+      ['success', colorValues.success, colorValues.successTint],
+      ['warning', colorValues.warning, colorValues.warningTint],
+      ['danger', colorValues.danger, colorValues.dangerTint],
+      ['info', colorValues.info, colorValues.infoTint],
     ] as const) {
       expect(contrastRatio(ink, tint), `${name} on its tint`).toBeGreaterThanOrEqual(AA_NORMAL);
     }
@@ -252,20 +252,20 @@ describe('the Phase 2C foundation meets AA', () => {
   it('the yellow accent badge carries darkened yellow text, never white', () => {
     // The accent badge is `brandYellowText` on `brandYellowTint`.
     expect(
-      contrastRatio(colorTokens.brandYellowText, colorTokens.brandYellowTint),
+      contrastRatio(colorValues.brandYellowText, colorValues.brandYellowTint),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
     // And white on yellow stays firmly unusable, which is why the rule exists.
-    expect(contrastRatio('#FFFFFF', colorTokens.brandYellow)).toBeLessThan(AA_LARGE);
-    expect(contrastRatio('#FFFFFF', colorTokens.brandYellowTint)).toBeLessThan(AA_LARGE);
+    expect(contrastRatio('#FFFFFF', colorValues.brandYellow)).toBeLessThan(AA_LARGE);
+    expect(contrastRatio('#FFFFFF', colorValues.brandYellowTint)).toBeLessThan(AA_LARGE);
   });
 
   it('the pressed purple is legible on the tint it appears against', () => {
     // Active navigation is `brandPurplePressed` on `brandPurpleTint`.
     expect(
-      contrastRatio(colorTokens.brandPurplePressed, colorTokens.brandPurpleTint),
+      contrastRatio(colorValues.brandPurplePressed, colorValues.brandPurpleTint),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
     expect(
-      contrastRatio(colorTokens.brandPurplePressed, colorTokens.surface),
+      contrastRatio(colorValues.brandPurplePressed, colorValues.surface),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 
@@ -283,21 +283,21 @@ describe('the Phase 2C foundation meets AA', () => {
    */
   it('every text token clears AA on every supporting surface it can land on', () => {
     const surfaces = [
-      ['surface', colorTokens.surface],
-      ['surfaceSoft', colorTokens.surfaceSoft],
-      ['surfaceWarm', colorTokens.surfaceWarm],
-      ['surfaceLavender', colorTokens.surfaceLavender],
-      ['surfaceLavenderStrong', colorTokens.surfaceLavenderStrong],
-      ['surfaceMuted', colorTokens.surfaceMuted],
-      ['surfaceSunken', colorTokens.surfaceSunken],
-      ['controlSurface', colorTokens.controlSurface],
+      ['surface', colorValues.surface],
+      ['surfaceSoft', colorValues.surfaceSoft],
+      ['surfaceWarm', colorValues.surfaceWarm],
+      ['surfaceLavender', colorValues.surfaceLavender],
+      ['surfaceLavenderStrong', colorValues.surfaceLavenderStrong],
+      ['surfaceMuted', colorValues.surfaceMuted],
+      ['surfaceSunken', colorValues.surfaceSunken],
+      ['controlSurface', colorValues.controlSurface],
     ] as const;
 
     const failures: string[] = [];
     for (const [surfaceName, background] of surfaces) {
       for (const [inkName, ink] of [
-        ['textPrimary', colorTokens.textPrimary],
-        ['textSecondary', colorTokens.textSecondary],
+        ['textPrimary', colorValues.textPrimary],
+        ['textSecondary', colorValues.textSecondary],
       ] as const) {
         const ratio = contrastRatio(ink, background);
         if (ratio < AA_NORMAL) {
@@ -331,25 +331,25 @@ describe('the Phase 2C foundation meets AA', () => {
      */
     const failures: string[] = [];
     for (const [name, background] of Object.entries({
-      surface: colorTokens.surface,
-      surfaceSoft: colorTokens.surfaceSoft,
-      surfaceWarm: colorTokens.surfaceWarm,
-      surfaceLavender: colorTokens.surfaceLavender,
-      surfaceLavenderStrong: colorTokens.surfaceLavenderStrong,
-      surfaceMuted: colorTokens.surfaceMuted,
-      surfaceSunken: colorTokens.surfaceSunken,
-      appBackground: colorTokens.appBackground,
-      controlSurface: colorTokens.controlSurface,
-      controlSurfaceDisabled: colorTokens.controlSurfaceDisabled,
-      brandYellowTint: colorTokens.brandYellowTint,
-      shellSurface: colorTokens.shellSurface,
-      shellSidebar: colorTokens.shellSidebar,
+      surface: colorValues.surface,
+      surfaceSoft: colorValues.surfaceSoft,
+      surfaceWarm: colorValues.surfaceWarm,
+      surfaceLavender: colorValues.surfaceLavender,
+      surfaceLavenderStrong: colorValues.surfaceLavenderStrong,
+      surfaceMuted: colorValues.surfaceMuted,
+      surfaceSunken: colorValues.surfaceSunken,
+      appBackground: colorValues.appBackground,
+      controlSurface: colorValues.controlSurface,
+      controlSurfaceDisabled: colorValues.controlSurfaceDisabled,
+      brandYellowTint: colorValues.brandYellowTint,
+      shellSurface: colorValues.shellSurface,
+      shellSidebar: colorValues.shellSidebar,
       // `shellPanel` is `transparent` in the full-demo alignment — the panel
       // takes the shell's own translucency — so the ground under it is the
       // shell, already asserted above.
-      ambientGround: colorTokens.ambientGround,
+      ambientGround: colorValues.ambientGround,
     })) {
-      const ratio = contrastRatio(colorTokens.textMuted, background);
+      const ratio = contrastRatio(colorValues.textMuted, background);
       if (ratio < AA_NORMAL) failures.push(`textMuted on ${name}: ${ratio.toFixed(2)}`);
     }
     expect(failures).toEqual([]);
@@ -360,13 +360,13 @@ describe('the Phase 2C foundation meets AA', () => {
     // demo's own `--muted` is below AA on the demo's own page ground.
     // The FULL demo's `--muted: #717179` and `--subtle: #a3a3aa`, both of which
     // fail on surfaces the demo itself puts them on.
-    expect(contrastRatio('#717179', colorTokens.surfaceMuted)).toBeLessThan(AA_NORMAL);
-    expect(contrastRatio('#A3A3AA', colorTokens.shellSidebar)).toBeLessThan(AA_NORMAL);
+    expect(contrastRatio('#717179', colorValues.surfaceMuted)).toBeLessThan(AA_NORMAL);
+    expect(contrastRatio('#A3A3AA', colorValues.shellSidebar)).toBeLessThan(AA_NORMAL);
     // …and the values that replaced them clear it.
-    expect(contrastRatio(colorTokens.textMuted, colorTokens.surfaceMuted)).toBeGreaterThanOrEqual(
+    expect(contrastRatio(colorValues.textMuted, colorValues.surfaceMuted)).toBeGreaterThanOrEqual(
       AA_NORMAL,
     );
-    expect(contrastRatio(colorTokens.textSubtle, colorTokens.shellSidebar)).toBeGreaterThanOrEqual(
+    expect(contrastRatio(colorValues.textSubtle, colorValues.shellSidebar)).toBeGreaterThanOrEqual(
       AA_NORMAL,
     );
   });
@@ -377,20 +377,20 @@ describe('the Phase 2C foundation meets AA', () => {
     // navigation item stopped relying on either in the demo alignment: it is
     // now an INK-FILLED pill with inverted text at 18.85:1, plus `aria-current`
     // — a fill inversion and a semantic, not a hue.
-    expect(contrastRatio(colorTokens.brandYellow, colorTokens.surface)).toBeLessThan(AA_NON_TEXT);
-    expect(contrastRatio(colorTokens.brandPurpleTint, colorTokens.surface)).toBeLessThan(
+    expect(contrastRatio(colorValues.brandYellow, colorValues.surface)).toBeLessThan(AA_NON_TEXT);
+    expect(contrastRatio(colorValues.brandPurpleTint, colorValues.surface)).toBeLessThan(
       AA_NON_TEXT,
     );
   });
 
   it('the ink-filled active navigation item is legible in both directions', () => {
-    expect(contrastRatio(colorTokens.inkInk, colorTokens.ink)).toBeGreaterThanOrEqual(AA_NORMAL);
-    expect(contrastRatio(colorTokens.inkInk, colorTokens.inkHover)).toBeGreaterThanOrEqual(
+    expect(contrastRatio(colorValues.inkInk, colorValues.ink)).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(contrastRatio(colorValues.inkInk, colorValues.inkHover)).toBeGreaterThanOrEqual(
       AA_NORMAL,
     );
     // And the resting item, on the sidebar's own plane.
     expect(
-      contrastRatio(colorTokens.textSecondary, colorTokens.shellSidebar),
+      contrastRatio(colorValues.textSecondary, colorValues.shellSidebar),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 });

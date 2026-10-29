@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PLATFORM_ASPECTS,
   breakpointTokens,
-  colorTokens,
+  colorValues,
   layoutTokens,
   mediaAtLeast,
   mediaBelow,
@@ -128,16 +128,16 @@ describe('the CSS mirror cannot drift from the TypeScript tokens', () => {
   const css = read('packages/ui/src/tokens.css');
 
   it.each([
-    ['--bs-brand-purple', colorTokens.brandPurple],
-    ['--bs-brand-purple-tint', colorTokens.brandPurpleTint],
-    ['--bs-brand-yellow', colorTokens.brandYellow],
-    ['--bs-surface', colorTokens.surface],
-    ['--bs-app-background', colorTokens.appBackground],
-    ['--bs-border-strong', colorTokens.borderStrong],
-    ['--bs-document-rule', colorTokens.documentRule],
-    ['--bs-text-primary', colorTokens.textPrimary],
-    ['--bs-danger', colorTokens.danger],
-    ['--bs-focus-ring', colorTokens.focusRing],
+    ['--bs-brand-purple', colorValues.brandPurple],
+    ['--bs-brand-purple-tint', colorValues.brandPurpleTint],
+    ['--bs-brand-yellow', colorValues.brandYellow],
+    ['--bs-surface', colorValues.surface],
+    ['--bs-app-background', colorValues.appBackground],
+    ['--bs-border-strong', colorValues.borderStrong],
+    ['--bs-document-rule', colorValues.documentRule],
+    ['--bs-text-primary', colorValues.textPrimary],
+    ['--bs-danger', colorValues.danger],
+    ['--bs-focus-ring', colorValues.focusRing],
   ])('%s matches its TypeScript token', (variable, value) => {
     const match = css.match(new RegExp(`${variable}:\\s*([^;]+);`));
     expect(match, `${variable} is missing from tokens.css`).not.toBeNull();
@@ -243,7 +243,7 @@ describe('the retired legacy blue is defined but never used', () => {
   const files = SOURCE_DIRECTORIES.flatMap(collectSourceFiles);
 
   it('the token is still defined, so the historical decisions stay readable', () => {
-    expect(colorTokens.brandBlue).toBe('#00ADEE');
+    expect(colorValues.brandBlue).toBe('#00ADEE');
   });
 
   it('no application file references any brandBlue token', () => {
@@ -273,6 +273,30 @@ describe('the retired legacy blue is defined but never used', () => {
       }
     }
     expect(offenders, 'a component consumes the retired blue').toEqual([]);
+  });
+});
+
+describe('no stylesheet consumes the retired legacy blue', () => {
+  /**
+   * D-61, for the stylesheets. Since S3 the stylesheets reference tokens rather
+   * than literals, and `--bs-brand-blue-ink` happens to be white: a codemod
+   * matching by value alone once picked it for 154 white declarations. Only
+   * tokens.css's own `:root` definitions may name the family.
+   */
+  const SHEETS = [
+    'packages/ui/src/tokens.css',
+    'packages/ui/src/prototype.css',
+    'packages/ui/src/entry.css',
+    'packages/ui/src/content-studio.css',
+    'packages/ui/src/brand-brain.css',
+  ];
+
+  it.each(SHEETS)('%s uses no --bs-brand-blue* token', (file) => {
+    expect(read(file).match(/var\(--bs-brand-blue[a-z-]*\)/g) ?? []).toEqual([]);
+  });
+
+  it('the family is still defined, so the decisions that name it stay readable', () => {
+    expect(read('packages/ui/src/tokens.css')).toMatch(/--bs-brand-blue: #00adee;/);
   });
 });
 
