@@ -846,7 +846,8 @@ export function AppShell({
 
   return (
     <div
-      className="bs-ambient-host"
+      // S5: `bs-console` puts the Control Center's own button look (tokens.css).
+      className="bs-ambient-host bs-console"
       data-testid="app-shell"
       data-sidebar-state={
         hydrated

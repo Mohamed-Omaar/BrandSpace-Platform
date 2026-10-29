@@ -1,17 +1,14 @@
-import { SectionHeader, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import {
+  SectionHeader,
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+  buttonClass,
+} from '@brandspace/ui';
 import { readPlanCatalogue } from '@brandspace/entitlements';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
-import {
-  Banner,
-  Card,
-  Field,
-  StatusPill,
-  dangerButtonStyle,
-  inputStyle,
-  primaryButtonStyle,
-  secondaryButtonStyle,
-} from '../../../../components/console-ui';
+import { Banner, Card, Field, StatusPill, inputStyle } from '../../../../components/console-ui';
 import { requirePageActor } from '../../../../server/platform-context';
 import { loadDomainEditor } from '../../../../server/config-draft';
 import {
@@ -216,7 +213,7 @@ export default async function FeaturesPage({
                     <div style={{ display: 'flex', gap: spacingTokens.xs }}>
                       <a
                         href={`/${locale}/console/features?edit=${encodeURIComponent(feature.key)}`}
-                        style={{ ...secondaryButtonStyle(), textDecoration: 'none' }}
+                        className={buttonClass('neutral')}
                         data-testid={`edit-feature-${feature.key}`}
                       >
                         {isArabic ? 'تحرير' : 'Edit'}
@@ -229,7 +226,7 @@ export default async function FeaturesPage({
                           name="key"
                           value={feature.key}
                         />
-                        <button type="submit" style={dangerButtonStyle()}>
+                        <button type="submit" className={buttonClass('danger')}>
                           {isArabic ? 'إزالة' : 'Remove'}
                         </button>
                       </form>
@@ -376,7 +373,7 @@ export default async function FeaturesPage({
                 />
               </Field>
             </div>
-            <button type="submit" style={primaryButtonStyle()} data-testid="save-grant">
+            <button type="submit" className={buttonClass('primary')} data-testid="save-grant">
               {isArabic ? 'حفظ المنح' : 'Save grant'}
             </button>
           </form>
@@ -518,7 +515,7 @@ export default async function FeaturesPage({
                 </select>
               </Field>
             </div>
-            <button type="submit" style={primaryButtonStyle()} data-testid="save-feature">
+            <button type="submit" className={buttonClass('primary')} data-testid="save-feature">
               {isArabic ? 'حفظ في المسودة' : 'Save to draft'}
             </button>
           </form>
@@ -571,7 +568,7 @@ export default async function FeaturesPage({
                 />
                 <button
                   type="submit"
-                  style={secondaryButtonStyle()}
+                  className={buttonClass('neutral')}
                   data-testid="validate-features"
                 >
                   {isArabic ? 'تحقق' : 'Validate'}
@@ -599,7 +596,11 @@ export default async function FeaturesPage({
                   <input className="bs-control" type="checkbox" name="acknowledge" value="yes" />
                   {isArabic ? 'أقرّ بالتغييرات عالية الأثر' : 'Acknowledge high-impact changes'}
                 </label>
-                <button type="submit" style={primaryButtonStyle()} data-testid="activate-features">
+                <button
+                  type="submit"
+                  className={buttonClass('primary')}
+                  data-testid="activate-features"
+                >
                   {isArabic ? 'تفعيل' : 'Activate'}
                 </button>
               </form>

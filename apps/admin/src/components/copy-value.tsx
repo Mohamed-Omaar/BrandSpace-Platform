@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { buttonStyle } from '@brandspace/ui';
+import { buttonClass } from '@brandspace/ui';
 
 /**
  * COPY A VALUE BRANDSPACE GENERATED — a callback, a webhook, a deauthorize or
@@ -47,7 +47,7 @@ export function CopyValue({
         type="button"
         aria-label={label}
         data-testid={testId}
-        style={buttonStyle('neutral', 'sm')}
+        className={buttonClass('neutral', 'sm')}
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(value);

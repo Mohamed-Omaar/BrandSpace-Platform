@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import {
   LanguageSwitcher,
   buttonClass,
-  buttonStyle,
   colorTokens,
   layoutTokens,
   motionTokens,
@@ -184,19 +183,13 @@ export function AdvancedScreenNotice({
           type="submit"
           name="mode"
           value="advanced"
-          className={buttonClass('neutral')}
-          style={buttonStyle('neutral', 'sm')}
+          className={buttonClass('neutral', 'sm')}
           data-testid="advanced-note-switch"
         >
           {labels.switchLabel}
         </button>
       </form>
-      <Link
-        href={base}
-        className={buttonClass('ghost')}
-        style={buttonStyle('ghost', 'sm')}
-        data-testid="advanced-note-home"
-      >
+      <Link href={base} className={buttonClass('ghost', 'sm')} data-testid="advanced-note-home">
         {labels.homeLabel}
       </Link>
     </div>
@@ -229,8 +222,7 @@ export function AdvancedLink({
         type="submit"
         name="mode"
         value="advanced"
-        className={buttonClass('ghost')}
-        style={buttonStyle('ghost', 'sm')}
+        className={buttonClass('ghost', 'sm')}
         data-testid={testId ?? 'advanced-link'}
       >
         {label}

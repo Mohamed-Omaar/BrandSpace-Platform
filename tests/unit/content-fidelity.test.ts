@@ -270,9 +270,6 @@ const SELECTORS: ReadonlyArray<readonly [string, string]> = [
   ['.channel-row', '.cs-channel-row'],
   ['.channel', '.cs-channel'],
   ['.channel.selected', '.cs-channel.selected'],
-  ['.primary-button', '.cs-primary-button'],
-  ['.dark-button', '.cs-dark-button'],
-  ['.ghost-button', '.cs-ghost-button'],
   ['.compact', '.cs-compact'],
   ['.select-like', '.cs-select'],
 ];

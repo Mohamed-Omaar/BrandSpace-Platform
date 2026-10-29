@@ -1,17 +1,14 @@
-import { SectionHeader, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import {
+  SectionHeader,
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+  buttonClass,
+} from '@brandspace/ui';
 import { rolloutBucket } from '@brandspace/entitlements';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
-import {
-  Banner,
-  Card,
-  Field,
-  StatusPill,
-  dangerButtonStyle,
-  inputStyle,
-  primaryButtonStyle,
-  secondaryButtonStyle,
-} from '../../../../components/console-ui';
+import { Banner, Card, Field, StatusPill, inputStyle } from '../../../../components/console-ui';
 import { requirePageActor } from '../../../../server/platform-context';
 import { loadDomainEditor } from '../../../../server/config-draft';
 import {
@@ -209,7 +206,11 @@ export default async function FlagsPage({
                   name="versionId"
                   value={state.draft.id}
                 />
-                <button type="submit" style={secondaryButtonStyle()} data-testid="validate-flags">
+                <button
+                  type="submit"
+                  className={buttonClass('neutral')}
+                  data-testid="validate-flags"
+                >
                   {isArabic ? 'تحقق' : 'Validate'}
                 </button>
               </form>
@@ -235,7 +236,11 @@ export default async function FlagsPage({
                   <input className="bs-control" type="checkbox" name="acknowledge" value="yes" />
                   {isArabic ? 'أقرّ بالتغييرات عالية الأثر' : 'Acknowledge high-impact changes'}
                 </label>
-                <button type="submit" style={primaryButtonStyle()} data-testid="activate-flags">
+                <button
+                  type="submit"
+                  className={buttonClass('primary')}
+                  data-testid="activate-flags"
+                >
                   {isArabic ? 'تفعيل' : 'Activate'}
                 </button>
               </form>
@@ -328,7 +333,7 @@ export default async function FlagsPage({
                       />
                       <button
                         type="submit"
-                        style={secondaryButtonStyle()}
+                        className={buttonClass('neutral')}
                         data-testid={`rollback-flag-${version.versionNumber}`}
                       >
                         {isArabic ? 'استرجاع' : 'Roll back'}
@@ -426,7 +431,7 @@ function FlagTable({
                   />
                   <button
                     type="submit"
-                    style={flag.killSwitch ? secondaryButtonStyle() : dangerButtonStyle()}
+                    className={buttonClass(flag.killSwitch ? 'neutral' : 'danger')}
                     data-testid={`kill-toggle-${flag.featureKey}`}
                   >
                     {flag.killSwitch
@@ -443,7 +448,7 @@ function FlagTable({
                 <>
                   <a
                     href={`/${locale}/console/flags?edit=${encodeURIComponent(flag.featureKey)}`}
-                    style={{ ...secondaryButtonStyle(), textDecoration: 'none' }}
+                    className={buttonClass('neutral')}
                     data-testid={`edit-flag-${flag.featureKey}`}
                   >
                     {isArabic ? 'تحرير' : 'Edit'}
@@ -456,7 +461,7 @@ function FlagTable({
                       name="featureKey"
                       value={flag.featureKey}
                     />
-                    <button type="submit" style={dangerButtonStyle()}>
+                    <button type="submit" className={buttonClass('danger')}>
                       {isArabic ? 'إزالة' : 'Remove'}
                     </button>
                   </form>
@@ -610,7 +615,7 @@ function FlagForm({ flag, locale }: { readonly flag: FlagRow | null; readonly lo
           />
         </Field>
       </div>
-      <button type="submit" style={primaryButtonStyle()} data-testid="save-flag">
+      <button type="submit" className={buttonClass('primary')} data-testid="save-flag">
         {isArabic ? 'حفظ في المسودة' : 'Save to draft'}
       </button>
     </form>

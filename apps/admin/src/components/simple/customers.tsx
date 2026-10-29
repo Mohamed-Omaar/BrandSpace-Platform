@@ -12,7 +12,6 @@ import {
   Stack,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   initialsFrom,
   inputStyle,
@@ -177,7 +176,7 @@ export async function SimpleCustomers({
             style={{ ...inputStyle(), inlineSize: 'min(22rem, 100%)' }}
             data-testid="customer-search"
           />
-          <button type="submit" className={buttonClass('neutral')} style={buttonStyle('neutral')}>
+          <button type="submit" className={buttonClass('neutral')}>
             {copy('cust.searchButton')}
           </button>
         </form>
@@ -791,7 +790,6 @@ export async function SimpleCustomerDetail({
                     <button
                       type="submit"
                       className={buttonClass('primary')}
-                      style={buttonStyle('primary')}
                       data-testid="simple-plan-submit"
                     >
                       {copy('cd.apply')}
@@ -830,7 +828,6 @@ export async function SimpleCustomerDetail({
                     <button
                       type="submit"
                       className={buttonClass('primary')}
-                      style={buttonStyle('primary')}
                       data-testid="simple-credits-submit"
                     >
                       {copy('cd.apply')}
@@ -874,7 +871,6 @@ export async function SimpleCustomerDetail({
                     <button
                       type="submit"
                       className={buttonClass(suspended ? 'primary' : 'danger')}
-                      style={buttonStyle(suspended ? 'primary' : 'danger')}
                       data-testid="simple-status-submit"
                     >
                       {suspended ? copy('cd.reactivate') : copy('cd.suspend')}

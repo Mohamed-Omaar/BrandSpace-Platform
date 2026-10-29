@@ -9,7 +9,6 @@ import {
   Stack,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   radiusTokens,
@@ -270,7 +269,6 @@ export async function SimpleFeatures({
                 <button
                   type="submit"
                   className={buttonClass('primary')}
-                  style={buttonStyle('primary')}
                   data-testid="feature-preview"
                 >
                   {copy('feat.preview')}
@@ -395,12 +393,7 @@ export async function SimpleFeatures({
               {copy('feat.confirm')}
             </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.sm }}>
-              <button
-                type="submit"
-                className={buttonClass('primary')}
-                style={buttonStyle('primary')}
-                data-testid="feature-apply"
-              >
+              <button type="submit" className={buttonClass('primary')} data-testid="feature-apply">
                 {copy('feat.apply')}
               </button>
               <ActionLink href={base} variant="ghost">

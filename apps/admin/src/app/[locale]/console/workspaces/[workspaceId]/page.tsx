@@ -4,10 +4,10 @@ import { randomUUID } from 'node:crypto';
 import {
   Breadcrumbs,
   PageHeader,
-  buttonStyle,
   colorTokens,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { UsageService } from '@brandspace/entitlements';
 import {
@@ -32,10 +32,7 @@ import {
   Field,
   StatusPill,
   TableScroll,
-  dangerButtonStyle,
   inputStyle,
-  primaryButtonStyle,
-  secondaryButtonStyle,
   tableStyle,
   tdStyle,
   thStyle,
@@ -159,10 +156,7 @@ export default async function WorkspaceDetailPage({
           </span>
         }
         actions={
-          <Link
-            href={`/${locale}/console/workspaces`}
-            style={{ ...buttonStyle('neutral', 'sm'), textDecoration: 'none' }}
-          >
+          <Link href={`/${locale}/console/workspaces`} className={buttonClass('neutral', 'sm')}>
             {t('ws.backToList')}
           </Link>
         }
@@ -276,7 +270,7 @@ export default async function WorkspaceDetailPage({
                 style={inputStyle()}
               />
             </Field>
-            <button type="submit" data-testid="workspace-save" style={primaryButtonStyle()}>
+            <button type="submit" data-testid="workspace-save" className={buttonClass('primary')}>
               {t('common.save')}
             </button>
           </form>
@@ -323,7 +317,11 @@ export default async function WorkspaceDetailPage({
                 style={inputStyle()}
               />
             </Field>
-            <button type="submit" data-testid="workspace-status-submit" style={dangerButtonStyle()}>
+            <button
+              type="submit"
+              data-testid="workspace-status-submit"
+              className={buttonClass('danger')}
+            >
               {t('ws.changeStatus')}
             </button>
           </form>
@@ -365,7 +363,11 @@ export default async function WorkspaceDetailPage({
             <Field label={t('ws.reason')} htmlFor="plan-reason">
               <input className="bs-control" id="plan-reason" name="reason" style={inputStyle()} />
             </Field>
-            <button type="submit" data-testid="assign-plan-submit" style={primaryButtonStyle()}>
+            <button
+              type="submit"
+              data-testid="assign-plan-submit"
+              className={buttonClass('primary')}
+            >
               {t('ws.assignPlan')}
             </button>
           </form>
@@ -454,7 +456,7 @@ export default async function WorkspaceDetailPage({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="workspaceId" value={workspaceId} />
                           <input type="hidden" name="featureKey" value={o.featureKey} />
-                          <button type="submit" style={secondaryButtonStyle()}>
+                          <button type="submit" className={buttonClass('neutral')}>
                             {t('ws.overrideRevoke')}
                           </button>
                         </form>
@@ -513,7 +515,7 @@ export default async function WorkspaceDetailPage({
                 style={inputStyle()}
               />
             </Field>
-            <button type="submit" data-testid="override-submit" style={primaryButtonStyle()}>
+            <button type="submit" data-testid="override-submit" className={buttonClass('primary')}>
               {t('ws.overrideAdd')}
             </button>
           </form>
@@ -560,7 +562,7 @@ export default async function WorkspaceDetailPage({
                 style={inputStyle()}
               />
             </Field>
-            <button type="submit" data-testid="credits-submit" style={primaryButtonStyle()}>
+            <button type="submit" data-testid="credits-submit" className={buttonClass('primary')}>
               {t('ws.creditsAdjust')}
             </button>
           </form>
@@ -832,7 +834,7 @@ export default async function WorkspaceDetailPage({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="workspaceId" value={workspaceId} />
                           <input type="hidden" name="cohortKey" value={membership.cohortKey} />
-                          <button type="submit" style={secondaryButtonStyle()}>
+                          <button type="submit" className={buttonClass('neutral')}>
                             {locale === 'ar' ? 'إزالة' : 'Remove'}
                           </button>
                         </form>
@@ -872,7 +874,7 @@ export default async function WorkspaceDetailPage({
                 data-testid="cohort-reason"
               />
             </Field>
-            <button type="submit" style={primaryButtonStyle()} data-testid="cohort-submit">
+            <button type="submit" className={buttonClass('primary')} data-testid="cohort-submit">
               {locale === 'ar' ? 'إضافة إلى المجموعة' : 'Add to cohort'}
             </button>
           </form>
@@ -939,7 +941,7 @@ export default async function WorkspaceDetailPage({
                             <input type="hidden" name="locale" value={locale} />
                             <input type="hidden" name="workspaceId" value={workspaceId} />
                             <input type="hidden" name="invitationId" value={i.id} />
-                            <button type="submit" style={secondaryButtonStyle()}>
+                            <button type="submit" className={buttonClass('neutral')}>
                               {t('ws.inviteRevoke')}
                             </button>
                           </form>
@@ -974,7 +976,7 @@ export default async function WorkspaceDetailPage({
                 ))}
               </select>
             </Field>
-            <button type="submit" data-testid="invite-submit" style={primaryButtonStyle()}>
+            <button type="submit" data-testid="invite-submit" className={buttonClass('primary')}>
               {t('ws.inviteSend')}
             </button>
           </form>

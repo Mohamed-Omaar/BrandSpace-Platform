@@ -7,10 +7,10 @@ import {
   Stack,
   StatusBadge,
   Toolbar,
-  buttonStyle,
   colorTokens,
   statusTone,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { AI_TASK_KEYS, DEFAULT_AI_PAGE_SIZE } from '@brandspace/ai-gateway';
 import {
@@ -186,7 +186,11 @@ export default async function AiUsagePage({
                   </option>
                 ))}
               </select>
-              <button type="submit" data-testid="ai-filter-submit" style={buttonStyle('neutral')}>
+              <button
+                type="submit"
+                data-testid="ai-filter-submit"
+                className={buttonClass('neutral')}
+              >
                 {isArabic ? 'تصفية' : 'Filter'}
               </button>
             </Toolbar>

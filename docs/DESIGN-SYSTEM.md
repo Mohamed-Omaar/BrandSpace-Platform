@@ -563,6 +563,19 @@ One component per family, used by both apps; a family's PR deletes the CSS it re
   second to `none`). A `position: fixed` layer covers the window only while no ancestor has a
   `transform`, `filter` or `backdrop-filter`; `tests/e2e/backdrop.spec.ts` measures that, and
   `tests/unit/backdrop.test.ts` keeps any other full-window overlay from being drawn.
+- **Button** (`Button` / `buttonClass()` in `packages/ui/src/primitives.tsx`, rules in `tokens.css`).
+  One class system for both apps; the inline `buttonStyle()` is gone. Every property is a
+  `--bs-btn-*` variable, so the two looks are two sets of values on one rule set:
+  - **customer** (default): the prototype's `.btn`, unchanged — ink / `.pur` / `.sec` / `.ghost`,
+    40 / 32 / 48px, 13.5px at 700, the destructive red text;
+  - **console** (`.bs-console`, the Control Center's `AppShell`, and `.bs-gallery-console`): the
+    Control Center's own button (owner decision), the values `buttonStyle()` painted — 40 / 36 / 48px,
+    10px at 800 (9px at 750 small), a transparent 1px border, a yellow accent and a tinted danger.
+    New in S5 (L-37): a hover on every fill, from existing tokens — ink → `--bs-ink-hover`, purple →
+    `--bs-brand-purple-hover`, neutral → `--bs-control-surface-hover`, ghost → `--bs-surface-muted`,
+    danger → `--bs-control-surface-hover`; and the shared disabled state.
+    `buttonClass('accent')` adds `bsp-accent`, which only the console look draws (yellow).
+    `tests/unit/button.test.ts` pins both sets.
 
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 

@@ -141,33 +141,6 @@
   font-size: var(--bsp-fs-10);
 }
 
-/* --- the demo's three button treatments ------------------------------ */
-
-.cs-primary-button,
-.cs-dark-button,
-.cs-ghost-button {
-  border: 0;
-  border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
-  min-height: var(--bsp-px-40);
-  padding: 0 var(--bsp-px-15);
-  font-size: var(--bsp-fs-10);
-  font-weight: 800;
-}
-
-.cs-primary-button {
-  background: var(--cs-purple);
-  color: var(--bs-surface);
-}
-
-.cs-dark-button {
-  background: var(--cs-ink);
-  color: var(--bs-surface);
-}
-
-.cs-ghost-button {
-  background: transparent;
-}
-
 .cs-compact {
   min-height: var(--bsp-px-38);
 }

@@ -3,7 +3,6 @@ import {
   Card,
   Field,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   spacingTokens,
@@ -111,7 +110,6 @@ export function OpenDraftNotice({
               <button
                 type="submit"
                 className={buttonClass('neutral')}
-                style={buttonStyle('neutral')}
                 data-testid="open-draft-discard"
               >
                 {copy('draft.discard')}

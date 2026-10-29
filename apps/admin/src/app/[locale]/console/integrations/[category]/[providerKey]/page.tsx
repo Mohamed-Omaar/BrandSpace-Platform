@@ -11,13 +11,10 @@ import {
   fontTokens,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { Cell, DataTable, EmptyState, PageIntro } from '../../../../../../components/admin-shell';
-import {
-  primaryButtonStyle,
-  secondaryButtonStyle,
-  inputStyle,
-} from '../../../../../../components/console-ui';
+import { inputStyle } from '../../../../../../components/console-ui';
 import { SimpleIntegrationSetup } from '../../../../../../components/simple/integrations';
 import {
   checkOutcomeWord,
@@ -447,7 +444,11 @@ export default async function IntegrationDetailPage({
                 />
               </div>
 
-              <button type="submit" style={primaryButtonStyle()} data-testid="save-configuration">
+              <button
+                type="submit"
+                className={buttonClass('primary')}
+                data-testid="save-configuration"
+              >
                 {isArabic ? 'حفظ الإعداد' : 'Save configuration'}
               </button>
             </form>
@@ -524,7 +525,11 @@ export default async function IntegrationDetailPage({
               <input type="hidden" name="locale" value={locale} />
               <input type="hidden" name="category" value={category} />
               <input type="hidden" name="providerKey" value={providerKey} />
-              <button type="submit" style={secondaryButtonStyle()} data-testid="test-connection">
+              <button
+                type="submit"
+                className={buttonClass('neutral')}
+                data-testid="test-connection"
+              >
                 {isArabic ? 'اختبار الاتصال' : 'Test connection'}
               </button>
             </form>
@@ -561,7 +566,7 @@ export default async function IntegrationDetailPage({
               />
               <button
                 type="submit"
-                style={view.enabled ? secondaryButtonStyle() : primaryButtonStyle()}
+                className={buttonClass(view.enabled ? 'neutral' : 'primary')}
                 data-testid={view.enabled ? 'disable-integration' : 'activate-integration'}
                 disabled={!view.enabled && view.selectionRefusal !== null}
               >

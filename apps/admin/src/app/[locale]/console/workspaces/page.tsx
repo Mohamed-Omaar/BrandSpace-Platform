@@ -10,12 +10,12 @@ import {
   Stack,
   StatusBadge,
   Toolbar,
-  buttonStyle,
   colorTokens,
   initialsFrom,
   statusTone,
   typographyTokens,
   type MediaSeed,
+  buttonClass,
 } from '@brandspace/ui';
 import { DEFAULT_WORKSPACE_PAGE_SIZE } from '@brandspace/auth';
 import {
@@ -26,14 +26,7 @@ import {
 } from '../../../../server/platform-context';
 import { translator } from '../../../../i18n/messages';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
-import {
-  Banner,
-  Card,
-  EmptyState,
-  Field,
-  inputStyle,
-  primaryButtonStyle,
-} from '../../../../components/console-ui';
+import { Banner, Card, EmptyState, Field, inputStyle } from '../../../../components/console-ui';
 import { createWorkspaceAction } from './actions';
 import { SimpleCustomers } from '../../../../components/simple/customers';
 import { getConsoleMode } from '../../../../server/console-mode-cookie';
@@ -152,7 +145,7 @@ export default async function WorkspacesPage({
             <Link
               href={`/${locale}/console/workspaces?view=new`}
               data-testid="open-create-workspace"
-              style={{ ...buttonStyle('primary'), textDecoration: 'none' }}
+              className={buttonClass('primary')}
             >
               {t('ws.create')}
             </Link>
@@ -176,7 +169,7 @@ export default async function WorkspacesPage({
                 placeholder={locale === 'ar' ? 'الاسم أو المُعرّف' : 'Name or slug'}
                 defaultValue={search ?? ''}
               />
-              <button type="submit" data-testid="search-submit" style={buttonStyle('neutral')}>
+              <button type="submit" data-testid="search-submit" className={buttonClass('neutral')}>
                 {locale === 'ar' ? 'بحث' : 'Search'}
               </button>
             </Toolbar>
@@ -465,7 +458,7 @@ export default async function WorkspacesPage({
             <button
               type="submit"
               data-testid="create-workspace-submit"
-              style={primaryButtonStyle()}
+              className={buttonClass('primary')}
             >
               {t('common.save')}
             </button>

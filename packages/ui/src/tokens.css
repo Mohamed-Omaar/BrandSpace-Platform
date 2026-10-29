@@ -2102,6 +2102,155 @@ html[dir='rtl'] input[type='week'] {
 }
 
 /*
+ * S5 — THE ONE BUTTON (`Button` / `buttonClass()` in primitives.tsx), for both
+ * apps. Moved here from prototype.css so the Control Center, which does not
+ * load prototype.css, draws the same class-based button and so gets its hover,
+ * focus and disabled states (L-37). TWO LOOKS, ONE RULE SET: every property is
+ * a `--bs-btn-*` variable.
+ *
+ *   - THE CUSTOMER LOOK is the prototype's `.btn` (`Main.dc.html`), the values
+ *     below, unchanged from prototype.css: ink, `.pur`, `.sec`, `.ghost`; 40 /
+ *     32 / 48px; the destructive red text.
+ *   - THE CONSOLE LOOK (`.bs-console`, the Control Center's shell, and
+ *     `.bs-gallery-console`) keeps the Control Center's own button (owner
+ *     decision): the retired full-demo geometry and fills that `buttonStyle()`
+ *     painted inline — 40 / 36 / 48px, 10px type at 800, a yellow accent and a
+ *     tinted danger — now with a hover.
+ *
+ * The variables are set on the button itself, not on `:root`, because the
+ * customer values are `--bsp-px-*` lengths that each scope rescales.
+ */
+.bsp-btn {
+  --bs-btn-gap: var(--bsp-px-8);
+  --bs-btn-radius: var(--bsp-px-12);
+  --bs-btn-pad: var(--bsp-px-9) var(--bsp-px-16);
+  --bs-btn-font-size: var(--bsp-fs-13-5);
+  --bs-btn-font-weight: 700;
+  --bs-btn-line-height: normal;
+  --bs-btn-height: var(--bsp-px-40);
+  --bs-btn-border: 0;
+  --bs-btn-bg: var(--bs-text-primary);
+  --bs-btn-fg: var(--bs-surface);
+  --bs-btn-bg-hover: var(--bs-lit-2a2a30);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bs-btn-gap);
+  border: var(--bs-btn-border);
+  border-radius: calc(var(--bs-btn-radius) * var(--bs-radius-scale));
+  padding: var(--bs-btn-pad);
+  font-size: var(--bs-btn-font-size);
+  font-weight: var(--bs-btn-font-weight);
+  line-height: var(--bs-btn-line-height);
+  background: var(--bs-btn-bg);
+  color: var(--bs-btn-fg);
+  white-space: nowrap;
+  min-block-size: var(--bs-btn-height);
+  box-sizing: border-box;
+  text-decoration: none;
+  transition:
+    background-color var(--bs-dur-150) var(--bs-ease-css),
+    border-color var(--bs-dur-150) var(--bs-ease-css),
+    box-shadow var(--bs-dur-200) var(--bs-ease-css),
+    translate var(--bs-dur-200) var(--bs-ease-out),
+    scale var(--bs-dur-120) var(--bs-ease-css);
+}
+.bsp-btn:hover {
+  background: var(--bs-btn-bg-hover);
+}
+.bsp-btn.bsp-pur {
+  --bs-btn-bg: var(--bs-brand-purple);
+  --bs-btn-bg-hover: var(--bs-brand-purple-hover);
+}
+.bsp-btn.bsp-sec {
+  --bs-btn-bg: var(--bs-lit-f2f2f4);
+  --bs-btn-fg: var(--bs-text-primary);
+  --bs-btn-bg-hover: var(--bs-lit-e6e6ea);
+}
+.bsp-btn.bsp-ghost {
+  --bs-btn-bg: transparent;
+  --bs-btn-fg: var(--bs-text-primary);
+  --bs-btn-bg-hover: var(--bs-lit-f2f2f4);
+}
+.bsp-btn.bsp-sm {
+  --bs-btn-pad: var(--bsp-px-6) var(--bsp-px-12);
+  --bs-btn-font-size: var(--bsp-fs-12-5);
+  --bs-btn-height: var(--bsp-px-32);
+  --bs-btn-radius: var(--bsp-px-10);
+}
+/* The hero's large `.btn`: `min-block-size: 48px; padding: 12px 20px; font-size: 14.5px`. */
+.bsp-btn.bsp-lg {
+  --bs-btn-pad: var(--bsp-px-12) var(--bsp-px-20);
+  --bs-btn-font-size: var(--bsp-fs-14-5);
+  --bs-btn-height: var(--bsp-px-48);
+}
+/* A destructive action: the prototype's `.btn` with `color: #b83245` (Remove, Delete, Disconnect). */
+.bsp-btn.bsp-danger {
+  --bs-btn-fg: var(--bs-danger);
+}
+
+/* THE CONSOLE LOOK — the Control Center's own button (owner decision). */
+:is(.bs-console, .bs-gallery-console) .bsp-btn {
+  --bs-btn-gap: var(--bsp-rem-0-5);
+  --bs-btn-radius: var(--bsp-rem-0-75);
+  --bs-btn-pad: 0 var(--bsp-rem-0-9375);
+  --bs-btn-font-size: var(--bsp-fs-10);
+  --bs-btn-font-weight: 800;
+  --bs-btn-line-height: var(--bsp-rem-0-875);
+  --bs-btn-height: var(--bsp-rem-2-5);
+  --bs-btn-border: 1px solid transparent;
+  --bs-btn-bg: var(--bs-ink);
+  --bs-btn-fg: var(--bs-ink-ink);
+  --bs-btn-bg-hover: var(--bs-ink-hover);
+  /* What the inline style also set: the page's type, no tracking, a hand. */
+  font-family: inherit;
+  letter-spacing: normal;
+  cursor: pointer;
+}
+:is(.bs-console, .bs-gallery-console) .bsp-btn.bsp-pur {
+  --bs-btn-bg: var(--bs-brand-purple);
+  --bs-btn-fg: var(--bs-brand-purple-ink);
+  --bs-btn-bg-hover: var(--bs-brand-purple-hover);
+}
+:is(.bs-console, .bs-gallery-console) .bsp-btn.bsp-sec {
+  --bs-btn-bg: var(--bs-surface-muted);
+  --bs-btn-fg: var(--bs-text-primary);
+  --bs-btn-bg-hover: var(--bs-control-surface-hover);
+}
+:is(.bs-console, .bs-gallery-console) .bsp-btn.bsp-ghost {
+  --bs-btn-bg: transparent;
+  --bs-btn-fg: var(--bs-text-secondary);
+  --bs-btn-bg-hover: var(--bs-surface-muted);
+}
+:is(.bs-console, .bs-gallery-console) .bsp-btn.bsp-accent {
+  --bs-btn-bg: var(--bs-brand-yellow);
+  --bs-btn-fg: var(--bs-brand-yellow-ink);
+  --bs-btn-bg-hover: var(--bs-brand-yellow);
+}
+:is(.bs-console, .bs-gallery-console) .bsp-btn.bsp-danger {
+  --bs-btn-bg: var(--bs-danger-tint);
+  --bs-btn-fg: var(--bs-danger);
+  --bs-btn-bg-hover: var(--bs-control-surface-hover);
+}
+:is(.bs-console, .bs-gallery-console) .bsp-btn.bsp-sm {
+  --bs-btn-pad: 0 var(--bsp-rem-0-6875);
+  --bs-btn-font-size: var(--bsp-rem-0-5625);
+  --bs-btn-font-weight: 750;
+  --bs-btn-height: var(--bsp-rem-2-25);
+  --bs-btn-radius: var(--bsp-rem-0-625);
+}
+:is(.bs-console, .bs-gallery-console) .bsp-btn.bsp-lg {
+  --bs-btn-height: var(--bsp-rem-3);
+}
+
+.bsp-btn[disabled],
+.bsp-btn[aria-disabled='true'] {
+  background: var(--bs-control-surface-hover);
+  color: var(--bs-scrollbar-thumb);
+  cursor: not-allowed;
+}
+
+/*
  * MO7 — THE COPILOT PANEL enters with opacity, a .98 → 1 grow and a 16 px
  * rise (340 ms), from its bottom end corner.
  */

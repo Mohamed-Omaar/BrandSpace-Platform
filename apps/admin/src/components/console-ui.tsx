@@ -2,7 +2,6 @@ import type { CSSProperties, ReactNode } from 'react';
 import {
   StateMessage,
   StatusBadge,
-  buttonStyle,
   inputStyle as sharedInputStyle,
   scrollContainerStyle,
   statusTone,
@@ -44,19 +43,6 @@ export function TableScroll({ children }: { children: ReactNode }) {
 /** An honest empty state. Never a fabricated number. */
 export function EmptyState({ message }: { message: string }) {
   return <StateMessage title={message} />;
-}
-
-export function primaryButtonStyle(): CSSProperties {
-  return buttonStyle('primary');
-}
-
-export function secondaryButtonStyle(): CSSProperties {
-  return buttonStyle('neutral');
-}
-
-/** Destructive/high-impact. Never the default, never the only styling signal. */
-export function dangerButtonStyle(): CSSProperties {
-  return buttonStyle('danger');
 }
 
 export function inputStyle(): CSSProperties {

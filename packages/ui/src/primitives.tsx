@@ -1,12 +1,5 @@
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react';
-import {
-  colorTokens,
-  layoutTokens,
-  motionTokens,
-  radiusTokens,
-  spacingTokens,
-  typographyTokens,
-} from './tokens';
+import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
 
 /**
  * The control primitives every surface composes.
@@ -65,6 +58,11 @@ const CONTROL_HEIGHT: Record<ControlSize, string> = {
  *
  * Use it on a plain `<button type="submit">` or a `<Link>` wherever `Button`
  * cannot be used (a no-JavaScript form, a navigation).
+ *
+ * S5: THE CONTROL CENTER USES IT TOO. Its own look (the retired full-demo
+ * geometry and fills that the inline `buttonStyle()` used to paint) is the
+ * console token set in tokens.css, under `.bs-console`; the inline style is
+ * gone, so its buttons have a hover (L-37).
  */
 export function buttonClass(variant: ButtonVariant = 'primary', size: ControlSize = 'md'): string {
   const fill: Record<ButtonVariant, string> = {
@@ -73,82 +71,11 @@ export function buttonClass(variant: ButtonVariant = 'primary', size: ControlSiz
     neutral: ' bsp-sec',
     ghost: ' bsp-ghost',
     danger: ' bsp-sec bsp-danger',
-    accent: ' bsp-sec',
+    // The customer look draws it as `.sec`; the console look's `.bsp-accent` is yellow.
+    accent: ' bsp-sec bsp-accent',
   };
   const scale = size === 'sm' ? ' bsp-sm' : size === 'lg' ? ' bsp-lg' : '';
   return `bsp-btn${fill[variant]}${scale}`;
-}
-
-/** The retired full-demo heights, for the Control Center's `buttonStyle` only. */
-const LEGACY_CONTROL_HEIGHT: Record<ControlSize, string> = {
-  sm: layoutTokens.controlHeightXs,
-  md: layoutTokens.controlHeight,
-  lg: 'var(--bsp-rem-3)',
-};
-
-function buttonBase(size: ControlSize): CSSProperties {
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacingTokens.sm,
-    minBlockSize: LEGACY_CONTROL_HEIGHT[size],
-    paddingInline: size === 'sm' ? 'var(--bsp-rem-0-6875)' : 'var(--bsp-rem-0-9375)',
-    paddingBlock: 0,
-    borderRadius: size === 'sm' ? radiusTokens.md : radiusTokens.control,
-    fontFamily: 'inherit',
-    fontSize: size === 'sm' ? 'var(--bsp-rem-0-5625)' : typographyTokens.button.fontSize,
-    fontWeight: size === 'sm' ? 750 : typographyTokens.button.fontWeight,
-    letterSpacing: 'normal',
-    lineHeight: typographyTokens.button.lineHeight,
-    cursor: 'pointer',
-    textDecoration: 'none',
-    whiteSpace: 'nowrap',
-    border: '1px solid transparent',
-    transition: `background-color ${motionTokens.fast} ${motionTokens.easeOut}`,
-  };
-}
-
-/**
- * CONTROL CENTER ONLY — the inline button style of the retired full-demo
- * reference, kept for `apps/admin`, which is not a customer screen and keeps
- * its own look. Customer code uses `buttonClass()`/`Button`; a unit test
- * (`tests/unit/r4-shared-controls.test.ts`) refuses `buttonStyle` anywhere in
- * `apps/dashboard` or in the customer components of this package.
- */
-export function buttonStyle(
-  variant: ButtonVariant = 'primary',
-  size: ControlSize = 'md',
-): CSSProperties {
-  const base = buttonBase(size);
-  switch (variant) {
-    case 'primary':
-      // Ink on white text at 18.85:1 — the highest-contrast action in the
-      // system, which is the right place for the most important one.
-      return { ...base, background: colorTokens.ink, color: colorTokens.inkInk };
-    case 'brand':
-      // `.primary-button { background: var(--purple); color: #fff }`. The full
-      // demo gives it NO glow — the flat purple is the whole treatment.
-      return {
-        ...base,
-        background: colorTokens.brandPurple,
-        color: colorTokens.brandPurpleInk,
-      };
-    case 'accent':
-      // Yellow with near-black ink at 15.3:1. Never white text on yellow.
-      return { ...base, background: colorTokens.brandYellow, color: colorTokens.brandYellowInk };
-    case 'neutral':
-      // `.soft-button { background: var(--soft) }`.
-      return {
-        ...base,
-        background: colorTokens.surfaceMuted,
-        color: colorTokens.textPrimary,
-      };
-    case 'ghost':
-      return { ...base, background: 'transparent', color: colorTokens.textSecondary };
-    case 'danger':
-      return { ...base, background: colorTokens.dangerTint, color: colorTokens.danger };
-  }
 }
 
 export function Button({

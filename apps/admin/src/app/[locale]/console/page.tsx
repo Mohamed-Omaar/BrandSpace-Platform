@@ -8,8 +8,8 @@ import {
   MetricCard,
   OverviewHero,
   Stack,
-  buttonStyle,
   colorTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { PageIntro } from '../../../components/admin-shell';
 import { translator } from '../../../i18n/messages';
@@ -140,7 +140,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
           primaryAction={
             <Link
               href={`/${locale}/console/workspaces`}
-              style={buttonStyle('primary')}
+              className={buttonClass('primary')}
               data-testid="console-hero-primary"
             >
               {t('console.hero.primary')}
@@ -150,11 +150,8 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
             <Link
               href={`/${locale}/console/health`}
               data-testid="console-hero-secondary"
-              style={{
-                ...buttonStyle('ghost'),
-                background: 'transparent',
-                color: colorTokens.textPrimary,
-              }}
+              className={buttonClass('ghost')}
+              style={{ color: colorTokens.textPrimary }}
             >
               {t('console.hero.secondary')}
             </Link>

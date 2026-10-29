@@ -5,20 +5,12 @@ import {
   radiusTokens,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { readPlanCatalogue, type PlanDetail } from '@brandspace/entitlements';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
-import {
-  Banner,
-  Card,
-  Field,
-  StatusPill,
-  inputStyle,
-  primaryButtonStyle,
-  secondaryButtonStyle,
-  dangerButtonStyle,
-} from '../../../../components/console-ui';
+import { Banner, Card, Field, StatusPill, inputStyle } from '../../../../components/console-ui';
 import {
   currentEnvironment,
   getConfigService,
@@ -308,7 +300,7 @@ export default async function PlansPage({
                     />
                     <button
                       type="submit"
-                      style={secondaryButtonStyle()}
+                      className={buttonClass('neutral')}
                       data-testid="validate-plans"
                     >
                       {isArabic ? 'تحقق وعاين الأثر' : 'Validate and preview impact'}
@@ -342,7 +334,11 @@ export default async function PlansPage({
                       />
                       {isArabic ? 'أقرّ بالتغييرات عالية الأثر' : 'Acknowledge high-impact changes'}
                     </label>
-                    <button type="submit" style={primaryButtonStyle()} data-testid="activate-plans">
+                    <button
+                      type="submit"
+                      className={buttonClass('primary')}
+                      data-testid="activate-plans"
+                    >
                       {isArabic ? 'تفعيل' : 'Activate'}
                     </button>
                   </form>
@@ -365,7 +361,7 @@ export default async function PlansPage({
                     />
                     <button
                       type="submit"
-                      style={dangerButtonStyle()}
+                      className={buttonClass('danger')}
                       data-testid="discard-plan-draft"
                     >
                       {isArabic ? 'تجاهل المسودة' : 'Discard draft'}
@@ -446,7 +442,8 @@ export default async function PlansPage({
                         />
                         <button
                           type="submit"
-                          style={{ ...secondaryButtonStyle(), ...compactButton }}
+                          className={buttonClass('neutral')}
+                          style={compactButton}
                           data-testid={`rollback-${version.versionNumber}`}
                         >
                           {isArabic ? 'استرجاع' : 'Roll back'}
@@ -532,7 +529,8 @@ function PlanTable({
               <div style={{ display: 'flex', gap: spacingTokens.xs }}>
                 <a
                   href={`/${locale}/console/plans?edit=${encodeURIComponent(plan.key)}`}
-                  style={{ ...secondaryButtonStyle(), ...compactButton, textDecoration: 'none' }}
+                  className={buttonClass('neutral')}
+                  style={compactButton}
                   data-testid={`edit-${plan.key}`}
                 >
                   {isArabic ? 'تحرير' : 'Edit'}
@@ -542,7 +540,8 @@ function PlanTable({
                   <input className="bs-control" type="hidden" name="key" value={plan.key} />
                   <button
                     type="submit"
-                    style={{ ...dangerButtonStyle(), ...compactButton }}
+                    className={buttonClass('danger')}
+                    style={compactButton}
                     data-testid={`remove-${plan.key}`}
                   >
                     {isArabic ? 'إزالة' : 'Remove'}
@@ -946,7 +945,7 @@ function PlanForm({
           borderStartStartRadius: radiusTokens.sm,
         }}
       >
-        <button type="submit" style={primaryButtonStyle()} data-testid="save-plan">
+        <button type="submit" className={buttonClass('primary')} data-testid="save-plan">
           {isArabic ? 'حفظ في المسودة' : 'Save to draft'}
         </button>
       </div>

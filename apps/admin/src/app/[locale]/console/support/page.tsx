@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { colorTokens, spacingTokens } from '@brandspace/ui';
+import { colorTokens, spacingTokens, buttonClass } from '@brandspace/ui';
 import { PageIntro } from '../../../../components/admin-shell';
 import {
   getSupportModeService,
@@ -15,9 +15,7 @@ import {
   EmptyState,
   Field,
   TableScroll,
-  dangerButtonStyle,
   inputStyle,
-  primaryButtonStyle,
   tableStyle,
   tdStyle,
   thStyle,
@@ -147,7 +145,7 @@ export default async function SupportModePage({
 
           <form action={endSupportAction} style={{ marginBlockStart: spacingTokens.md }}>
             <input type="hidden" name="locale" value={locale} />
-            <button type="submit" data-testid="support-end" style={dangerButtonStyle()}>
+            <button type="submit" data-testid="support-end" className={buttonClass('danger')}>
               {t('support.end')}
             </button>
           </form>
@@ -208,7 +206,7 @@ export default async function SupportModePage({
                   style={inputStyle()}
                 />
               </Field>
-              <button type="submit" data-testid="support-start" style={primaryButtonStyle()}>
+              <button type="submit" data-testid="support-start" className={buttonClass('primary')}>
                 {t('support.start')}
               </button>
             </form>
