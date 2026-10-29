@@ -3030,9 +3030,15 @@ span.bsp-cal-hol {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--bsp-px-14);
-  /* Review of #67, round 2: each card keeps its natural height, the row
-     top-aligned, as the prototype draws them. */
-  align-items: start;
+  /* S5 (KNOWN bug 16; supersedes review of #67, round 2): the cards of a row
+     share one height, the actions on one line at the bottom. */
+  align-items: stretch;
+}
+.bsp-posts-grid > li {
+  display: flex;
+}
+.bsp-posts-grid > li > .bsp-post {
+  flex: 1 1 auto;
 }
 /* `.lift` */
 .bsp-lift {
@@ -3193,6 +3199,16 @@ span.bsp-cal-hol {
   place-items: center;
   background: var(--bs-gradient-lit-7);
   color: var(--bs-surface);
+}
+.bsp-post-overlay.bsp-post-overlay-ink {
+  /* S5 (KNOWN bug 16): on the soft art, the palette's own dark ink. */
+  color: var(--bs-media-ink-soft);
+  text-shadow: none;
+}
+/* The compact list tile's glyph, over its art. */
+.bsp-post-textart-glyph {
+  position: absolute;
+  color: var(--bs-media-ink-soft);
 }
 .bsp-post-overlay {
   position: absolute;
@@ -5199,7 +5215,15 @@ span.bsp-cal-hol {
 /* `background: rgba(17,17,20,.55); color: #fff; border-radius: 99px;
    padding: 4px 10px; font-size: 11px; font-weight: 700`. */
 .bsp-camp-more {
-  position: relative;
+  /* S5 (KNOWN bug 15): out of the layout, centred over the frame. In the flow it
+     was a second grid item, and the picture (whose own inline
+     `position: relative` beats the absolute fill above) shared the frame with
+     it, filling only its top band. Physical centring is symmetric, so it holds
+     in RTL. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
   z-index: var(--bs-z-1);
   background: var(--bs-lit-111114-a55);
   color: var(--bs-surface);

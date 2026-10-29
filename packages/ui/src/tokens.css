@@ -723,6 +723,7 @@
   --bs-fx-backdrop-18-sat-170: blur(18px) saturate(170%);
   --bs-fx-backdrop-22-sat-180: blur(22px) saturate(180%);
   --bs-fx-backdrop-24: blur(24px);
+  --bs-media-ink-soft: #2a1a5e;
   --bs-check-accent: var(--bs-ink);
   --bs-fx-backdrop-scrim: none;
   --bs-fx-backdrop-30: blur(30px);

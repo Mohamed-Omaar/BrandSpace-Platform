@@ -2521,3 +2521,11 @@ draft alike.
   tick in ink (`--bs-check-accent`), as the prototype's chosen chips and segments are. The media
   picker's select box and the entry screens' consent rows move from purple to ink; every other
   checkbox and radio moves from the browser's blue to ink.
+
+### 6.3.75 Design-system programme S5 — the post and campaign cards (D-578)
+
+- **Campaign cards (KNOWN bug 15):** a literal port restored. The prototype's third picture is a full
+  frame with "+N" centred on it; the port's picture filled only the top band beside the badge. Fixed.
+- **Posts grid (KNOWN bug 16), owner-decided:** a text-only post's picture is the soft abstract art
+  instead of the prototype's purple (supersedes D-306 §23 for that tile), its excerpt in the
+  palette's dark ink and never the title; the cards of a row share one height.
