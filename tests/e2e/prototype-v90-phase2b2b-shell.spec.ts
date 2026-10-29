@@ -464,7 +464,10 @@ test.describe('§8 motion — overlays (D-350)', () => {
     await expect(menu).toHaveCount(0);
   });
 
-  test('MO6: a modal grows in over a veil whose blur goes to 3 px', async ({ page, isMobile }) => {
+  test('MO6: a modal grows in over the fading veil, which has the scrim blur (D-576: none)', async ({
+    page,
+    isMobile,
+  }) => {
     test.skip(isMobile === true, 'one run creates its own workspace');
     const ws = await ownWorkspace('dialog-motion');
     const assetId = await seedAsset(ws, 'Dialog motion.pdf');
@@ -476,9 +479,10 @@ test.describe('§8 motion — overlays (D-350)', () => {
     expect(await dialog.evaluate(anim)).toBe('bs-dialog-in 0.3s 0s');
     const veil = page.getByTestId('assets-delete-dialog-scrim');
     expect(await veil.evaluate(anim)).toBe('bs-veil-in 0.26s 0s');
+    // D-576: the veil is the prototype's, with no blur (D-350's 3 px is superseded).
     await expect
       .poll(() => veil.evaluate((el) => getComputedStyle(el).backdropFilter))
-      .toBe('blur(3px)');
+      .toBe('none');
   });
 
   test('MO7: the Copilot panel rises from its bottom end corner', async ({ page }) => {

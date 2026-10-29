@@ -16,6 +16,7 @@ import { Banner, Skeleton } from './feedback';
 import { useOverlayBehaviour } from './overlays';
 import { Avatar } from './media';
 import type { CopilotSurface } from './copilot-types';
+import { Backdrop } from './backdrop';
 
 /**
  * The AI Copilot's VISUAL SHELL. No provider, no generation, no credits spent.
@@ -950,18 +951,11 @@ export function CopilotPanel({
 
   return (
     <>
-      <div
+      <Backdrop
+        layer="overlay"
         className="bs-copilot-scrim"
-        data-testid="copilot-scrim"
-        onMouseDown={(event) => {
-          if (event.target === event.currentTarget) onClose();
-        }}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: zIndexTokens.overlay,
-          background: 'rgba(15, 23, 42, 0.45)',
-        }}
+        testId="copilot-scrim"
+        onDismiss={onClose}
       />
       <aside
         ref={measure}
@@ -1022,18 +1016,7 @@ export function CopilotDrawer({
   useOverlayBehaviour({ open, onClose, containerRef: panelRef });
   if (!open) return null;
   return (
-    <div
-      data-testid={`${testId}-scrim`}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: zIndexTokens.drawer,
-        background: 'rgba(12, 12, 14, 0.25)',
-      }}
-    >
+    <Backdrop layer="drawer" testId={`${testId}-scrim`} onDismiss={onClose}>
       <div
         ref={panelRef}
         role="dialog"
@@ -1064,7 +1047,7 @@ export function CopilotDrawer({
           {children}
         </div>
       </div>
-    </div>
+    </Backdrop>
   );
 }
 

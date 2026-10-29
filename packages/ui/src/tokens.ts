@@ -111,6 +111,13 @@ export const colorValues = {
   floatCardAlpha: 'rgba(255, 255, 255, 0.8)',
   drawerAlpha: 'rgba(255, 255, 255, 0.96)',
   /**
+   * S5 (D-5) — THE ONE SCRIM behind every drawer, sheet and dialog (`Backdrop`).
+   * The prototype's veil, `Main.dc.html` L1521/L1548/L1557/L1572/L1598:
+   * `background: rgba(17,17,20,.28)`, under its dialogs and its command panel
+   * alike. Its blur is `--bs-fx-backdrop-scrim`.
+   */
+  scrim: 'rgba(17, 17, 20, 0.28)',
+  /**
    * `.auth-card { background: rgba(255,255,255,.9) }`. Ninety per cent white on
    * the opaque auth stage resolves to about #FDFCFF, so purple link text on it
    * measures 5.5:1 — comfortably clear of AA.
@@ -1587,6 +1594,7 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-surface-card-alpha', value: colorValues.surfaceCardAlpha },
   { name: '--bs-float-card-alpha', value: colorValues.floatCardAlpha },
   { name: '--bs-drawer-alpha', value: colorValues.drawerAlpha },
+  { name: '--bs-scrim', value: colorValues.scrim },
   { name: '--bs-auth-card-alpha', value: colorValues.authCardAlpha },
   { name: '--bs-preview-panel-alpha', value: colorValues.previewPanelAlpha },
   { name: '--bs-shadow-auth-card', value: shadowValues.authCard },
@@ -1612,7 +1620,6 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-lit-111114-a14', value: 'rgba(17, 17, 20, 0.14)' },
   { name: '--bs-lit-111114-a18', value: 'rgba(17, 17, 20, 0.18)' },
   { name: '--bs-lit-111114-a2', value: 'rgba(17, 17, 20, 0.2)' },
-  { name: '--bs-lit-111114-a28', value: 'rgba(17, 17, 20, 0.28)' },
   { name: '--bs-lit-111114-a35', value: 'rgba(17, 17, 20, 0.35)' },
   { name: '--bs-lit-111114-a55', value: 'rgba(17, 17, 20, 0.55)' },
   { name: '--bs-lit-111114-a72', value: 'rgba(17, 17, 20, 0.72)' },
@@ -1844,7 +1851,8 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-fx-backdrop-18-sat-170', value: 'blur(18px) saturate(170%)' },
   { name: '--bs-fx-backdrop-22-sat-180', value: 'blur(22px) saturate(180%)' },
   { name: '--bs-fx-backdrop-24', value: 'blur(24px)' },
-  { name: '--bs-fx-backdrop-3', value: 'blur(3px)' },
+  // S5 (D-5): the scrim's blur. The prototype's veil has none (`blur(3px)` was D-350's MO6).
+  { name: '--bs-fx-backdrop-scrim', value: 'none' },
   { name: '--bs-fx-backdrop-30', value: 'blur(30px)' },
   { name: '--bs-fx-backdrop-8', value: 'blur(8px)' },
   { name: '--bs-shadow-lit-1', value: '0 14px 36px var(--bs-lit-111114-a14)' },
@@ -1870,7 +1878,6 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-z-6', value: '6' },
   { name: '--bs-z-60', value: '60' },
   { name: '--bs-z-7', value: '7' },
-  { name: '--bs-z-70', value: '70' },
   { name: '--bs-z-neg-1', value: '-1' },
   // S4: the decorative gradients (scripts/style/codemod-gradients.ts), so gradients can be switched off.
   {

@@ -552,6 +552,18 @@ severity). Step S6 turns both into errors.
 **Parity** — `tests/unit/token-parity.test.ts` compares every colour, shadow, z-index, font and
 motion token in tokens.ts with its tokens.css twin, and pins the list of tokens that have no twin yet.
 
+### 10.1a The shared components (design-system programme, S5)
+
+One component per family, used by both apps; a family's PR deletes the CSS it replaces.
+
+- **Backdrop** (`packages/ui/src/backdrop.tsx`, D-576). Every drawer, sheet and modal dialog sits on
+  it: `layer` is the z-index token (`drawer` 40, `overlay` 50, `dialog` 60), `fade` is the MO6 veil
+  fade, `leaving` keeps it inert while the panel's exit runs, `onDismiss` is a press on the backdrop
+  itself. Its look is two tokens: `--bs-scrim` and `--bs-fx-backdrop-scrim` (the blur switch turns the
+  second to `none`). A `position: fixed` layer covers the window only while no ancestor has a
+  `transform`, `filter` or `backdrop-filter`; `tests/e2e/backdrop.spec.ts` measures that, and
+  `tests/unit/backdrop.test.ts` keeps any other full-window overlay from being drawn.
+
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 
 - **`tokens.ts` is the source.** tokens.css's `:root` block is generated from `cssRootTokens`

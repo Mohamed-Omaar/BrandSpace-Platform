@@ -21,7 +21,6 @@ import {
   shadowTokens,
   spacingTokens,
   typographyTokens,
-  zIndexTokens,
   motionMs,
 } from './tokens';
 import { prefersReducedMotion, scaledMs } from './motion';
@@ -29,6 +28,7 @@ import { usePresence } from './motion-hooks';
 import { AmbientBackground } from './ambient';
 import { ChevronEndIcon, ChevronStartIcon, CloseIcon, MenuIcon } from './icons';
 import { Tooltip, useOverlayBehaviour } from './overlays';
+import { Backdrop } from './backdrop';
 
 /**
  * The responsive application shell shared by the Customer Dashboard and the
@@ -1091,18 +1091,11 @@ export function AppShell({
       </div>
 
       {drawer.present ? (
-        <div
-          data-testid="navigation-scrim"
-          {...(drawer.leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeDrawer();
-          }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: zIndexTokens.drawer,
-            background: 'rgba(12, 12, 14, 0.25)',
-          }}
+        <Backdrop
+          layer="drawer"
+          testId="navigation-scrim"
+          leaving={drawer.leaving}
+          onDismiss={closeDrawer}
         >
           <div
             id={drawerId}
@@ -1171,7 +1164,7 @@ export function AppShell({
             />
             {profile}
           </div>
-        </div>
+        </Backdrop>
       ) : null}
     </div>
   );

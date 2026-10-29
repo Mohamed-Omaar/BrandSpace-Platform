@@ -469,6 +469,7 @@
   --bs-surface-card-alpha: rgba(255, 255, 255, 0.82);
   --bs-float-card-alpha: rgba(255, 255, 255, 0.8);
   --bs-drawer-alpha: rgba(255, 255, 255, 0.96);
+  --bs-scrim: rgba(17, 17, 20, 0.28);
   --bs-auth-card-alpha: rgba(255, 255, 255, 0.9);
   --bs-preview-panel-alpha: rgba(255, 255, 255, 0.88);
   --bs-shadow-auth-card: 0 24px 70px rgba(44, 25, 82, 0.12);
@@ -496,7 +497,6 @@
   --bs-lit-111114-a14: rgba(17, 17, 20, 0.14);
   --bs-lit-111114-a18: rgba(17, 17, 20, 0.18);
   --bs-lit-111114-a2: rgba(17, 17, 20, 0.2);
-  --bs-lit-111114-a28: rgba(17, 17, 20, 0.28);
   --bs-lit-111114-a35: rgba(17, 17, 20, 0.35);
   --bs-lit-111114-a55: rgba(17, 17, 20, 0.55);
   --bs-lit-111114-a72: rgba(17, 17, 20, 0.72);
@@ -723,7 +723,7 @@
   --bs-fx-backdrop-18-sat-170: blur(18px) saturate(170%);
   --bs-fx-backdrop-22-sat-180: blur(22px) saturate(180%);
   --bs-fx-backdrop-24: blur(24px);
-  --bs-fx-backdrop-3: blur(3px);
+  --bs-fx-backdrop-scrim: none;
   --bs-fx-backdrop-30: blur(30px);
   --bs-fx-backdrop-8: blur(8px);
   --bs-shadow-lit-1: 0 14px 36px var(--bs-lit-111114-a14);
@@ -746,7 +746,6 @@
   --bs-z-6: 6;
   --bs-z-60: 60;
   --bs-z-7: 7;
-  --bs-z-70: 70;
   --bs-z-neg-1: -1;
   --bs-gradient-lit-1: linear-gradient(
     90deg,
@@ -2058,10 +2057,12 @@ html[dir='rtl'] input[type='week'] {
   }
 }
 
+/* S5: opacity only. A backdrop's blur is painted at its opacity, so the fade
+   brings the blur in with it; animating `backdrop-filter` from `blur(0)` would
+   leave `blur(0px)` behind when the scrim blur is `none`. */
 @keyframes bs-veil-in {
   from {
     opacity: 0;
-    backdrop-filter: blur(0);
   }
 }
 
@@ -2069,8 +2070,34 @@ html[dir='rtl'] input[type='week'] {
   animation: bs-dialog-in var(--bs-motion-dialog) var(--bs-ease-out) both;
 }
 
+/*
+ * S5 (D-5) — THE ONE BACKDROP (`Backdrop` in backdrop.tsx): one tint, one blur,
+ * the token z-index. `.bs-veil` is only its MO6 fade, for modal dialogs.
+ */
+.bs-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--bs-scrim);
+  backdrop-filter: var(--bs-fx-backdrop-scrim);
+}
+.bs-backdrop[data-backdrop='drawer'] {
+  z-index: var(--bs-z-drawer);
+}
+.bs-backdrop[data-backdrop='overlay'] {
+  z-index: var(--bs-z-overlay);
+}
+.bs-backdrop[data-backdrop='dialog'] {
+  z-index: var(--bs-z-dialog);
+}
+
+.bs-dialog-veil {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--bsp-rem-1);
+}
+
 .bs-veil {
-  backdrop-filter: var(--bs-fx-backdrop-3);
   animation: bs-veil-in var(--bs-motion-veil) var(--bs-ease-out) both;
 }
 

@@ -29,14 +29,8 @@ import { usePresence } from './motion-hooks';
 import { Tooltip, useOverlayBehaviour } from './overlays';
 import { LinkPendingMark, usePrefetchOnIntent } from './prefetch-link';
 import { PrototypeIcon } from './prototype-icons';
-import {
-  colorTokens,
-  motionMs,
-  radiusTokens,
-  shadowTokens,
-  spacingTokens,
-  zIndexTokens,
-} from './tokens';
+import { colorTokens, motionMs, radiusTokens, shadowTokens, spacingTokens } from './tokens';
+import { Backdrop } from './backdrop';
 
 /**
  * THE CUSTOMER APPLICATION'S SHELL, PORTED FROM `prototype-2026-09-27` (D-468).
@@ -1007,18 +1001,11 @@ export function CustomerShell({
   }, [drawerOpen]);
 
   const drawerElement = drawer.present ? (
-    <div
-      data-testid="navigation-scrim"
-      {...(drawer.leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) closeDrawer();
-      }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: zIndexTokens.drawer,
-        background: 'rgba(12, 12, 14, 0.25)',
-      }}
+    <Backdrop
+      layer="drawer"
+      testId="navigation-scrim"
+      leaving={drawer.leaving}
+      onDismiss={closeDrawer}
     >
       <div
         id={drawerId}
@@ -1068,7 +1055,7 @@ export function CustomerShell({
         />
         <div className="bsp-sb-foot">{profile}</div>
       </div>
-    </div>
+    </Backdrop>
   ) : null;
 
   const floating = (

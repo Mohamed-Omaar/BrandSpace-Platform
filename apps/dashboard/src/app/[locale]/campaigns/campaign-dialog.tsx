@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useId, useRef, useState, type ReactNode } from 'react';
-import { useOverlayBehaviour } from '@brandspace/ui';
+import { Backdrop, useOverlayBehaviour } from '@brandspace/ui';
 
 /**
  * D-496 (Shell 7, Campaigns 1, 15, 16, 21) — THE CAMPAIGN DIALOG, the
@@ -36,11 +36,12 @@ export function CampaignDialog({
   useOverlayBehaviour({ open: true, onClose: close, containerRef: panelRef });
 
   return (
-    <div
-      className="bs-veil bsp-cp-veil"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) close();
-      }}
+    <Backdrop
+      layer="dialog"
+      fade
+      className="bsp-cp-veil"
+      testId={`${testId}-scrim`}
+      onDismiss={close}
     >
       <section
         ref={panelRef}
@@ -66,7 +67,7 @@ export function CampaignDialog({
         </div>
         {children}
       </section>
-    </div>
+    </Backdrop>
   );
 }
 

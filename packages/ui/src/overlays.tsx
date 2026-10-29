@@ -23,6 +23,7 @@ import { Button, buttonClass } from './primitives';
 import { ChevronDownIcon, CloseIcon } from './icons';
 import { OverlayStack, type StackedOverlay } from './overlay-stack';
 import { usePresence } from './motion-hooks';
+import { Backdrop } from './backdrop';
 
 /**
  * Overlay behaviour: tooltip, dropdown menu, dialog, confirmation.
@@ -618,23 +619,13 @@ export function Dialog({
   if (!open) return null;
 
   return (
-    <div
-      data-testid={testId ? `${testId}-scrim` : 'dialog-scrim'}
-      // MO6: the veil fades in while its backdrop blur goes 0 → 3 px.
-      className="bs-veil"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: zIndexTokens.dialog,
-        background: 'rgba(15, 23, 42, 0.45)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: spacingTokens.md,
-      }}
+    <Backdrop
+      layer="dialog"
+      // MO6: the veil fades in.
+      fade
+      testId={testId ? `${testId}-scrim` : 'dialog-scrim'}
+      onDismiss={onClose}
+      className="bs-dialog-veil"
     >
       <div
         ref={panelRef}
@@ -708,7 +699,7 @@ export function Dialog({
           </div>
         ) : null}
       </div>
-    </div>
+    </Backdrop>
   );
 }
 
@@ -945,19 +936,7 @@ export function SideSheet({
   const { present, leaving } = usePresence(open, panelRef);
   if (!present) return null;
   return (
-    <div
-      data-testid={`${testId}-scrim`}
-      {...(leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: zIndexTokens.drawer,
-        background: 'rgba(12, 12, 14, 0.25)',
-      }}
-    >
+    <Backdrop layer="drawer" testId={`${testId}-scrim`} leaving={leaving} onDismiss={onClose}>
       <div
         ref={panelRef}
         role="dialog"
@@ -1021,6 +1000,6 @@ export function SideSheet({
         </div>
         {children}
       </div>
-    </div>
+    </Backdrop>
   );
 }

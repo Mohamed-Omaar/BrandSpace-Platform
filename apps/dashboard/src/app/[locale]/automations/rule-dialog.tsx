@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useId, useRef, type ReactNode } from 'react';
-import { useOverlayBehaviour } from '@brandspace/ui';
+import { Backdrop, useOverlayBehaviour } from '@brandspace/ui';
 
 /**
  * THE RULE DIALOG — the prototype's rule builder, `Main.dc.html` lines
@@ -35,11 +35,12 @@ export function RuleDialog({
   useOverlayBehaviour({ open: true, onClose: close, containerRef: panelRef });
 
   return (
-    <div
-      className="bs-veil bsp-au-veil"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) close();
-      }}
+    <Backdrop
+      layer="dialog"
+      fade
+      className="bsp-au-veil"
+      testId={`${testId}-scrim`}
+      onDismiss={close}
     >
       <section
         ref={panelRef}
@@ -65,6 +66,6 @@ export function RuleDialog({
         </div>
         {children}
       </section>
-    </div>
+    </Backdrop>
   );
 }

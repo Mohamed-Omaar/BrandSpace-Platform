@@ -2502,3 +2502,14 @@ draft alike.
   chat panel's fields) now draw `#e4e4e8`. Under `prefers-contrast: more` it is the 3:1 contrast border.
 - **The 11px faint grey is `#6a6a72` (L-28, D-575):** the business switcher's caption, the account
   menu's e-mail and the Settings → Notifications header, which drew `#8a8a92` (3.43:1).
+
+### 6.3.73 Design-system programme S5 — one backdrop, the prototype's veil (D-576)
+
+- **A literal port, now everywhere.** The prototype draws one veil, `rgba(17,17,20,.28)` with no blur,
+  under its dialogs and its command panel (`Main.dc.html` L1521, L1548, L1557, L1572, L1598). Every
+  drawer, sheet and dialog now sits on `Backdrop` with that value (`--bs-scrim`,
+  `--bs-fx-backdrop-scrim: none`). The drawers were `rgba(12,12,14,.25)` and `Dialog` a slate
+  `rgba(15,23,42,.45)` with a 3 px blur; both now match the prototype.
+- **Superseded:** the veil's 3 px blur from D-350 / MO6. The 260 ms fade stays, by opacity only.
+- **Layers:** drawers 40, the Copilot phone sheet 50, dialogs 60 — the token z-index. The rule-builder
+  and campaign veils move from 70 to 60.
