@@ -712,7 +712,6 @@
 }
 .bsp-consent-row input {
   margin-block-start: var(--bsp-px-4);
-  accent-color: var(--bs-brand-purple);
 }
 .bsp-consent-brands {
   display: flex;

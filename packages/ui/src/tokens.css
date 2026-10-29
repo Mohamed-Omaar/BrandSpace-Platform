@@ -723,6 +723,7 @@
   --bs-fx-backdrop-18-sat-170: blur(18px) saturate(170%);
   --bs-fx-backdrop-22-sat-180: blur(22px) saturate(180%);
   --bs-fx-backdrop-24: blur(24px);
+  --bs-check-accent: var(--bs-ink);
   --bs-fx-backdrop-scrim: none;
   --bs-fx-backdrop-30: blur(30px);
   --bs-fx-backdrop-8: blur(8px);
@@ -1383,6 +1384,16 @@ html:has(.bs-topbar:not(.bsp-header)) {
   transition:
     background-color var(--bs-duration-fast) var(--bs-ease-out),
     box-shadow var(--bs-duration-fast) var(--bs-ease-out);
+}
+
+/*
+ * S5 (D-577) — ONE TICK COLOUR. Every native checkbox and radio, in both apps,
+ * draws its tick in `--bs-check-accent` (ink), instead of three colours: purple
+ * in two places, ink in one, the browser's blue everywhere else.
+ */
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--bs-check-accent);
 }
 
 /*

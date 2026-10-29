@@ -5963,7 +5963,6 @@ span.bsp-cal-hol {
   margin: 0;
   inline-size: var(--bsp-px-16);
   block-size: var(--bsp-px-16);
-  accent-color: var(--bs-brand-purple);
 }
 /* The empty library: `.card` with `padding: 28px; gap: 8px; align-items:
    flex-start`, `font-size: 16px` and `13.5px; color: #6a6a72`. */
@@ -13472,12 +13471,8 @@ select.bs-select.bsp-chevron {
   font-weight: 700;
 }
 /* Step 7 (flow 7.6) — Brand access keeps its native radios and checkboxes
-   (it works without script), drawn in the platform's ink rather than the
-   browser's blue, as every other chosen control is. */
-.bsp-tm-access input[type='radio'],
-.bsp-tm-access input[type='checkbox'] {
-  accent-color: var(--bs-text-primary);
-}
+   (it works without script); their ink tick is now every tick's (D-577,
+   `--bs-check-accent` in tokens.css). */
 
 /* Round 5 (F2) — the Publishing log's row, ported from `Main.dc.html`
    lines 1290–1297: `section.card` (overflow hidden) of `.row`s — a 44px

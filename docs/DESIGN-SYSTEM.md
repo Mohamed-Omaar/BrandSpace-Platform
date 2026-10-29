@@ -584,6 +584,12 @@ One component per family, used by both apps; a family's PR deletes the CSS it re
   border and states, so a field that draws its own size (a compact filter select) keeps it. The
   Control Center's `inputStyle()` and the customer `customerInputStyle()` now set only a form width
   (28rem, 24rem). `tests/unit/field.test.ts` pins the values.
+- **Checkbox / radio** (D-577). Every native checkbox and radio draws its tick in
+  `--bs-check-accent` (ink), from one global rule in `tokens.css`; no stylesheet or component sets
+  its own (`tests/unit/checkbox.test.ts`). The composite choices that hide a native input inside a
+  chip, a tile or a row (`.bsp-ai-radio`, `.bsp-au-radio`, `.bsp-wz-radio`, `.bsp-vc-toggle`,
+  `.bsp-tgl-in` — the prototype's `.tgl` switch) are ports of different prototype elements and stay
+  where they are.
 
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 

@@ -1851,6 +1851,9 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-fx-backdrop-18-sat-170', value: 'blur(18px) saturate(170%)' },
   { name: '--bs-fx-backdrop-22-sat-180', value: 'blur(22px) saturate(180%)' },
   { name: '--bs-fx-backdrop-24', value: 'blur(24px)' },
+  // S5 (D-577): the one tick colour of every native checkbox and radio — ink, as
+  // the prototype's chosen chips and segments are. One token, so a look can set it.
+  { name: '--bs-check-accent', value: 'var(--bs-ink)' },
   // S5 (D-5): the scrim's blur. The prototype's veil has none (`blur(3px)` was D-350's MO6).
   { name: '--bs-fx-backdrop-scrim', value: 'none' },
   { name: '--bs-fx-backdrop-30', value: 'blur(30px)' },

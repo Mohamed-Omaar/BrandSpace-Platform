@@ -2513,3 +2513,11 @@ draft alike.
 - **Superseded:** the veil's 3 px blur from D-350 / MO6. The 260 ms fade stays, by opacity only.
 - **Layers:** drawers 40, the Copilot phone sheet 50, dialogs 60 — the token z-index. The rule-builder
   and campaign veils move from 70 to 60.
+
+### 6.3.74 Design-system programme S5 — one tick colour (D-577)
+
+- **An approved design-system extension, owner-decided.** The prototype draws no tick colour (its one
+  checkbox, the sign-up terms, is the browser's blue). Every native checkbox and radio now draws its
+  tick in ink (`--bs-check-accent`), as the prototype's chosen chips and segments are. The media
+  picker's select box and the entry screens' consent rows move from purple to ink; every other
+  checkbox and radio moves from the browser's blue to ink.
