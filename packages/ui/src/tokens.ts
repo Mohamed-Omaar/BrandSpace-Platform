@@ -1825,6 +1825,10 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-motion-speed', value: '1' },
   { name: '--bs-motion-scale', value: 'calc(var(--bs-motion-level) * var(--bs-motion-speed))' },
   { name: '--bs-radius-scale', value: '1' },
+  // LF: the hooks the Look & feel theme sets, at the original look's values.
+  { name: '--bs-control-border-width', value: 'var(--bsp-px-1)' },
+  { name: '--bs-line-body', value: '1.6' },
+  { name: '--bs-line-relaxed', value: '1.8' },
   // D-2: the customer app's field border, one token (D-55 restores it to 3:1 under prefers-contrast).
   { name: '--bs-control-border-customer', value: '#e4e4e8' },
   { name: '--bs-control-border-customer-hover', value: '#c9c9d1' },

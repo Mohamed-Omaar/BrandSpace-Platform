@@ -5,6 +5,8 @@ import {
   ABSOLUTE_MIN_PASSWORD_LENGTH,
   BUNDLED_FONTS,
   BUNDLED_FONT_KEYS,
+  contrastIssues,
+  themeDocumentSchema,
 } from '@brandspace/shared';
 
 /**
@@ -2998,6 +3000,26 @@ const aiAppsSchema = z.object({
   allowedOrigins: z.array(z.string().url().max(200)).max(20).default([]),
 });
 
+// --- Theme (Look & feel, LF) ---------------------------------------------------
+
+/**
+ * The theme document is `@brandspace/shared`'s, so the Control Center's
+ * preview and both apps' stylesheet writer read the very schema activation
+ * validates. Every look it holds — the active one and each saved preset — must
+ * pass the contrast checks.
+ */
+const themeSchema = themeDocumentSchema.superRefine((doc, ctx) => {
+  const looks = [
+    { path: ['look'], look: doc.look },
+    ...doc.savedPresets.map((p, i) => ({ path: ['savedPresets', i, 'look'], look: p.look })),
+  ];
+  for (const { path, look } of looks) {
+    for (const issue of contrastIssues(look)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [...path, 'colours'], message: issue.en });
+    }
+  }
+});
+
 // --- Registry ---------------------------------------------------------------
 
 export const CONFIG_DOMAINS = {
@@ -3079,6 +3101,10 @@ export const CONFIG_DOMAINS = {
   // may connect is each member's own permissions; which plans is the
   // `feature.ai_apps` entitlement.
   'ai-apps': { schema: aiAppsSchema, schemaVersion: 1 },
+  // LF. The Look & feel theme. `{}` is the original look (the prototype,
+  // D-468); validation refuses any look that fails WCAG AA contrast in light or
+  // dark, so a theme that cannot be read can never be activated.
+  theme: { schema: themeSchema, schemaVersion: 1 },
 } as const;
 
 export type ConfigDomain = keyof typeof CONFIG_DOMAINS;

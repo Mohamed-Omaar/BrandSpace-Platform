@@ -22,3 +22,4 @@ export * from './result';
 export * from './roles';
 export * from './untrusted-text';
 export * from './prompt-language';
+export * from './theme';
