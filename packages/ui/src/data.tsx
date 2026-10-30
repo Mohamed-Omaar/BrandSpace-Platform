@@ -90,7 +90,7 @@ export function Row({
 }
 
 /**
- * The table's classes (S5). `thStyle()` / `tdStyle()` painted these inline;
+ * The table's classes (S5). The retired inline helpers painted these;
  * the declarations are now `.bs-table`, `.bs-th` and `.bs-td` in tokens.css.
  */
 export const TABLE_CLASS = 'bs-table';

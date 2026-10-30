@@ -613,6 +613,12 @@ One component per family, used by both apps; a family's PR deletes the CSS it re
   `admin-shell.tsx`) are gone and its 32 call sites use `StateMessage` directly. The unused
   `.cs-empty` and `.bb-source-empty` are deleted. The prototype's per-screen empty cards
   (`.bsp-*-empty`, 34 classes) are ports of each screen's own empty card and stay with their screens.
+- **Table** (`DataTable`, `Row`, `Cell` in `packages/ui/src/data.tsx`; `.bs-table`, `.bs-th`, `.bs-td`
+  in `tokens.css`). One class-based table for both apps: `thStyle()`, `tdStyle()`, the Control
+  Center's `tableStyle()` and the customer app's identical `customerTableStyle()` are gone, and a
+  hand-built table carries `TABLE_CLASS`, `TH_CLASS` and `TD_CLASS`. The declarations and tokens are
+  the ones the helpers painted (`tests/unit/table.test.ts`), so neither look changes. The
+  prototype's per-screen row and table classes are ports of each screen and stay with their screens.
 
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 
