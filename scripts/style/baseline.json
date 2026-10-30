@@ -111,14 +111,14 @@
       "length": 7
     },
     "apps/admin/src/app/[locale]/console/support/page.tsx": {
-      "inline-style": 26
+      "inline-style": 6
     },
     "apps/admin/src/app/[locale]/console/team/page.tsx": {
       "inline-style": 9,
       "length": 1
     },
     "apps/admin/src/app/[locale]/console/workspaces/[workspaceId]/page.tsx": {
-      "inline-style": 125
+      "inline-style": 33
     },
     "apps/admin/src/app/[locale]/console/workspaces/page.tsx": {
       "inline-style": 14,
@@ -232,7 +232,7 @@
       "numeric-style": 1
     },
     "apps/dashboard/src/app/[locale]/billing/invoices/[invoiceId]/page.tsx": {
-      "inline-style": 32
+      "inline-style": 12
     },
     "apps/dashboard/src/app/[locale]/billing/page.tsx": {
       "inline-style": 16
@@ -312,7 +312,7 @@
       "inline-style": 6
     },
     "apps/dashboard/src/app/[locale]/design-system/components/components-client.tsx": {
-      "inline-style": 61,
+      "inline-style": 56,
       "length": 1
     },
     "apps/dashboard/src/app/[locale]/design-system/components/page.tsx": {
@@ -373,11 +373,11 @@
       "numeric-style": 2
     },
     "apps/dashboard/src/app/[locale]/permissions/page.tsx": {
-      "inline-style": 16,
+      "inline-style": 11,
       "numeric-style": 1
     },
     "apps/dashboard/src/app/[locale]/plan/page.tsx": {
-      "inline-style": 58
+      "inline-style": 29
     },
     "apps/dashboard/src/app/[locale]/publishing/page.tsx": {
       "inline-style": 7
@@ -479,8 +479,8 @@
       "inline-style": 13
     },
     "packages/ui/src/data.tsx": {
-      "inline-style": 28,
-      "length": 4
+      "inline-style": 24,
+      "length": 3
     },
     "packages/ui/src/design-studio.tsx": {
       "colour": 1,

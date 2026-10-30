@@ -1,5 +1,13 @@
 import { cookies } from 'next/headers';
-import { colorTokens, spacingTokens, buttonClass, StateMessage } from '@brandspace/ui';
+import {
+  colorTokens,
+  spacingTokens,
+  buttonClass,
+  StateMessage,
+  TABLE_CLASS,
+  TD_CLASS,
+  TH_CLASS,
+} from '@brandspace/ui';
 import { PageIntro } from '../../../../components/admin-shell';
 import {
   getSupportModeService,
@@ -9,16 +17,7 @@ import {
 } from '../../../../server/platform-context';
 import { translator } from '../../../../i18n/messages';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
-import {
-  Banner,
-  Card,
-  Field,
-  TableScroll,
-  inputStyle,
-  tableStyle,
-  tdStyle,
-  thStyle,
-} from '../../../../components/console-ui';
+import { Banner, Card, Field, TableScroll, inputStyle } from '../../../../components/console-ui';
 import { endSupportAction, startSupportAction } from './actions';
 import { SUPPORT_COOKIE } from '../../../../server/support-cookie';
 
@@ -95,46 +94,46 @@ export default async function SupportModePage({
             {t('support.noImpersonation')}
           </p>
           <TableScroll>
-            <table style={tableStyle()}>
+            <table className={TABLE_CLASS}>
               <tbody>
                 <tr>
-                  <th scope="row" style={thStyle()}>
+                  <th scope="row" className={TH_CLASS}>
                     {locale === 'ar' ? 'مساحة العمل' : 'Workspace'}
                   </th>
-                  <td style={tdStyle()} data-testid="support-workspace">
+                  <td className={TD_CLASS} data-testid="support-workspace">
                     {active.workspaceName}
                   </td>
                 </tr>
                 <tr>
-                  <th scope="row" style={thStyle()}>
+                  <th scope="row" className={TH_CLASS}>
                     {locale === 'ar' ? 'الفاعل' : 'Actor'}
                   </th>
-                  <td style={tdStyle()}>
+                  <td className={TD_CLASS}>
                     {actor.email} · {actor.roleKey}
                   </td>
                 </tr>
                 <tr>
-                  <th scope="row" style={thStyle()}>
+                  <th scope="row" className={TH_CLASS}>
                     {t('support.reason')}
                   </th>
-                  <td style={tdStyle()} data-testid="support-reason">
+                  <td className={TD_CLASS} data-testid="support-reason">
                     {active.reason}
                   </td>
                 </tr>
                 <tr>
-                  <th scope="row" style={thStyle()}>
+                  <th scope="row" className={TH_CLASS}>
                     {t('support.remaining')}
                   </th>
-                  <td style={tdStyle()} data-testid="support-remaining">
+                  <td className={TD_CLASS} data-testid="support-remaining">
                     {Math.floor(active.remainingSeconds / 60)}{' '}
                     {locale === 'ar' ? 'دقيقة' : 'minutes'}
                   </td>
                 </tr>
                 <tr>
-                  <th scope="row" style={thStyle()}>
+                  <th scope="row" className={TH_CLASS}>
                     {locale === 'ar' ? 'الصلاحية' : 'Access'}
                   </th>
-                  <td style={tdStyle()} data-testid="support-access-level">
+                  <td className={TD_CLASS} data-testid="support-access-level">
                     {t('support.readOnly')}
                   </td>
                 </tr>
@@ -228,24 +227,24 @@ export default async function SupportModePage({
             </p>
           )}
           <TableScroll>
-            <table style={tableStyle()}>
+            <table className={TABLE_CLASS}>
               <thead>
                 <tr>
-                  <th style={thStyle()}>{locale === 'ar' ? 'الفاعل' : 'Actor'}</th>
-                  <th style={thStyle()}>{t('support.reason')}</th>
-                  <th style={thStyle()}>{locale === 'ar' ? 'بدأت' : 'Granted'}</th>
-                  <th style={thStyle()}>{locale === 'ar' ? 'تنتهي' : 'Expires'}</th>
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'الفاعل' : 'Actor'}</th>
+                  <th className={TH_CLASS}>{t('support.reason')}</th>
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'بدأت' : 'Granted'}</th>
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'تنتهي' : 'Expires'}</th>
                 </tr>
               </thead>
               <tbody>
                 {history.map((s) => (
                   <tr key={s.id}>
-                    <td style={tdStyle()}>{s.platformUserEmail}</td>
-                    <td style={tdStyle()}>{s.reason}</td>
-                    <td style={tdStyle()}>
+                    <td className={TD_CLASS}>{s.platformUserEmail}</td>
+                    <td className={TD_CLASS}>{s.reason}</td>
+                    <td className={TD_CLASS}>
                       {s.grantedAt.toISOString().slice(0, 16).replace('T', ' ')}
                     </td>
-                    <td style={tdStyle()}>
+                    <td className={TD_CLASS}>
                       {s.expiresAt.toISOString().slice(0, 16).replace('T', ' ')}
                     </td>
                   </tr>

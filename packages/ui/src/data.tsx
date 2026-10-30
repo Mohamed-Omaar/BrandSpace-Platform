@@ -1,6 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
-import { scrollContainerStyle } from './a11y';
 import { ChevronEndIcon, ChevronStartIcon, SearchIcon } from './icons';
 import { FIELD_CLASS } from './primitives';
 
@@ -20,7 +19,7 @@ import { FIELD_CLASS } from './primitives';
  *
  * `tabIndex={0}` because a region that scrolls with a mouse must also scroll
  * with a keyboard, or its content is unreachable without a pointer (WCAG
- * 2.1.1). `scrollContainerStyle()` also establishes a containing block, so an
+ * 2.1.1). `.bs-table-scroll` also establishes a containing block, so an
  * absolutely-positioned descendant — a visually-hidden label, say — is clipped
  * here instead of extending the document (D-48).
  */
@@ -43,28 +42,19 @@ export function DataTable({
       tabIndex={0}
       role="group"
       aria-label={caption}
-      style={{
-        ...scrollContainerStyle(),
-        // A soft container, not a bordered box: the surface and the radius say
-        // "this is a table" without drawing a frame around it (D-54).
-        borderRadius: radiusTokens.lg,
-        background: colorTokens.surface,
-      }}
+      // A soft container, not a bordered box: the surface and the radius say
+      // "this is a table" without drawing a frame around it (D-54).
+      className="bs-table-scroll"
     >
       <table
         data-testid={testId}
-        style={{
-          inlineSize: '100%',
-          borderCollapse: 'collapse',
-          minInlineSize: minWidth,
-          ...typographyTokens.bodySm,
-          textAlign: 'start',
-        }}
+        className={`${TABLE_CLASS} bs-table-body`}
+        style={{ minInlineSize: minWidth }}
       >
         <thead>
           <tr>
             {headers.map((header) => (
-              <th key={header} scope="col" style={thStyle()}>
+              <th key={header} scope="col" className={TH_CLASS}>
                 {header}
               </th>
             ))}
@@ -93,54 +83,26 @@ export function Row({
   readonly testId?: string | undefined;
 }) {
   return (
-    <tr
-      className="bs-row"
-      data-testid={testId}
-      aria-selected={selected || undefined}
-      style={selected ? { background: colorTokens.surfaceLavender } : undefined}
-    >
+    <tr className="bs-row" data-testid={testId} aria-selected={selected || undefined}>
       {children}
     </tr>
   );
 }
 
-export function thStyle(): CSSProperties {
-  return {
-    // `start`, not `left`, so Arabic mirrors.
-    textAlign: 'start',
-    paddingBlock: spacingTokens.sm,
-    paddingInline: spacingTokens.md,
-    // No filled header band and no grid: one hairline under the header row is
-    // all the separation a column heading needs.
-    background: 'transparent',
-    borderBlockEnd: `1px solid ${colorTokens.hairline}`,
-    color: colorTokens.textMuted,
-    ...typographyTokens.caption,
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    whiteSpace: 'nowrap',
-  };
-}
-
-export function tdStyle(): CSSProperties {
-  return {
-    paddingBlock: spacingTokens.md,
-    paddingInline: spacingTokens.md,
-    // A row separator, not a cell grid. Vertical rules are what made the old
-    // tables read as a spreadsheet.
-    borderBlockEnd: `1px solid ${colorTokens.hairline}`,
-    verticalAlign: 'middle',
-    color: colorTokens.textPrimary,
-  };
-}
+/**
+ * The table's classes (S5). The retired inline helpers painted these;
+ * the declarations are now `.bs-table`, `.bs-th` and `.bs-td` in tokens.css.
+ */
+export const TABLE_CLASS = 'bs-table';
+export const TH_CLASS = 'bs-th';
+export const TD_CLASS = 'bs-td';
 
 export function Cell({
   children,
   ...rest
 }: { readonly children: ReactNode } & Record<string, unknown>) {
   return (
-    <td style={tdStyle()} {...rest}>
+    <td className={TD_CLASS} {...rest}>
       {children}
     </td>
   );

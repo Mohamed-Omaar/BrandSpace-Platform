@@ -1143,9 +1143,4 @@ export function CustomerBanner({
  * component can reach them without importing this server shell — see that
  * file's note. Server callers keep their existing import path.
  */
-export {
-  customerInputStyle,
-  customerTableStyle,
-  customerTdStyle,
-  customerThStyle,
-} from './customer-styles';
+export { customerInputStyle } from './customer-styles';
