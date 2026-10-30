@@ -12,7 +12,7 @@
     "postinstall": "pnpm --filter @brandspace/database exec prisma generate",
     "build": "pnpm -r --filter './packages/*' build",
     "typecheck": "pnpm -r typecheck",
-    "lint": "eslint .",
+    "lint": "eslint . && pnpm lint:style",
     "lint:fix": "eslint . --fix",
     "lint:style": "stylelint \"packages/ui/src/**/*.css\" \"apps/*/src/**/*.css\" --allow-empty-input",
     "style:ratchet": "tsx scripts/style/ratchet.ts",

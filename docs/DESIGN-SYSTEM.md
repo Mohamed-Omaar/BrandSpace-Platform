@@ -6,8 +6,9 @@
 > والمكوّنات المشتركة، وسلوك الشريط الجانبي، وقواعد الاستجابة، وقواعد العربية RTL والإنجليزية LTR،
 > وعقد معاينة المنشور الاجتماعي، وعقد واجهة مساعد الذكاء الاصطناعي، ومتطلبات الوصولية.
 >
-> **القاعدة الأهم:** كل لون وكل مقاس يُقرَّر في `packages/ui/src/tokens.ts` فقط. لا يُكتب أي لون مباشرةً داخل صفحة أو مكوّن،
-> ويوجد اختبار يفشل إذا حدث ذلك.
+> **القاعدة الأهم:** كل لون وكل مقاس يُقرَّر في `packages/ui/src/tokens.ts`، وتحمل `tokens.css` القيم نفسها. لا يُكتب أي لون أو مقاس
+> مباشرةً داخل صفحة أو مكوّن جديد: قاعدتا الفحص (ESLint وstylelint) تعدّانه خطأً، والملفات القديمة التي ما زالت فيها قيم مكتوبة
+> يحرسها اختبار يفشل إذا زاد عددها (الخطوة S6).
 
 **Phase 2C-A, revised.** This document describes the visual foundation. It is the contract the
 remaining screens are migrated onto in Phase 2C-B.
@@ -43,6 +44,11 @@ hairline of last resort. See D-54 and D-55 in `docs/DECISIONS.md`.
 | Content calendar (month, week, agenda)                   | `packages/ui/src/calendar.tsx`            |
 | Post composer (editor, preview, Copilot slot)            | `packages/ui/src/composer.tsx`            |
 | Design Studio (toolbar, rail, artboard, properties)      | `packages/ui/src/design-studio.tsx`       |
+
+**What enforces it.** Not every value in the tree comes from a token yet. The files that still
+write values by hand are listed in `scripts/style/baseline.json`, and the style ratchet stops their
+counts rising (§10). In every other file, a new one included, a hand-written colour, length or
+inline style is a lint error (S6, D-581).
 
 **Applications compose; they do not decide.** `tests/unit/design-system.test.ts` scans every file in
 `apps/*/src` and fails on a hex colour literal outside a comment. That rule is CLAUDE.md §4 made
@@ -87,7 +93,7 @@ at all — zero occurrences across all ten files, including its own `.public-*` 
 | Selected surface                       | `brandPurpleTint` + `brandPurpleBorder`                         | Carries `textPrimary` and `brandPurplePressed`              |
 | Accent, highlight, badge               | `brandYellow`, `brandYellowTint`                                | **Never** body text; **never** white text on it             |
 | Yellow as text                         | `brandYellowText`                                               | 5.52:1 on white; the only permitted yellow-toned text       |
-| Page ground                            | `appBackground` = white                                         | Never tinted. The canvas is the quiet part (D-49)           |
+| Page ground                            | `appBackground` = `#F2F2F2`                                     | Never tinted. The canvas is the quiet part (D-49)           |
 | Supporting surfaces                    | `surfaceSoft`, `surfaceWarm`, `surfaceLavender`, `surfaceMuted` | These carry structure, not borders (D-54)                   |
 | Control fill                           | `controlSurface` + `.bs-control`                                | A control is identified by its FILL, never by an outline    |
 | Accent, highlight, badge               | `brandYellow`, `brandYellowTint`                                | **Never** body text; **never** white text on it             |
@@ -242,9 +248,9 @@ One implementation, used by both the Customer Dashboard and the Control Center.
 
 ### Desktop sidebar (≥ 768px)
 
-- **Expanded** (`17rem`): icon plus text label, grouped under section headings, with the workspace
+- **Expanded** (`15.5rem`, `--bs-sidebar-expanded`): icon plus text label, grouped under section headings, with the workspace
   identity above and the signed-in profile below.
-- **Collapsed** (`4.5rem`): icon only, with an accessible tooltip on hover **and on keyboard focus**
+- **Collapsed** (`4.875rem`, `--bs-sidebar-collapsed`): icon only, with an accessible tooltip on hover **and on keyboard focus**
   (WCAG 1.4.13). The link keeps `aria-label`, so it still has a name — without it axe reports
   `link-name` and a screen-reader user hears "link" five times.
 - **Active item** is a soft filled lavender **pill** — not a row with a box drawn around it — carrying
@@ -547,7 +553,13 @@ object (`colorTokens.*` and its siblings) in the TS/TSX. The counts are committe
 `pnpm style:ratchet --write` records a lower baseline. The same values are reported, as warnings only,
 by stylelint (`pnpm lint:style`, `scale-unlimited/declaration-strict-value`) and by ESLint
 (`style/no-restricted-syntax`, a second name for the core rule so the `new Date()` error keeps its
-severity). Step S6 turns both into errors.
+severity).
+
+**Strict since S6 (D-581).** The baseline is exact: a count that went down must be recorded
+(`pnpm style:ratchet --write`) in the same change, or `style-ratchet.test.ts` fails. Both lint rules
+are **errors** in every file the baseline does not list — a new file, or one whose counts reached
+zero and so left the baseline — and warnings only in the files it still holds. `pnpm lint` runs
+stylelint after ESLint, so CI enforces both (`tests/unit/style-strict.test.ts`).
 
 **Parity** — `tests/unit/token-parity.test.ts` compares every colour, shadow, z-index, font and
 motion token in tokens.ts with its tokens.css twin, and pins the list of tokens that have no twin yet.

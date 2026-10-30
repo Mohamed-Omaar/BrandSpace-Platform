@@ -2,7 +2,12 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import importX from 'eslint-plugin-import-x';
-import { STYLE_SYNTAX_RULE, styleSyntaxPlugin } from './scripts/style/style-rules.mjs';
+import {
+  STYLE_SYNTAX_RATCHETED,
+  STYLE_SYNTAX_RULE,
+  ratchetedFiles,
+  styleSyntaxPlugin,
+} from './scripts/style/style-rules.mjs';
 
 /**
  * Module boundary matrix — docs/ARCHITECTURE.md §4.1.
@@ -388,16 +393,22 @@ export default tseslint.config(
     },
   },
 
-  // --- Hard-coded style values: REPORT ONLY (design-system programme) ------
-  // Warnings, never errors, until step S6: the counts are held by the style
-  // ratchet (tests/unit/style-ratchet.test.ts), which fails only if one goes
-  // up. A second name for the core rule, so the `new Date()` error above keeps
+  // --- Hard-coded style values: STRICT (design-system programme, S6) -------
+  // An error in every file, new files included, except the files the style
+  // ratchet still holds (scripts/style/baseline.json): there it is a warning
+  // and tests/unit/style-ratchet.test.ts stops the counts rising. A file the
+  // ratchet drops (its counts reached zero) has zero tolerance from then on.
+  // A second name for the core rule, so the `new Date()` error above keeps
   // its severity — see scripts/style/style-rules.mjs.
   {
     files: ['apps/*/src/**/*.{ts,tsx}', 'packages/ui/src/**/*.{ts,tsx}'],
     ignores: ['packages/ui/src/tokens.ts', '**/*.test.{ts,tsx}'],
     plugins: { style: styleSyntaxPlugin },
     rules: { 'style/no-restricted-syntax': STYLE_SYNTAX_RULE },
+  },
+  {
+    files: ratchetedFiles('ts'),
+    rules: { 'style/no-restricted-syntax': STYLE_SYNTAX_RATCHETED },
   },
 
   // --- Config, scripts and tests are allowed to be noisier ----------------

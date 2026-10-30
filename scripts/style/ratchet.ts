@@ -6,7 +6,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { measure, regressions, totals, type Counts } from './measure';
+import { measure, regressions, stale, totals, type Counts } from './measure';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const BASELINE = path.join(ROOT, 'scripts/style/baseline.json');
@@ -53,6 +53,11 @@ async function main(): Promise<void> {
     }
     console.log('Baseline CSS', totals(baseline.css));
     console.log('Baseline TS ', totals(baseline.ts));
+    const down = [...stale(current.css, baseline.css), ...stale(current.ts, baseline.ts)];
+    if (down.length > 0 && !write) {
+      console.error(`Counts went DOWN; record them with --write:\n  ${down.join('\n  ')}`);
+      process.exitCode = 1;
+    }
   }
 
   if (write || init) {

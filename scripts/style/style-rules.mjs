@@ -1,4 +1,6 @@
 // @ts-check
+import { readFileSync } from 'node:fs';
+import { URL } from 'node:url';
 import { builtinRules } from 'eslint/use-at-your-own-risk';
 
 /**
@@ -9,8 +11,8 @@ import { builtinRules } from 'eslint/use-at-your-own-risk';
  * severity per file. The core `no-restricted-syntax` already ERRORS on
  * `new Date()` everywhere; adding these selectors to it as warnings would
  * downgrade that error. Registering the same core rule under a plugin name lets
- * the style selectors report as warnings (report-only, until the S6 step of the
- * design-system programme) while the Date rule stays an error.
+ * the style selectors keep their own severity while the Date rule stays an
+ * error everywhere.
  *
  * Every message starts with `[category]`, which is how the ratchet groups them.
  */
@@ -54,5 +56,27 @@ export const STYLE_SYNTAX_SELECTORS = [
   },
 ];
 
-/** The editor-facing rule config, used by eslint.config.mjs. */
-export const STYLE_SYNTAX_RULE = ['warn', ...STYLE_SYNTAX_SELECTORS];
+/**
+ * STRICT (design-system programme, S6). The rule is an ERROR in every file,
+ * new files included, except the files the ratchet still holds — those listed
+ * in scripts/style/baseline.json, where it stays a warning and the ratchet
+ * stops their counts rising. When a file's counts reach zero,
+ * `pnpm style:ratchet --write` drops it from the baseline, and from then on it
+ * has zero tolerance.
+ */
+export const STYLE_SYNTAX_RULE = ['error', ...STYLE_SYNTAX_SELECTORS];
+export const STYLE_SYNTAX_RATCHETED = ['warn', ...STYLE_SYNTAX_SELECTORS];
+
+/**
+ * The files the ratchet still holds, by kind (`ts` or `css`), as repo-relative
+ * glob patterns. A route segment such as `[locale]` is escaped, or the glob
+ * would read it as a character class and miss the file.
+ * @param {'ts' | 'css'} kind
+ * @returns {string[]}
+ */
+export function ratchetedFiles(kind) {
+  const baseline = JSON.parse(readFileSync(new URL('./baseline.json', import.meta.url), 'utf8'));
+  return Object.keys(baseline[kind])
+    .sort()
+    .map((file) => file.replace(/[[\]()*?{}!]/g, '\\$&'));
+}
