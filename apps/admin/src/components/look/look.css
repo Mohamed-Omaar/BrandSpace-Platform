@@ -1,0 +1,150 @@
+/*
+ * THE LOOK & FEEL PAGE (LF) — an approved design-system extension
+ * (CLAUDE.md §4.2). Layout only: every value is a design token, and the
+ * controls are the design system's own classes (`.bs-field`, `.bsp-btn`).
+ */
+.lf-editor {
+  display: grid;
+  gap: var(--bs-space-lg);
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 72rem) {
+  .lf-editor {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    align-items: start;
+  }
+  .lf-side {
+    position: sticky;
+    inset-block-start: var(--bs-space-md);
+  }
+}
+.lf-controls,
+.lf-side,
+.lf-grid,
+.lf-activate,
+.lf-preview-wrap {
+  display: grid;
+  gap: var(--bs-space-md);
+  min-inline-size: 0;
+}
+.lf-field {
+  display: grid;
+  gap: var(--bs-space-xs);
+}
+.lf-field > label,
+.lf-activate > label,
+.lf-inline-form > label,
+.lf-pane > label {
+  font-size: var(--bsp-fs-12);
+  font-weight: 600;
+  color: var(--bs-text-secondary);
+}
+.lf-check {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-xs);
+  font-size: var(--bsp-fs-13);
+}
+.lf-colour,
+.lf-row,
+.lf-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--bs-space-sm);
+}
+.lf-colour-input {
+  inline-size: var(--bsp-px-44);
+  block-size: var(--bsp-px-32);
+  padding: 0;
+  border: 0;
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+.lf-colour-value {
+  font-family: var(--bs-font-mono);
+  font-size: var(--bsp-fs-12);
+}
+.lf-hint,
+.lf-muted {
+  margin: 0;
+  font-size: var(--bsp-fs-12);
+  color: var(--bs-text-muted);
+}
+.lf-subhead {
+  margin-block: var(--bs-space-sm) 0;
+  font-size: var(--bsp-fs-13);
+}
+.lf-saved {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bs-space-sm);
+}
+.lf-saved > li,
+.lf-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--bs-space-xs);
+}
+.lf-issues {
+  margin-block: var(--bs-space-xs) 0;
+  padding-inline-start: var(--bs-space-lg);
+}
+
+/* The preview box: the edited look's own ground, text and spacing. */
+.lf-preview {
+  display: grid;
+  gap: var(--bs-space-md);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bsp-rem-16)), 1fr));
+  padding: var(--bs-space-md);
+  border-radius: var(--bs-radius-card);
+  background: var(--bs-app-background);
+  color: var(--bs-text-primary);
+  line-height: var(--bs-line-body);
+}
+.lf-pane {
+  display: grid;
+  gap: var(--bs-space-xs);
+  align-content: start;
+  min-inline-size: 0;
+  padding: var(--bs-space-md);
+  border-radius: calc(var(--bs-radius-card) * var(--bs-radius-scale));
+  background: var(--bs-surface);
+  box-shadow: var(--bs-shadow-card);
+}
+.lf-pane-title {
+  margin: 0;
+  font-size: var(--bsp-fs-14);
+}
+.lf-pane-lead {
+  margin: 0;
+  font-size: var(--bsp-fs-20);
+  font-weight: 700;
+}
+.lf-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--bs-space-sm);
+}
+.lf-tile {
+  display: grid;
+  gap: var(--bs-space-3xs);
+  padding: var(--bs-space-sm);
+  border-radius: calc(var(--bs-radius-md) * var(--bs-radius-scale));
+  background: var(--bs-brand-purple-tint);
+}
+.lf-tile-label {
+  font-size: var(--bsp-fs-12);
+  color: var(--bs-text-secondary);
+}
+.lf-tile-value {
+  font-size: var(--bsp-fs-20);
+}
+.lf-signin {
+  background: var(--bs-surface);
+}

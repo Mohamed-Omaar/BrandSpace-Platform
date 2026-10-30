@@ -13,7 +13,7 @@ import {
   type Palette,
   type Role,
   type ThemeLook,
-} from '@brandspace/shared';
+} from '@brandspace/shared/theme';
 import { cssRootTokens } from './tokens';
 
 /**
