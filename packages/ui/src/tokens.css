@@ -699,7 +699,10 @@
   --bs-motion-speed: 1;
   --bs-motion-scale: calc(var(--bs-motion-level) * var(--bs-motion-speed));
   --bs-radius-scale: 1;
-  --bs-control-border-width: var(--bsp-px-1);
+  --bs-field-border-1: 1px;
+  --bs-field-border-1-5: 1.5px;
+  --bs-field-border-2: 2px;
+  --bs-control-border-width: var(--bs-field-border-1);
   --bs-line-body: 1.6;
   --bs-line-relaxed: 1.8;
   --bs-hero-ground: #f9f7ff;

@@ -153,10 +153,12 @@ const MOTION_SPEED = { calm: 1.35, normal: 1, quick: 0.7 } as const;
 const SIDEBAR = { compact: 0.88, default: 1, wide: 1.12 } as const;
 const FONT_SCALE = { small: 0.92, normal: 1, large: 1.1 } as const;
 const DENSITY = { comfortable: 1, compact: 0.86 } as const;
+// Real pixels, never the --bsp-px table: that table is rescaled x0.88 in the
+// dashboard, and Chromium draws a border under 1px as nothing at all.
 const FIELD_BORDER = {
-  '1': 'var(--bsp-px-1)',
-  '1.5': 'var(--bsp-px-1-5)',
-  '2': 'var(--bsp-px-2)',
+  '1': 'var(--bs-field-border-1)',
+  '1.5': 'var(--bs-field-border-1-5)',
+  '2': 'var(--bs-field-border-2)',
 } as const;
 
 /**
