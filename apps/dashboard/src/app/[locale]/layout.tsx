@@ -60,6 +60,14 @@ export default async function LocaleLayout({
     <html lang={htmlLangForLocale(locale)} dir={directionForLocale(locale)}>
       <head>
         {/*
+          LF — the Look & feel theme. Custom properties only, served by
+          `/theme.css` so this layout stays static; empty for the original look
+          and on any error.
+        */}
+        <link rel="stylesheet" href="/theme.css" />
+        {/* LF: the theme's favicon; without one it answers with the original icon. */}
+        <link rel="icon" href="/theme-assets/favicon.img" />
+        {/*
           OPTIONAL WEBFONTS, and optional on purpose.
 
           `next/font/google` downloads the faces at BUILD time and fails the

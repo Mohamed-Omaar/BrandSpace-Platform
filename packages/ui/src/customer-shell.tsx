@@ -499,8 +499,21 @@ function RailNav({
 }
 
 /** What the rail draws: everything in it comes from the page being shown. */
+/**
+ * LF: the Look & feel theme's logo, when the owner set one. `src` is the logo
+ * for the surface the reader sees; `darkSrc`, when present, is swapped in
+ * under `prefers-color-scheme: dark` (a reader following their device); `mark`
+ * stands in for the brand glyph. Absent, the rail draws the original wordmark.
+ */
+export interface ShellLogo {
+  readonly src?: string | undefined;
+  readonly darkSrc?: string | undefined;
+  readonly mark?: string | undefined;
+}
+
 export interface CustomerRailModel {
   readonly wordmark: string;
+  readonly logo?: ShellLogo | undefined;
   readonly sections: readonly CustomerNavSection[];
   readonly labels: AppShellLabels;
   readonly brandCard?: ReactNode;
@@ -644,7 +657,13 @@ function useSidebarCollapse(): SidebarCollapse {
   );
 }
 
-function RailLogo({ wordmark }: { readonly wordmark: string }) {
+function RailLogo({
+  wordmark,
+  logo,
+}: {
+  readonly wordmark: string;
+  readonly logo?: ShellLogo | undefined;
+}) {
   return (
     <span
       data-testid="brand"
@@ -657,9 +676,24 @@ function RailLogo({ wordmark }: { readonly wordmark: string }) {
       }}
     >
       <span className="bsp-sb-logo-mark">
-        <BrandGlyph size="var(--bsp-px-34)" />
+        {logo?.mark ? (
+          <img className="bs-theme-logo-mark" src={logo.mark} alt="" />
+        ) : (
+          <BrandGlyph size="var(--bsp-px-34)" />
+        )}
       </span>
-      <span className="bsp-sb-wordmark bsp-nl bs-brand-text bsp-ltr">{wordmark}</span>
+      <span className="bsp-sb-wordmark bsp-nl bs-brand-text bsp-ltr">
+        {logo?.src ? (
+          <picture>
+            {logo.darkSrc ? (
+              <source media="(prefers-color-scheme: dark)" srcSet={logo.darkSrc} />
+            ) : null}
+            <img className="bs-theme-logo" src={logo.src} alt={wordmark} />
+          </picture>
+        ) : (
+          wordmark
+        )}
+      </span>
     </span>
   );
 }
@@ -681,7 +715,7 @@ function RailAside({
     >
       <div className="bsp-sb-top">
         <div className="bsp-sb-logo">
-          <RailLogo wordmark={rail.wordmark} />
+          <RailLogo wordmark={rail.wordmark} logo={rail.logo} />
           <button
             type="button"
             className="bsp-ibtn bsp-sbt"
@@ -836,6 +870,7 @@ export function CustomerFrameHost({ children }: { readonly children: ReactNode }
 
 export function CustomerShell({
   wordmark,
+  logo,
   sections,
   labels,
   brandCard,
@@ -851,6 +886,8 @@ export function CustomerShell({
   children,
 }: {
   readonly wordmark: string;
+  /** LF: the theme's logo, when set. */
+  readonly logo?: ShellLogo | undefined;
   readonly sections: readonly CustomerNavSection[];
   readonly labels: AppShellLabels;
   /** The rail's brand / business card, under the logo. */
@@ -890,8 +927,8 @@ export function CustomerShell({
     () => false,
   );
   const railModel = useMemo<CustomerRailModel>(
-    () => ({ wordmark, sections, labels, brandCard, profile, banner, contentLang }),
-    [wordmark, sections, labels, brandCard, profile, banner, contentLang],
+    () => ({ wordmark, logo, sections, labels, brandCard, profile, banner, contentLang }),
+    [wordmark, logo, sections, labels, brandCard, profile, banner, contentLang],
   );
   // This shell's own token: a page that is leaving cannot clear the rail the
   // arriving page has just published.
@@ -1033,7 +1070,7 @@ export function CustomerShell({
       >
         <div className="bsp-sb-top">
           <div className="bsp-sb-logo">
-            <RailLogo wordmark={wordmark} />
+            <RailLogo wordmark={wordmark} logo={logo} />
             <button
               type="button"
               className="bsp-ibtn bsp-sbt"

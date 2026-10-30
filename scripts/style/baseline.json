@@ -24,7 +24,7 @@
       "size": 4
     },
     "packages/ui/src/prototype.css": {
-      "border-width": 196,
+      "border-width": 186,
       "font-family": 3,
       "letter-spacing": 37,
       "lit-token": 457,
@@ -35,7 +35,7 @@
     },
     "packages/ui/src/tokens.css": {
       "blur": 3,
-      "border-width": 12,
+      "border-width": 11,
       "font-size": 2,
       "lit-token": 7,
       "radius": 2,

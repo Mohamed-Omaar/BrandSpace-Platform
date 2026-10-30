@@ -157,6 +157,8 @@ describe('D-308 · two navigations', () => {
       '/health',
       '/team',
       '/changes',
+      // LF: Simple → Look & feel.
+      '/look',
     ]);
     expect(
       SIMPLE_SECTIONS.flatMap((s) => s.items)
@@ -182,6 +184,7 @@ describe('D-308 · two navigations', () => {
       'System',
       'Team',
       'Change history',
+      'Look & feel',
     ]);
     expect(SIMPLE_SECTIONS.map((section) => section.title?.en ?? null)).toEqual([
       null,

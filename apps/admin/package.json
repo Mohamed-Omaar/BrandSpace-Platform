@@ -20,6 +20,7 @@
     "@brandspace/observability": "workspace:*",
     "@brandspace/secrets": "workspace:*",
     "@brandspace/shared": "workspace:*",
+    "@brandspace/storage": "workspace:*",
     "@brandspace/ui": "workspace:*",
     "@fontsource/cairo": "5.3.0",
     "@fontsource/inter": "5.3.0",

@@ -643,6 +643,26 @@ One component per family, used by both apps; a family's PR deletes the CSS it re
   (`tests/unit/tooltip.test.ts`), so neither look changes. The status check's wrapped explanation
   (`.bsp-st-check-tip`, D-570) is a screen port and stays with its screen.
 
+### 10.1b The Look & feel theme (LF, D-582)
+
+The theme is configuration (`theme`), written as custom properties by `themeStylesheet()`
+(`packages/ui/src/theme-css.ts`) and served by each app's `/theme.css`. It never adds a rule for a
+component's look: the shared classes keep drawing, and a theme moves their tokens.
+
+- **Colours.** The owner's primary drives `--bs-brand-purple` and its shades. Every colour token in
+  the purple family (by OKLCH hue, within 32° of the original purple) follows it, keeping its
+  relation; the other anchors (secondary, success, warning, danger, info) work the same way.
+- **Dark.** Every colour token has a generated dark value (`darkCounterpart()`): near-white
+  surfaces stay in order and darken, ink inverts, pale tints become deep tinted surfaces,
+  translucent shadows stay dark. The dark palette's roles then apply the owner's adjustments.
+- **Type size.** The three size tables are rebuilt at the scale by the D-484 rule: the customer
+  root ×0.88, the Control Center root ×1, the entry screens ×0.80.
+- **Hooks**, each at its original value: `--bs-control-border-width`, `--bs-line-body` /
+  `--bs-line-relaxed`, `--bs-hero-ground` / `--bs-hero-blob-strength`, and `--bs-sidebar-default`
+  (read by the sidebar hook only for a reader who never chose).
+- **A preview box** (`scope`) re-declares every root alias, because an alias resolves where it is
+  declared.
+
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 
 - **`tokens.ts` is the source.** tokens.css's `:root` block is generated from `cssRootTokens`

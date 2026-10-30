@@ -4191,6 +4191,10 @@ export const messages = {
     'account.credits': 'رصيد الذكاء الاصطناعي',
     'account.creditsToast': 'رصيد الذكاء الاصطناعي المتبقي: {credits}.',
     'account.language': 'اللغة',
+    'account.appearance': 'المظهر',
+    'appearance.light': 'فاتح',
+    'appearance.dark': 'داكن',
+    'appearance.system': 'حسب الجهاز',
     'ws.menuHeading': 'مساحات العمل',
     'ws.menuNote':
       'لكل مساحة عمل فريقها وبياناتها. يعتمد عدد مساحات العمل على خطة المالك، والمالك وحده يُنشئ مساحة عمل جديدة.',
@@ -8585,6 +8589,10 @@ export const messages = {
     'account.credits': 'AI credits',
     'account.creditsToast': 'AI credits left: {credits}.',
     'account.language': 'Language',
+    'account.appearance': 'Appearance',
+    'appearance.light': 'Light',
+    'appearance.dark': 'Dark',
+    'appearance.system': 'Device',
     'ws.menuHeading': 'Workspaces',
     'ws.menuNote':
       'Each workspace has its own team and data. How many workspaces you get depends on the owner’s plan, and only the owner can create a new workspace.',

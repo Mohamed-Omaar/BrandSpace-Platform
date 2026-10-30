@@ -744,7 +744,7 @@ select.bsp-chip {
   ).bs-control {
   box-sizing: border-box;
   min-block-size: auto;
-  border: 1px solid var(--bs-control-border-customer);
+  border: var(--bs-control-border-width) solid var(--bs-control-border-customer);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-9) var(--bsp-px-12);
   font-size: var(--bsp-fs-14);
@@ -1078,7 +1078,7 @@ button.bsp-xcard:hover {
   gap: var(--bsp-px-6);
 }
 .bs-control.bsp-sg-bradd-in {
-  border: 1px solid var(--bs-control-border-customer);
+  border: var(--bs-control-border-width) solid var(--bs-control-border-customer);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-9) var(--bsp-px-12);
   font-size: var(--bsp-fs-14);
@@ -2796,7 +2796,7 @@ span.bsp-cal-hol {
 .bsp-chip.bs-control.bsp-cal-select:hover:not(:disabled) {
   /* The colour only: the shorthand cleared the global chevron (review of #67). */
   background-color: var(--bs-surface);
-  border: 1px solid var(--bs-control-border-customer);
+  border: var(--bs-control-border-width) solid var(--bs-control-border-customer);
 }
 .bsp-chip.bs-control.bsp-cal-select:hover:not(:disabled) {
   border-color: var(--bs-control-border-customer-hover);
@@ -3736,7 +3736,7 @@ span.bsp-cal-hol {
   color: var(--bs-text-muted);
 }
 .bsp-st-when-input {
-  border: 1px solid var(--bs-control-border-customer);
+  border: var(--bs-control-border-width) solid var(--bs-control-border-customer);
   border-radius: calc(var(--bsp-px-10) * var(--bs-radius-scale));
   padding: var(--bsp-px-7) var(--bsp-px-8);
   font-size: var(--bsp-fs-13);
@@ -6735,7 +6735,7 @@ span.bsp-cal-hol {
   box-sizing: border-box;
   inline-size: 100%;
   min-inline-size: 0;
-  border: 1px solid var(--bs-control-border-customer);
+  border: var(--bs-control-border-width) solid var(--bs-control-border-customer);
   border-radius: calc(var(--bsp-px-10) * var(--bs-radius-scale));
   background: var(--bs-surface);
   padding: var(--bsp-px-9) var(--bsp-px-12);
@@ -7347,7 +7347,7 @@ button.bsp-chip.bsp-bb-q {
   font-weight: 700;
 }
 .bsp-bb-chat .bb-chat-panel :is(select, input, textarea) {
-  border: 1px solid var(--bs-control-border-customer);
+  border: var(--bs-control-border-width) solid var(--bs-control-border-customer);
   border-radius: calc(var(--bsp-px-10) * var(--bs-radius-scale));
   background: var(--bs-surface);
   color: var(--bs-text-primary);
@@ -8700,7 +8700,7 @@ img.bsp-pf-art {
 }
 /* `border: 1px solid #e4e4e8; border-radius: 12px; padding: 10px 12px; font-size: 14px` */
 .bsp-cp-in.bs-control {
-  border: 1px solid var(--bs-control-border-customer);
+  border: var(--bs-control-border-width) solid var(--bs-control-border-customer);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-10) var(--bsp-px-12);
   font-size: var(--bsp-fs-14);
@@ -8798,7 +8798,7 @@ img.bsp-pf-art {
 }
 /* The prototype's fields: `border: 1px solid #e4e4e8; border-radius: 12px; padding: 9px 12px; font-size: 14px`. */
 .bsp-au-input.bs-control {
-  border: 1px solid var(--bs-control-border-customer);
+  border: var(--bs-control-border-width) solid var(--bs-control-border-customer);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-9) var(--bsp-px-12);
   font-size: var(--bsp-fs-14);
@@ -9068,7 +9068,7 @@ img.bsp-pf-art {
   gap: var(--bsp-px-6);
 }
 .bsp-tm-input.bs-control {
-  border: 1px solid var(--bs-control-border-customer);
+  border: var(--bs-control-border-width) solid var(--bs-control-border-customer);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-9) var(--bsp-px-12);
   font-size: var(--bsp-fs-14);
@@ -11129,7 +11129,7 @@ img.bsp-pf-art {
     select,
     textarea
   ).bs-control {
-  border: 1px solid var(--bs-control-border-customer) !important;
+  border: var(--bs-control-border-width) solid var(--bs-control-border-customer) !important;
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale)) !important;
   padding: var(--bsp-px-9) var(--bsp-px-12) !important;
   font-size: var(--bsp-fs-14) !important;

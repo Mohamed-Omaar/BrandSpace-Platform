@@ -52,6 +52,11 @@ export default async function LocaleLayout({
     <html lang={htmlLangForLocale(locale)} dir={directionForLocale(locale)}>
       <head>
         {/*
+          LF — the Look & feel theme. Empty while "Keep the Control Center on
+          the original look" is on, which is the default.
+        */}
+        <link rel="stylesheet" href="/theme.css" />
+        {/*
           OPTIONAL WEBFONTS, and optional on purpose.
 
           `next/font/google` downloads the faces at BUILD time and fails the

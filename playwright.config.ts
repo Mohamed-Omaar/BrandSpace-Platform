@@ -397,7 +397,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore: [
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email|phase4-security-settings|owner-simple-mode)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email|phase4-security-settings|owner-simple-mode|look-and-feel)\.(spec|screenshots\.spec)\.ts/,
         // EVERY capture run, not a list of them: a screenshots spec writes
         // files for review and belongs only to `visual-review` (F-33). The
         // Phase 6 set ran here because its name was not on the list above.
@@ -414,7 +414,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore: [
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email|phase4-security-settings|owner-simple-mode)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email|phase4-security-settings|owner-simple-mode|look-and-feel)\.(spec|screenshots\.spec)\.ts/,
         // EVERY capture run, not a list of them: a screenshots spec writes
         // files for review and belongs only to `visual-review` (F-33). The
         // Phase 6 set ran here because its name was not on the list above.
@@ -446,7 +446,8 @@ export default defineConfig({
        * restores what it changes before it finishes.
        */
       name: 'owner-simple-mode',
-      testMatch: /owner-simple-mode\.spec\.ts/,
+      // LF: Look & feel shares the signed-in Control Center, so it runs here too.
+      testMatch: /(owner-simple-mode|look-and-feel)\.spec\.ts/,
       fullyParallel: false,
       dependencies: ['admin-console'],
       use: {

@@ -100,6 +100,11 @@ export function PrototypeHeroCanvas({ className }: { readonly className?: string
     let height = 0;
     let raf = 0;
     let alive = true;
+    // LF: the ground and the blobs' strength are tokens, so the Look & feel
+    // dark palette darkens them; unset, the canvas's own values.
+    const css = getComputedStyle(canvas);
+    const ground = css.getPropertyValue('--bs-hero-ground').trim() || GROUND;
+    const strength = Number(css.getPropertyValue('--bs-hero-blob-strength').trim() || 1);
     const size = () => {
       const rect = canvas.getBoundingClientRect();
       width = rect.width || 1100;
@@ -114,7 +119,7 @@ export function PrototypeHeroCanvas({ className }: { readonly className?: string
       const now = canvas.getBoundingClientRect();
       if (Math.abs(now.width - width) > 1 || Math.abs(now.height - height) > 1) size();
       ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = GROUND;
+      ctx.fillStyle = ground;
       ctx.fillRect(0, 0, width, height);
       for (const b of BLOBS) {
         const cx = (b.x + Math.sin((t / b.px) * 6.283 + b.ph) * b.ax) * width;
@@ -127,9 +132,10 @@ export function PrototypeHeroCanvas({ className }: { readonly className?: string
         ctx.scale(1, ry / rx);
         const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
         const c = b.c.join(',');
-        gradient.addColorStop(0, `rgba(${c},${b.a})`);
-        gradient.addColorStop(0.35, `rgba(${c},${b.a * 0.72})`);
-        gradient.addColorStop(0.7, `rgba(${c},${b.a * 0.25})`);
+        const a = b.a * strength;
+        gradient.addColorStop(0, `rgba(${c},${a})`);
+        gradient.addColorStop(0.35, `rgba(${c},${a * 0.72})`);
+        gradient.addColorStop(0.7, `rgba(${c},${a * 0.25})`);
         gradient.addColorStop(1, `rgba(${c},0)`);
         ctx.fillStyle = gradient;
         ctx.beginPath();

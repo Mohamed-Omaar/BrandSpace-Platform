@@ -1,4 +1,6 @@
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
+import { COLOUR_SCHEME_COOKIE } from '../server/colour-scheme';
+import { activeLook, logoHref } from '../server/theme';
 import { systemClock } from '@brandspace/shared';
 import { Suspense, type ReactNode } from 'react';
 import {
@@ -469,6 +471,23 @@ export async function WorkspaceShell({
    * languages — from the name when it is written in Latin letters, else from
    * the email — so the avatar reads the same in `ar` and `en`.
    */
+  // LF: the person's light / dark / device choice, cycled by the account menu.
+  const schemeCookie = (await cookies()).get(COLOUR_SCHEME_COOKIE)?.value;
+  const scheme: 'light' | 'dark' | 'system' =
+    schemeCookie === 'dark' || schemeCookie === 'system' ? schemeCookie : 'light';
+  const nextScheme = scheme === 'light' ? 'dark' : scheme === 'dark' ? 'system' : 'light';
+  // LF: the theme's logo, when the owner set one, for the surface this person sees.
+  const themeLogo = (await activeLook()).logo;
+  const lightLogo = themeLogo.light ? logoHref('light', themeLogo.light) : undefined;
+  const darkLogo = themeLogo.dark ? logoHref('dark', themeLogo.dark) : undefined;
+  const logo =
+    lightLogo || darkLogo || themeLogo.mark
+      ? {
+          src: scheme === 'dark' ? (darkLogo ?? lightLogo) : (lightLogo ?? darkLogo),
+          darkSrc: scheme === 'system' && lightLogo ? darkLogo : undefined,
+          mark: themeLogo.mark ? logoHref('mark', themeLogo.mark) : undefined,
+        }
+      : undefined;
   const me = await getCustomer().catch(() => null);
   const personName = me?.name?.trim() ?? '';
   const personEmail = me?.email ?? customerName;
@@ -1030,6 +1049,13 @@ export async function WorkspaceShell({
       >
         {t('account.language')}
       </PrototypeMenuLink>
+      <PrototypeMenuLink
+        href={`/${locale}/appearance?to=${nextScheme}&back=${encodeURIComponent(localeHref(locale))}`}
+        testId="account-appearance"
+        trailing={<b>{t(`appearance.${scheme}`)}</b>}
+      >
+        {t('account.appearance')}
+      </PrototypeMenuLink>
       <form action={signOutAction} style={{ margin: 0 }}>
         <input type="hidden" name="locale" value={locale} />
         <button
@@ -1051,6 +1077,7 @@ export async function WorkspaceShell({
         // The logotype, drawn in Latin in both languages as the prototype and the
         // brand mark's own title do — the brand's name, not copy to translate.
         wordmark="Brandspace"
+        logo={logo}
         sections={sections}
         labels={{
           primaryNavigation: t('nav.primary'),

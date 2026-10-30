@@ -1825,6 +1825,19 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-motion-speed', value: '1' },
   { name: '--bs-motion-scale', value: 'calc(var(--bs-motion-level) * var(--bs-motion-speed))' },
   { name: '--bs-radius-scale', value: '1' },
+  // LF: the hooks the Look & feel theme sets, at the original look's values.
+  // The border is a real 1px, as the stylesheets wrote it: the --bsp-px table
+  // is rescaled x0.88 in the dashboard, and Chromium draws a 0.88px border as 0.
+  { name: '--bs-field-border-1', value: '1px' },
+  { name: '--bs-field-border-1-5', value: '1.5px' },
+  { name: '--bs-field-border-2', value: '2px' },
+  { name: '--bs-control-border-width', value: 'var(--bs-field-border-1)' },
+  { name: '--bs-line-body', value: '1.6' },
+  { name: '--bs-line-relaxed', value: '1.8' },
+  // LF: Home's hero canvas reads its ground and its blobs' strength from here,
+  // at the canvas's own values, so the dark palette can darken it.
+  { name: '--bs-hero-ground', value: '#F9F7FF' },
+  { name: '--bs-hero-blob-strength', value: '1' },
   // D-2: the customer app's field border, one token (D-55 restores it to 3:1 under prefers-contrast).
   { name: '--bs-control-border-customer', value: '#e4e4e8' },
   { name: '--bs-control-border-customer-hover', value: '#c9c9d1' },

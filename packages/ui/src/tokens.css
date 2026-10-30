@@ -699,6 +699,14 @@
   --bs-motion-speed: 1;
   --bs-motion-scale: calc(var(--bs-motion-level) * var(--bs-motion-speed));
   --bs-radius-scale: 1;
+  --bs-field-border-1: 1px;
+  --bs-field-border-1-5: 1.5px;
+  --bs-field-border-2: 2px;
+  --bs-control-border-width: var(--bs-field-border-1);
+  --bs-line-body: 1.6;
+  --bs-line-relaxed: 1.8;
+  --bs-hero-ground: #f9f7ff;
+  --bs-hero-blob-strength: 1;
   --bs-control-border-customer: #e4e4e8;
   --bs-control-border-customer-hover: #c9c9d1;
   --bsp-sidebar-expanded: var(--bsp-px-250);
@@ -870,7 +878,8 @@ body {
    * step below the browser default.
    */
   font-size: var(--bsp-fs-15);
-  line-height: 1.6;
+  /* 1.6, the original look; the Look & feel theme may relax it (LF). */
+  line-height: var(--bs-line-body);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -1381,7 +1390,7 @@ html:has(.bs-topbar:not(.bsp-header)) {
  */
 .bs-control {
   background-color: var(--bs-control-surface);
-  border: 1px solid var(--bs-control-border);
+  border: var(--bs-control-border-width) solid var(--bs-control-border);
   transition:
     background-color var(--bs-duration-fast) var(--bs-ease-out),
     box-shadow var(--bs-duration-fast) var(--bs-ease-out);
@@ -2301,6 +2310,25 @@ html[dir='rtl'] input[type='week'] {
 }
 .bs-backdrop[data-backdrop='dialog'] {
   z-index: var(--bs-z-dialog);
+}
+
+/*
+ * LF — THE LOOK & FEEL LOGO, when the owner uploaded one: it takes the
+ * wordmark's place at the wordmark's height, and the small mark takes the
+ * brand glyph's 34px square. Without one, nothing here draws.
+ */
+.bs-theme-logo {
+  display: block;
+  block-size: var(--bsp-px-28);
+  inline-size: auto;
+  max-inline-size: 100%;
+  object-fit: contain;
+}
+.bs-theme-logo-mark {
+  display: block;
+  inline-size: var(--bsp-px-34);
+  block-size: var(--bsp-px-34);
+  object-fit: contain;
 }
 
 /*

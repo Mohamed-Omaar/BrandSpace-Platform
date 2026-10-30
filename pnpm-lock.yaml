@@ -89,6 +89,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@brandspace/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@brandspace/ui':
         specifier: workspace:*
         version: link:../../packages/ui

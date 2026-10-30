@@ -134,7 +134,16 @@ export function useCollapsePreference(): readonly [boolean, (next: boolean) => v
     setHydrated(true);
     if (chosen.current) return;
     try {
-      setCollapsed(window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === '1');
+      const stored = window.localStorage.getItem(COLLAPSE_STORAGE_KEY);
+      // LF: a reader who has never chosen gets the Look & feel default, which
+      // the theme stylesheet sets as `--bs-sidebar-default`; unset, expanded.
+      setCollapsed(
+        stored === null
+          ? getComputedStyle(document.documentElement)
+              .getPropertyValue('--bs-sidebar-default')
+              .trim() === 'collapsed'
+          : stored === '1',
+      );
     } catch {
       // A browser with storage disabled is not an error state: the sidebar
       // simply stays expanded for the session.
