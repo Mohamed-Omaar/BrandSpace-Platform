@@ -103,14 +103,19 @@ tradeoffs are stated so alternatives can be chosen deliberately.
 
 ### 3.1 Frontend
 
-**Recommendation: Next.js (App Router) + React + TypeScript + Tailwind CSS + Radix UI primitives.**
+**Recommendation: Next.js (App Router) + React + TypeScript, styled by the design system's own CSS
+(`packages/ui`: `tokens.css` and the shared component classes) and its own accessible primitives.**
+
+_As built:_ there is no Tailwind, no Radix, no CSS-in-JS and no CSS modules. The first draft
+recommended Tailwind + Radix; the design system replaced them (see `docs/DESIGN-SYSTEM.md`, D-581).
 
 - _Why Next.js:_ one framework covers the three very different rendering needs — static/ISR marketing pages
   for SEO, authenticated dynamic dashboard, and internal admin. Built-in i18n routing, image optimization,
   server components reduce client JS, and it deploys well on multiple hosts.
-- _Why Tailwind + Radix:_ Tailwind has native RTL support via logical properties and `rtl:` variants, which
-  matters enormously for Arabic. Radix gives accessible, unstyled primitives so WCAG 2.2 AA is achievable
-  without fighting a component library's opinions.
+- _Why the design system's own CSS:_ the approved prototype is a CSS specification that is ported
+  value for value (`docs/UI-FIDELITY-CONTRACT.md`), and logical properties (`margin-inline-start`,
+  `inset-inline-end`) give Arabic its RTL layout without a framework. The primitives in `packages/ui`
+  (dialog, menu, tabs, tooltip) carry their own focus, keyboard and ARIA behaviour for WCAG 2.2 AA.
 - _Design system:_ `packages/ui` owns tokens (colours incl. `#7935FE` / `#FFDD15`, spacing, typography with an
   Arabic-capable font pairing), primitives, and composed patterns. Direction-agnostic by construction.
 - _State/data:_ TanStack Query for server state; minimal client state. Forms via React Hook Form + Zod resolvers.

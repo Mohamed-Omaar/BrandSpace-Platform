@@ -7,7 +7,8 @@
  * the whole design-system programme is done. Instead the counts measured here
  * are committed as a baseline (`baseline.json`), and
  * `tests/unit/style-ratchet.test.ts` fails if any count goes UP. Each later PR
- * lowers them; S6 turns the ratchet strict.
+ * lowers them. Since S6 the baseline is exact (`stale`), and the lint rules are
+ * errors in every file the baseline no longer lists.
  *
  * WHAT COUNTS AS A HARD-CODED VALUE.
  *
@@ -221,6 +222,23 @@ export function totals(counts: Counts): Record<string, number> {
 }
 
 /** Every (file, category) whose count is above the baseline. */
+/**
+ * S6: the baseline is EXACT. Every (file, category) the baseline records above
+ * the current count — a count that went down, or a file that reached zero —
+ * is stale until `pnpm style:ratchet --write` records it, so an improvement is
+ * locked in by the PR that makes it.
+ */
+export function stale(current: Counts, baseline: Counts): string[] {
+  const out: string[] = [];
+  for (const [file, perFile] of Object.entries(baseline)) {
+    for (const [category, allowed] of Object.entries(perFile)) {
+      const n = current[file]?.[category] ?? 0;
+      if (n < allowed) out.push(`${file} ${category}: ${allowed} -> ${n}`);
+    }
+  }
+  return out.sort();
+}
+
 export function regressions(current: Counts, baseline: Counts): string[] {
   const out: string[] = [];
   for (const [file, perFile] of Object.entries(current)) {
