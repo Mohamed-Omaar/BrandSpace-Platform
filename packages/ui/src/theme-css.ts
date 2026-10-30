@@ -128,6 +128,25 @@ function darkColours(look: ThemeLook): Map<string, string> {
   return out;
 }
 
+/**
+ * The hand-written root aliases outside `cssRootTokens` that colour a shared
+ * component (tokens.css): the console badge set. A preview box re-declares
+ * them, as above.
+ */
+const ROOT_ALIASES: ReadonlyArray<[string, string]> = [
+  ['--bs-badge-neutral-fg', 'var(--bs-text-secondary)'],
+  ['--bs-badge-success-bg', 'var(--bs-success-tint)'],
+  ['--bs-badge-success-fg', 'var(--bs-success)'],
+  ['--bs-badge-warning-bg', 'var(--bs-warning-tint)'],
+  ['--bs-badge-warning-fg', 'var(--bs-warning)'],
+  ['--bs-badge-danger-bg', 'var(--bs-danger-tint)'],
+  ['--bs-badge-danger-fg', 'var(--bs-danger)'],
+  ['--bs-badge-info-bg', 'var(--bs-info-tint)'],
+  ['--bs-badge-info-fg', 'var(--bs-info)'],
+  ['--bs-badge-accent-bg', 'var(--bs-brand-yellow-tint)'],
+  ['--bs-badge-accent-fg', 'var(--bs-brand-yellow-text)'],
+];
+
 const RADIUS = { sharp: 0.4, medium: 1, round: 1.5 } as const;
 const MOTION_LEVEL = { full: 1, reduced: 0.5, off: 0 } as const;
 const MOTION_SPEED = { calm: 1.35, normal: 1, quick: 0.7 } as const;
@@ -369,6 +388,15 @@ export function themeStylesheet(input: unknown, options: ThemeStylesheetOptions 
   const out: string[] = [];
   // The original look writes nothing on top of the stylesheets but the dark
   // palette a user may switch to.
+  // A PREVIEW BOX re-declares every root alias (`--x: var(--y)`). An alias is
+  // resolved where it is declared, so one declared on `:root` would carry the
+  // page's value into the box instead of the box's own.
+  if (scope !== ':root') {
+    const aliases = ENTRIES.filter((e) => e.value.includes('var(')).map(
+      (e) => [e.name, e.value.trim()] as [string, string],
+    );
+    out.push(`${root} {\n${declarations([...aliases, ...ROOT_ALIASES])}\n}`);
+  }
   if (!isOriginalLook(look)) {
     const light = themeVariables(look);
     if (light.length > 0) out.push(`${root} {\n${declarations(light)}\n}`);
