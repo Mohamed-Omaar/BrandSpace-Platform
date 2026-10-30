@@ -110,7 +110,7 @@ describe('MO6 — modals', () => {
     const overlays = read('packages/ui/src/overlays.tsx');
     expect(overlays).toMatch(/<Backdrop\s+layer="dialog"[^>]*\bfade\b/);
     expect(read('packages/ui/src/backdrop.tsx')).toContain("fade ? 'bs-veil' : ''");
-    expect(overlays).toContain('className="bs-dialog-in"');
+    expect(overlays).toContain('className="bs-dialog bs-dialog-in"');
   });
 });
 

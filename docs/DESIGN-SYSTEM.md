@@ -619,6 +619,12 @@ One component per family, used by both apps; a family's PR deletes the CSS it re
   hand-built table carries `TABLE_CLASS`, `TH_CLASS` and `TD_CLASS`. The declarations and tokens are
   the ones the helpers painted (`tests/unit/table.test.ts`), so neither look changes. The
   prototype's per-screen row and table classes are ports of each screen and stay with their screens.
+- **Dialog** (`Dialog`, `ConfirmDialog` in `packages/ui/src/overlays.tsx`; `.bs-dialog` in
+  `tokens.css`). One class-based dialog, two looks (D-580): inside the customer frame, the
+  prototype's modal (`.bsp-cp-dialog`, the 20px `.sech` title); the console look is what the inline
+  style painted (`tests/unit/dialog.test.ts`). The campaign and rule dialogs are URL-driven ports
+  of their own screens and keep their classes. The drawers (`SideSheet`, the post drawer, the
+  Copilot drawer) already share one look and are unchanged.
 
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 

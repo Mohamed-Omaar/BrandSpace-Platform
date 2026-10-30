@@ -636,28 +636,10 @@ export function Dialog({
         data-testid={testId ?? 'dialog'}
         tabIndex={-1}
         // MO6: the dialog fades, grows from .98 and rises 8 px.
-        className="bs-dialog-in"
-        style={{
-          inlineSize: '100%',
-          maxInlineSize: 'var(--bsp-rem-30)',
-          maxBlockSize: '90vh',
-          overflowY: 'auto',
-          background: colorTokens.surface,
-          borderRadius: radiusTokens['2xl'],
-          boxShadow: shadowTokens.overlay,
-          padding: spacingTokens.xl,
-        }}
+        className="bs-dialog bs-dialog-in"
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: spacingTokens.md,
-            marginBlockEnd: spacingTokens.sm,
-          }}
-        >
-          <h2 id={titleId} style={{ ...typographyTokens.h2, color: colorTokens.textPrimary }}>
+        <div className="bs-dialog-head">
+          <h2 id={titleId} className="bs-dialog-title">
             {title}
           </h2>
           <button
@@ -665,39 +647,18 @@ export function Dialog({
             aria-label={closeLabel}
             data-testid="dialog-close"
             onClick={onClose}
-            className={buttonClass('ghost', 'sm')}
-            style={{ color: colorTokens.textSecondary }}
+            className={`${buttonClass('ghost', 'sm')} bs-dialog-close`}
           >
             <CloseIcon size={18} />
           </button>
         </div>
         {description ? (
-          <p
-            id={descriptionId}
-            style={{
-              margin: 0,
-              marginBlockEnd: spacingTokens.md,
-              ...typographyTokens.bodySm,
-              color: colorTokens.textSecondary,
-            }}
-          >
+          <p id={descriptionId} className="bs-dialog-desc">
             {description}
           </p>
         ) : null}
         {children}
-        {footer ? (
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'flex-end',
-              gap: spacingTokens.sm,
-              marginBlockStart: spacingTokens.lg,
-            }}
-          >
-            {footer}
-          </div>
-        ) : null}
+        {footer ? <div className="bs-dialog-foot">{footer}</div> : null}
       </div>
     </Backdrop>
   );
