@@ -13,7 +13,7 @@ import { LOGO_SLOTS, activeLook, type LogoSlot } from '../../../server/theme';
 const TYPES = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' } as const;
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ file: string }> },
 ): Promise<Response> {
   const { file } = await params;
@@ -21,7 +21,9 @@ export async function GET(
   if (!LOGO_SLOTS.includes(slot)) return new Response(null, { status: 404 });
   const key = (await activeLook()).logo[slot];
   // No favicon set: the original icon.
-  if (!key && slot === 'favicon') return Response.redirect(new URL('/icon.svg', request.url), 307);
+  if (!key && slot === 'favicon') {
+    return new Response(null, { status: 307, headers: { location: '/icon.svg' } });
+  }
   if (!key) return new Response(null, { status: 404 });
   const bytes = await objectStore()
     .get(key)

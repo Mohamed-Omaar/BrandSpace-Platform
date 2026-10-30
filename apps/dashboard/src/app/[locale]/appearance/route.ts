@@ -21,7 +21,9 @@ export async function GET(
   const back = url.searchParams.get('back') ?? '';
   const safeBack =
     back.startsWith(`/${locale}/`) && !back.startsWith('//') && !back.includes('\\') ? back : home;
-  const response = NextResponse.redirect(new URL(safeBack, url.origin), 303);
+  // A RELATIVE address: behind a proxy the request's own host can differ from
+  // the one the browser used, and a redirect to another host loses the cookie.
+  const response = new NextResponse(null, { status: 303, headers: { location: safeBack } });
   const choice = colourSchemeSchema.safeParse(url.searchParams.get('to'));
   if (choice.success) {
     response.cookies.set(COLOUR_SCHEME_COOKIE, choice.data, {
