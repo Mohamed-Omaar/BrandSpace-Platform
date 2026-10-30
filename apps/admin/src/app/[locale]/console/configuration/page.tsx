@@ -8,10 +8,11 @@ import {
   spacingTokens,
   typographyTokens,
   buttonClass,
+  StateMessage,
 } from '@brandspace/ui';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import Link from 'next/link';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import { Card, Field, inputStyle } from '../../../../components/console-ui';
 import {
   currentEnvironment,
@@ -242,7 +243,7 @@ export default async function ConfigurationPage({
       <Card testId="config-versions">
         <SectionHeader title={isArabic ? 'الإصدارات' : 'Versions'} />
         {versions.length === 0 ? (
-          <EmptyState message={isArabic ? 'لا توجد إصدارات بعد.' : 'No versions yet.'} />
+          <StateMessage title={isArabic ? 'لا توجد إصدارات بعد.' : 'No versions yet.'} />
         ) : (
           <DataTable
             headers={[

@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { colorTokens, spacingTokens, buttonClass } from '@brandspace/ui';
+import { colorTokens, spacingTokens, buttonClass, StateMessage } from '@brandspace/ui';
 import { PageIntro } from '../../../../components/admin-shell';
 import {
   getSupportModeService,
@@ -12,7 +12,6 @@ import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import {
   Banner,
   Card,
-  EmptyState,
   Field,
   TableScroll,
   inputStyle,
@@ -164,8 +163,8 @@ export default async function SupportModePage({
             {t('support.none')}
           </p>
           {workspaces.items.length === 0 ? (
-            <EmptyState
-              message={locale === 'ar' ? 'لا توجد مساحات عمل.' : 'There are no workspaces.'}
+            <StateMessage
+              title={locale === 'ar' ? 'لا توجد مساحات عمل.' : 'There are no workspaces.'}
             />
           ) : (
             <form action={startSupportAction}>

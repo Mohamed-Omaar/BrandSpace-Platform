@@ -11,6 +11,7 @@ import {
   statusTone,
   typographyTokens,
   buttonClass,
+  StateMessage,
 } from '@brandspace/ui';
 import { AI_TASK_KEYS, DEFAULT_AI_PAGE_SIZE } from '@brandspace/ai-gateway';
 import {
@@ -19,7 +20,7 @@ import {
   serviceActor,
 } from '../../../../server/platform-context';
 import { translator } from '../../../../i18n/messages';
-import { Card, EmptyState } from '../../../../components/console-ui';
+import { Card } from '../../../../components/console-ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,8 +136,8 @@ export default async function AiUsagePage({
 
         <Card testId="ai-rollup">
           {byModel.length === 0 ? (
-            <EmptyState
-              message={isArabic ? 'لا توجد بيانات استخدام بعد.' : 'No usage recorded yet.'}
+            <StateMessage
+              title={isArabic ? 'لا توجد بيانات استخدام بعد.' : 'No usage recorded yet.'}
             />
           ) : (
             <DataTable
@@ -197,8 +198,8 @@ export default async function AiUsagePage({
           </form>
 
           {listing.total === 0 ? (
-            <EmptyState
-              message={
+            <StateMessage
+              title={
                 taskKey || status || workspaceId
                   ? isArabic
                     ? 'لا توجد طلبات مطابقة لهذه التصفية.'

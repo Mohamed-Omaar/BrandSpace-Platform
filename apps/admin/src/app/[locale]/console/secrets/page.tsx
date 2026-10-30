@@ -13,10 +13,11 @@ import {
   spacingTokens,
   typographyTokens,
   buttonClass,
+  StateMessage,
 } from '@brandspace/ui';
 import { translator } from '../../../../i18n/messages';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import { inputStyle as sharedInputStyle } from '../../../../components/console-ui';
 import {
   currentEnvironment,
@@ -332,8 +333,8 @@ export default async function SecretsPage({
       </p>
 
       {listing.total === 0 ? (
-        <EmptyState
-          message={
+        <StateMessage
+          title={
             query || category
               ? t('secrets.noMatches')
               : isArabic

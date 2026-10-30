@@ -608,6 +608,11 @@ One component per family, used by both apps; a family's PR deletes the CSS it re
   pills written as classes (`.bsp-pill` + `.bsp-p-*`, 73 uses) keep their classes and now share their
   values with `StatusBadge` (`tests/unit/badge.test.ts`). `.bsp-chip` (64 uses) is the prototype's
   chip, a different element (a selectable filter), and stays. The unused `.cs-status` is deleted.
+- **Empty state** (`StateMessage` in `packages/ui/src/feedback.tsx`). The one empty state for both
+  apps: the Control Center's two identical `EmptyState` wrappers (`console-ui.tsx`,
+  `admin-shell.tsx`) are gone and its 32 call sites use `StateMessage` directly. The unused
+  `.cs-empty` and `.bb-source-empty` are deleted. The prototype's per-screen empty cards
+  (`.bsp-*-empty`, 34 classes) are ports of each screen's own empty card and stay with their screens.
 
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 

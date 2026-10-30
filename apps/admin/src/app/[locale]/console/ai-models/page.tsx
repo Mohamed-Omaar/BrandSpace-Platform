@@ -1,5 +1,5 @@
-import { colorTokens } from '@brandspace/ui';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import { colorTokens, StateMessage } from '@brandspace/ui';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import {
   currentEnvironment,
   getConfigService,
@@ -38,8 +38,8 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
         }
       />
       {rows.length === 0 ? (
-        <EmptyState
-          message={
+        <StateMessage
+          title={
             isArabic
               ? 'لا توجد قيم مُفعّلة بعد — أنشئ مسودة وفعّلها من صفحة الإعدادات.'
               : 'Nothing activated yet — create and activate a draft on the Configuration page.'

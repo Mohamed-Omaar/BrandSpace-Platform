@@ -16,6 +16,7 @@ import {
   typographyTokens,
   type MediaSeed,
   buttonClass,
+  StateMessage,
 } from '@brandspace/ui';
 import { DEFAULT_WORKSPACE_PAGE_SIZE } from '@brandspace/auth';
 import {
@@ -26,7 +27,7 @@ import {
 } from '../../../../server/platform-context';
 import { translator } from '../../../../i18n/messages';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
-import { Banner, Card, EmptyState, Field, inputStyle } from '../../../../components/console-ui';
+import { Banner, Card, Field, inputStyle } from '../../../../components/console-ui';
 import { createWorkspaceAction } from './actions';
 import { SimpleCustomers } from '../../../../components/simple/customers';
 import { getConsoleMode } from '../../../../server/console-mode-cookie';
@@ -179,16 +180,16 @@ export default async function WorkspacesPage({
             search ? (
               /* No RESULTS is not the same message as no workspaces: one asks
                  you to change the query, the other to create a customer. */
-              <EmptyState
-                message={
+              <StateMessage
+                title={
                   locale === 'ar'
                     ? 'لا توجد نتائج مطابقة لبحثك.'
                     : 'No workspaces match your search.'
                 }
               />
             ) : (
-              <EmptyState
-                message={
+              <StateMessage
+                title={
                   locale === 'ar'
                     ? 'لا توجد مساحات عمل بعد. أنشئ أول عميل للبدء.'
                     : 'No workspaces yet. Create the first customer to begin.'

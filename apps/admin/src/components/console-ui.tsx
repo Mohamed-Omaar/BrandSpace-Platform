@@ -1,6 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
 import {
-  StateMessage,
   StatusBadge,
   scrollContainerStyle,
   statusTone,
@@ -37,11 +36,6 @@ export { DataTable, Cell } from '@brandspace/ui';
 /** A wide block that scrolls inside its own box rather than scrolling the page. */
 export function TableScroll({ children }: { children: ReactNode }) {
   return <div style={scrollContainerStyle()}>{children}</div>;
-}
-
-/** An honest empty state. Never a fabricated number. */
-export function EmptyState({ message }: { message: string }) {
-  return <StateMessage title={message} />;
 }
 
 /**

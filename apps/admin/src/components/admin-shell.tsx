@@ -16,7 +16,6 @@ import {
   RouteIcon,
   SlidersIcon,
   SparkIcon,
-  StateMessage,
   StatusBadge,
   SupportModeBanner,
   colorTokens,
@@ -323,8 +322,4 @@ export function PageIntro({ description }: { readonly description: string }) {
       {description}
     </p>
   );
-}
-
-export function EmptyState({ message }: { message: string }) {
-  return <StateMessage title={message} />;
 }

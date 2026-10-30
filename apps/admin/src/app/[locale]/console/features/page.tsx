@@ -4,10 +4,11 @@ import {
   spacingTokens,
   typographyTokens,
   buttonClass,
+  StateMessage,
 } from '@brandspace/ui';
 import { readPlanCatalogue } from '@brandspace/entitlements';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import { Banner, Card, Field, StatusPill, inputStyle } from '../../../../components/console-ui';
 import { requirePageActor } from '../../../../server/platform-context';
 import { loadDomainEditor } from '../../../../server/config-draft';
@@ -184,8 +185,8 @@ export default async function FeaturesPage({
           }
         />
         {features.length === 0 ? (
-          <EmptyState
-            message={isArabic ? 'لم تُعرَّف أي ميزة بعد.' : 'No feature has been defined yet.'}
+          <StateMessage
+            title={isArabic ? 'لم تُعرَّف أي ميزة بعد.' : 'No feature has been defined yet.'}
           />
         ) : (
           <DataTable
@@ -252,8 +253,8 @@ export default async function FeaturesPage({
           }
         />
         {features.length === 0 || plans.length === 0 ? (
-          <EmptyState
-            message={
+          <StateMessage
+            title={
               isArabic
                 ? 'تحتاج المصفوفة إلى خطة واحدة وميزة واحدة على الأقل.'
                 : 'The matrix needs at least one plan and one feature.'
