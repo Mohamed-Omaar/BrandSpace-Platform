@@ -2535,3 +2535,13 @@ draft alike.
 - **A literal port, now everywhere in the customer app.** `StatusBadge` draws the prototype's `.pill`
   on customer screens (it drew the older token palette at 9px/600 beside the ported pills). The
   Control Center keeps its own badge look.
+
+### 6.3.77 Design-system programme S5 — one dialog (D-580)
+
+- **A literal port, now in every customer dialog.** `Dialog` draws the prototype's modal on customer
+  screens, the campaign dialog's `.bsp-cp-dialog` and its 20px `.sech` title; it drew a 30rem,
+  radius-18 panel with a 29px title beside the ported campaign and rule dialogs. Measured in a real
+  browser: the assets upload and folder dialogs and the gallery's customer dialog equal the campaign
+  dialog on every panel, header and title property.
+- **One listed difference:** the close control keeps `Dialog`'s 18px icon (37px wide) where the
+  prototype draws a `✕` glyph (30px). The Control Center look is unchanged.
