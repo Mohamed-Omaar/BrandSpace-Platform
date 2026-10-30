@@ -2304,6 +2304,51 @@ html[dir='rtl'] input[type='week'] {
 }
 
 /*
+ * THE TOOLTIP (design-system programme, S5). What `Tooltip` painted inline,
+ * as classes: an ink label in the caption type, 8px off its trigger, below it
+ * (`block-end`) or beside it (`inline-end`). The label sets no `display`, so
+ * `hidden` keeps it closed.
+ */
+.bs-tooltip-host {
+  position: relative;
+  display: inline-flex;
+}
+.bs-tooltip-trigger {
+  display: inline-flex;
+}
+.bs-tooltip-host[data-stretch],
+.bs-tooltip-trigger[data-stretch] {
+  inline-size: 100%;
+  justify-content: center;
+}
+.bs-tooltip {
+  --bs-tooltip-gap: calc(100% + var(--bsp-px-8));
+  position: absolute;
+  z-index: var(--bs-z-tooltip);
+  padding: var(--bsp-rem-0-25) var(--bsp-rem-0-5);
+  border-radius: var(--bsp-rem-0-5);
+  background: var(--bs-surface-ink);
+  color: var(--bs-text-inverse);
+  font-size: var(--bsp-fs-9);
+  line-height: var(--bsp-rem-0-75);
+  font-weight: 400;
+  letter-spacing: normal;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--bs-shadow-overlay);
+}
+.bs-tooltip[data-placement='block-end'] {
+  inset-block-start: var(--bs-tooltip-gap);
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+}
+.bs-tooltip[data-placement='inline-end'] {
+  inset-inline-start: var(--bs-tooltip-gap);
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+}
+
+/*
  * THE DIALOG (design-system programme, S5; D-580). `Dialog` and
  * `ConfirmDialog` carry `.bs-dialog`; it was an inline style.
  *   - THE CONSOLE LOOK (`.bs-dialog`): what the inline style painted — 30rem,
