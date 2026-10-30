@@ -590,6 +590,17 @@ One component per family, used by both apps; a family's PR deletes the CSS it re
   chip, a tile or a row (`.bsp-ai-radio`, `.bsp-au-radio`, `.bsp-wz-radio`, `.bsp-vc-toggle`,
   `.bsp-tgl-in` — the prototype's `.tgl` switch) are ports of different prototype elements and stay
   where they are.
+- **Card** (D-578). The owner's rule merges card looks only where they differ by spacing; none do:
+
+  | Look                   | Uses | Border                           | Radius | Shadow              | Padding         |
+  | ---------------------- | ---- | -------------------------------- | ------ | ------------------- | --------------- |
+  | `.bsp-card`            | 74   | 1px `--bs-control-surface-hover` | 22     | `0 10 30`           | per use         |
+  | `.bsp-xcard`           | 51   | none                             | 24     | `0 5 18`            | 22              |
+  | `.bsp-bcard`           | 8    | 1px                              | 16     | `0 6 16`            | `10 12`, gap 12 |
+  | `.bsp-ucard`           | 6    | 1px                              | 16     | none                | `10 12`, gap 10 |
+  | `Card` / `cardStyle()` | 122  | transparent                      | 18     | `shadowTokens.card` | 22              |
+
+  The post and campaign cards' fixes (KNOWN bugs 15, 16) are D-578; `tests/unit/card.test.ts`.
 
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 

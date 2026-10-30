@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import {
+  AbstractMedia,
   AssetMedia,
+  type MediaSeed,
   NoteIcon,
   PlayIcon,
   PrefetchLink,
@@ -19,6 +21,9 @@ import { listOf } from './compose/format-fit';
 import { PostMenu } from './post-menu';
 import { ChannelMark } from '../calendar/prototype-calendar';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
+
+/** S5 (KNOWN bug 16): a text-only post's art — one of the two soft lavender palettes, stable per post. */
+const softSeed = (id: string): MediaSeed => (id.charCodeAt(id.length - 1) % 2 === 0 ? 2 : 5);
 
 /**
  * THE CONTENT LIBRARY — PORTED FROM `prototype-2026-09-27` (D-468 batch 2):
@@ -420,22 +425,25 @@ export function ContentLibrary({
         <PlayIcon size={compact ? 20 : 32} aria-hidden="true" />
       </span>
     ) : (
-      /* A TEXT-ONLY POST IS A DESIGNED CARD, NOT A MISSING IMAGE (D-306 §23):
-         the prototype's purple picture, and the post's own words where the
-         prototype puts a design's headline (`c.overlay`). The compact list
-         tile keeps only the glyph. */
+      /* A TEXT-ONLY POST IS A DESIGNED CARD, NOT A MISSING IMAGE (D-306 §23).
+         S5 (KNOWN bug 16): the product's soft abstract art, as the calendar
+         and the campaign covers draw, instead of the saturated purple; and the
+         post's own words only when it has an excerpt — never the title, which
+         the card already prints under the picture. The compact list tile keeps
+         only the glyph. */
       <span
         data-testid={`content-text-${card.id}`}
         data-text-only="true"
-        className="bsp-post-textart"
+        className="bsp-post-textart bsp-post-textart-soft"
       >
+        <AbstractMedia seed={softSeed(card.id)} alt="" />
         {compact ? (
-          <NoteIcon size={20} aria-hidden="true" />
-        ) : (
-          <span dir="auto" className="bsp-post-overlay">
-            {card.excerpt || card.title}
+          <NoteIcon size={20} aria-hidden="true" className="bsp-post-textart-glyph" />
+        ) : card.excerpt ? (
+          <span dir="auto" className="bsp-post-overlay bsp-post-overlay-ink">
+            {card.excerpt}
           </span>
-        )}
+        ) : null}
       </span>
     );
 
