@@ -508,8 +508,8 @@
       "length": 2
     },
     "packages/ui/src/overlays.tsx": {
-      "baked-token": 4,
-      "inline-style": 16
+      "baked-token": 3,
+      "inline-style": 13
     },
     "packages/ui/src/overview-hero.tsx": {
       "colour": 1,

@@ -262,26 +262,10 @@ export function Tooltip({
   const id = useId();
   const [open, setOpen] = useState(false);
 
-  const position: CSSProperties =
-    placement === 'inline-end'
-      ? {
-          insetInlineStart: 'calc(100% + var(--bsp-px-8))',
-          insetBlockStart: '50%',
-          transform: 'translateY(-50%)',
-        }
-      : {
-          insetBlockStart: 'calc(100% + var(--bsp-px-8))',
-          insetInlineStart: '50%',
-          transform: 'translateX(-50%)',
-        };
-
   return (
     <span
-      style={{
-        position: 'relative',
-        display: 'inline-flex',
-        ...(stretch ? { inlineSize: '100%', justifyContent: 'center' } : {}),
-      }}
+      className="bs-tooltip-host"
+      data-stretch={stretch || undefined}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
@@ -293,10 +277,8 @@ export function Tooltip({
     >
       <span
         aria-describedby={open ? id : undefined}
-        style={{
-          display: 'inline-flex',
-          ...(stretch ? { inlineSize: '100%', justifyContent: 'center' } : {}),
-        }}
+        className="bs-tooltip-trigger"
+        data-stretch={stretch || undefined}
       >
         {children}
       </span>
@@ -305,19 +287,8 @@ export function Tooltip({
         id={id}
         data-testid="tooltip"
         hidden={!open}
-        style={{
-          position: 'absolute',
-          ...position,
-          zIndex: zIndexTokens.tooltip,
-          padding: `${spacingTokens.xs} ${spacingTokens.sm}`,
-          borderRadius: radiusTokens.sm,
-          background: colorTokens.surfaceInk,
-          color: colorTokens.textInverse,
-          ...typographyTokens.caption,
-          whiteSpace: 'nowrap',
-          pointerEvents: 'none',
-          boxShadow: shadowTokens.overlay,
-        }}
+        className="bs-tooltip"
+        data-placement={placement}
       >
         {label}
       </span>

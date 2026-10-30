@@ -625,6 +625,11 @@ One component per family, used by both apps; a family's PR deletes the CSS it re
   style painted (`tests/unit/dialog.test.ts`). The campaign and rule dialogs are URL-driven ports
   of their own screens and keep their classes. The drawers (`SideSheet`, the post drawer, the
   Copilot drawer) already share one look and are unchanged.
+- **Tooltip** (`Tooltip` in `packages/ui/src/overlays.tsx`; `.bs-tooltip` in `tokens.css`). One
+  class-based tooltip for both apps: the ink label in the caption type, 8px off its trigger, below it
+  or beside it. The declarations and tokens are the ones the inline style painted
+  (`tests/unit/tooltip.test.ts`), so neither look changes. The status check's wrapped explanation
+  (`.bsp-st-check-tip`, D-570) is a screen port and stays with its screen.
 
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 
