@@ -202,6 +202,7 @@ export const SIMPLE_SECTIONS: readonly ConsoleNavSection[] = [
       simple('/health', 'nav.system', 'page.system', 'platform.workspace.read', 'pulse'),
       simple('/team', 'nav.team', 'page.team', 'platform.user.read', 'building'),
       simple('/changes', 'nav.changes', 'page.changes', 'platform.audit.read', 'list'),
+      simple('/look', 'nav.look', 'page.look', 'platform.configuration.read', 'sliders'),
     ],
   },
 ];

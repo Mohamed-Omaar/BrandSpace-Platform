@@ -179,12 +179,14 @@ const ELEVATION = ENTRIES.filter(
 );
 
 /**
- * The type size tables, rebuilt at a scale: `:root` holds the prototype's
- * sizes, the customer frame its × 0.88 table and the entry screens their
- * × 0.80 table, each rounded to 0.5px and never under 11px (D-484). The rule
- * is the one tests/unit/b7-scale.test.ts pins.
+ * The type size tables, rebuilt at a scale. The customer application's root
+ * is the prototype × 0.88 (prototype.css's `:root` table, D-484); the
+ * Control Center's root, which does not load prototype.css, is the
+ * prototype's own sizes; the entry screens are × 0.80 in both. Each value is
+ * rounded to 0.5px and never under 11px — the rule
+ * tests/unit/b7-scale.test.ts pins.
  */
-function typeTables(scale: number): Array<[string, Record<string, string>]> {
+function typeTables(scale: number, app: ThemeApp): Array<[string, Record<string, string>]> {
   const fs = ENTRIES.filter((e) => e.name.startsWith('--bsp-fs-'));
   const half = (v: number) => Math.round(v * 2) / 2;
   const table = (factor: number, floor: number) =>
@@ -196,8 +198,7 @@ function typeTables(scale: number): Array<[string, Record<string, string>]> {
       }),
     );
   return [
-    ['', table(1, 0)],
-    ['.bsp-frame', table(0.88, 11)],
+    ['', app === 'dashboard' ? table(0.88, 11) : table(1, 0)],
     ['.bsp-auth', table(0.8, 11)],
   ];
 }
@@ -263,7 +264,7 @@ export function themeVariables(look: ThemeLook): Array<[string, string]> {
 }
 
 /** The scoped rules a look needs beyond `:root` (type tables, buttons, fields). */
-function scopedRules(look: ThemeLook, scope: string): string[] {
+function scopedRules(look: ThemeLook, scope: string, app: ThemeApp): string[] {
   const rules: string[] = [];
   const at = (selector: string) =>
     scope === ':root' ? `:root ${selector}`.trim() : `${scope} ${selector}`.trim();
@@ -273,15 +274,18 @@ function scopedRules(look: ThemeLook, scope: string): string[] {
       .join('\n')}\n}`;
 
   if (look.text.size !== 'normal') {
-    for (const [selector, table] of typeTables(FONT_SCALE[look.text.size])) {
+    for (const [selector, table] of typeTables(FONT_SCALE[look.text.size], app)) {
       rules.push(block(selector ? at(selector) : scope === ':root' ? ':root:root' : scope, table));
     }
   }
   // Arabic reads at least relaxed under a theme; Latin follows the owner's choice.
   rules.push(
-    block(`${scope === ':root' ? ':root:root' : scope}[dir='rtl'], ${at("[dir='rtl']")}`, {
-      '--bs-line-body': 'var(--bs-line-relaxed)',
-    }),
+    block(
+      scope === ':root'
+        ? `:root:root[dir='rtl'], ${at("[dir='rtl']")}`
+        : `[dir='rtl'] ${scope}, ${scope}[dir='rtl'], ${at("[dir='rtl']")}`,
+      { '--bs-line-body': 'var(--bs-line-relaxed)' },
+    ),
   );
 
   const customerButton = at(
@@ -332,7 +336,12 @@ function declarations(vars: Iterable<[string, string]>): string {
   return [...vars].map(([k, v]) => `  ${k}: ${v};`).join('\n');
 }
 
+/** Which application the stylesheet is for: their root type tables differ. */
+export type ThemeApp = 'dashboard' | 'admin';
+
 export interface ThemeStylesheetOptions {
+  /** `dashboard` (the default) or `admin`, the Control Center. */
+  readonly app?: ThemeApp;
   /** `:root` for an app; a selector for the Control Center's preview box. */
   readonly scope?: string;
   /**
@@ -360,7 +369,7 @@ export function themeStylesheet(input: unknown, options: ThemeStylesheetOptions 
   if (!isOriginalLook(look)) {
     const light = themeVariables(look);
     if (light.length > 0) out.push(`${root} {\n${declarations(light)}\n}`);
-    out.push(...scopedRules(look, scope));
+    out.push(...scopedRules(look, scope, options.app ?? 'dashboard'));
   }
 
   const scheme = options.scheme ?? 'attribute';

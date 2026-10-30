@@ -19,7 +19,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const theme = await getConfigService().get('theme', currentEnvironment());
     if (!theme.controlCenterOriginal) {
-      css = `${themeFontFaces(theme.look)}\n${themeStylesheet(theme.look, { scheme: theme.look.dark.mode })}\n`;
+      css = `${themeFontFaces(theme.look)}\n${themeStylesheet(theme.look, { app: 'admin', scheme: theme.look.dark.mode })}\n`;
     }
   } catch (error: unknown) {
     log.warn('The theme could not be read; the original look is used', internalErrorFields(error));

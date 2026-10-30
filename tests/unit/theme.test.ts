@@ -155,11 +155,13 @@ describe('the stylesheet', () => {
     }
   });
 
-  it('text size rebuilds the three type tables at the same rule (×0.88 frame, ×0.80 entry)', () => {
+  it('text size rebuilds the type tables at the same rule (×0.88 customer root, ×0.80 entry)', () => {
     const css = themeStylesheet({ text: { size: 'large' } });
-    expect(css).toMatch(/:root:root \{[^}]*--bsp-fs-14: 15\.5px;/);
-    expect(css).toMatch(/:root \.bsp-frame \{[^}]*--bsp-fs-14: 14px;/);
+    expect(css).toMatch(/:root:root \{[^}]*--bsp-fs-14: 14px;/);
     expect(css).toMatch(/:root \.bsp-auth \{[^}]*--bsp-fs-14: 12px;/);
+    // The Control Center's root is the prototype's own sizes.
+    const admin = themeStylesheet({ text: { size: 'large' } }, { app: 'admin' });
+    expect(admin).toMatch(/:root:root \{[^}]*--bsp-fs-14: 15\.5px;/);
   });
 
   it('removing shadows never removes the focus ring', () => {

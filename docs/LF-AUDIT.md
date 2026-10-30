@@ -43,9 +43,10 @@ question, and the tests. Written after S6 merged (staging `08f6e7f`).
    primary or a dark mode recolours only what reads a semantic token. Each `--bs-lit-*` needs a
    role: a semantic token, or a `color-mix()` of one. That role-mapping is the bulk of the colour
    and dark-mode work.
-2. **No font is self-hosted.** Fonts load from Google only when `BRANDSPACE_WEBFONTS=google`.
-   Cairo, Inter, IBM Plex Sans Arabic and Tajawal are all OFL fonts. Their files would be committed
-   under `packages/ui` and served by both apps.
+2. **The four fonts are already self-hosted** (corrected after the audit was sent: it first said
+   none were). Cairo, Inter, IBM Plex Sans Arabic and Tajawal ship as OFL files in
+   `apps/dashboard/public/fonts`, catalogued in `BUNDLED_FONTS` for brand fonts. The theme reuses
+   them; the Control Center gets copies so its preview can draw them.
 
 **Fidelity.** The original look is the prototype, unchanged (D-468). A theme is an owner-approved
 deviation that applies only when the owner activates one, and "reset to the original look" brings
