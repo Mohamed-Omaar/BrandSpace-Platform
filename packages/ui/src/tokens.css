@@ -2303,6 +2303,98 @@ html[dir='rtl'] input[type='week'] {
   z-index: var(--bs-z-dialog);
 }
 
+/*
+ * THE DIALOG (design-system programme, S5; D-580). `Dialog` and
+ * `ConfirmDialog` carry `.bs-dialog`; it was an inline style.
+ *   - THE CONSOLE LOOK (`.bs-dialog`): what the inline style painted — 30rem,
+ *     radius 18, the overlay shadow, 32px, a 29px title.
+ *   - THE CUSTOMER LOOK (inside `.bsp-frame`, outside the gallery's console
+ *     column): the prototype's modal, `.bsp-cp-dialog` — min(560px, 100%),
+ *     radius 28, `0 30px 80px`, 24px 26px, a 16px column, the 20px `.sech` title.
+ */
+.bs-dialog {
+  --bs-dialog-title-tracking: -0.035em;
+  --bs-dialog-max-block: 90vh;
+  inline-size: 100%;
+  max-inline-size: var(--bsp-rem-30);
+  max-block-size: var(--bs-dialog-max-block);
+  overflow-y: auto;
+  background: var(--bs-surface);
+  border-radius: var(--bsp-rem-1-125);
+  box-shadow: var(--bs-shadow-overlay);
+  padding: var(--bsp-rem-2);
+}
+.bs-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--bsp-rem-1);
+  margin-block-end: var(--bsp-rem-0-5);
+}
+.bs-dialog-title {
+  font-size: var(--bsp-fs-29);
+  line-height: var(--bsp-rem-2-125);
+  font-weight: 700;
+  letter-spacing: var(--bs-dialog-title-tracking);
+  color: var(--bs-text-primary);
+}
+.bsp-btn.bs-dialog-close {
+  color: var(--bs-text-secondary);
+}
+.bs-dialog-desc {
+  margin: 0;
+  margin-block-end: var(--bsp-rem-1);
+  font-size: var(--bsp-fs-11);
+  line-height: var(--bsp-rem-1);
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--bs-text-secondary);
+}
+.bs-dialog-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--bsp-rem-0-5);
+  margin-block-start: var(--bsp-rem-1-5);
+}
+.bsp-frame .bs-dialog:not(.bs-gallery-console *) {
+  --bs-dialog-max-block: calc((100vh - var(--bsp-px-40)) * 0.92);
+  --bs-dialog-shadow: 0 var(--bsp-px-30) var(--bsp-px-80) var(--bs-lit-141023-a25);
+  inline-size: min(var(--bsp-px-560), 100%);
+  max-inline-size: none;
+  overflow: auto;
+  border-radius: calc(var(--bsp-px-28) * var(--bs-radius-scale));
+  box-shadow: var(--bs-dialog-shadow);
+  padding: var(--bsp-px-24) var(--bsp-px-26);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-16);
+  color: var(--bs-text-primary);
+  line-height: normal;
+}
+.bsp-frame .bs-dialog:not(.bs-gallery-console *) > .bs-dialog-head {
+  align-items: center;
+  gap: normal;
+  margin-block-end: 0;
+}
+.bsp-frame .bs-dialog:not(.bs-gallery-console *) .bs-dialog-title {
+  margin: 0;
+  /* `.cp-dialog-h > .sech`: the modal's title is the section head at 20px. */
+  font-size: var(--bsp-fs-20);
+  line-height: 1.4;
+  font-weight: 800;
+}
+.bsp-frame .bs-dialog:not(.bs-gallery-console *) .bs-dialog-close {
+  color: var(--bs-btn-fg);
+}
+.bsp-frame .bs-dialog:not(.bs-gallery-console *) > .bs-dialog-desc {
+  margin-block-end: 0;
+}
+.bsp-frame .bs-dialog:not(.bs-gallery-console *) > .bs-dialog-foot {
+  margin-block-start: 0;
+}
+
 .bs-dialog-veil {
   display: flex;
   align-items: center;
