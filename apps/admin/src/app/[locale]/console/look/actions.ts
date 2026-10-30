@@ -20,6 +20,7 @@ import {
 } from '../../../../server/platform-context';
 import { proposeAndActivate, refusalCode } from '../../../../server/simple-config';
 import { previousThemeVersion } from '../../../../server/look';
+import { LOGO_SLOTS, storeLogo, type LogoSlot } from '../../../../server/theme-logo';
 import { currentEnvironment } from '../../../../server/platform-context';
 
 /**
@@ -252,4 +253,48 @@ export async function recoverLookAction(formData: FormData): Promise<void> {
   }
   revalidatePath(pageOf(locale));
   redirect(destination);
+}
+
+function slotOf(formData: FormData): LogoSlot {
+  const slot = String(formData.get('slot') ?? '');
+  if (!(LOGO_SLOTS as readonly string[]).includes(slot))
+    throw new AppError('VALIDATION_FAILED', 'LOGO');
+  return slot as LogoSlot;
+}
+
+/** Upload one of the theme's images; it is active at once, like the rest of the look. */
+export async function uploadLogoAction(formData: FormData): Promise<void> {
+  let key: string;
+  let slot: LogoSlot;
+  try {
+    await requirePlatformActor('platform.configuration.manage');
+    slot = slotOf(formData);
+    const file = formData.get('file');
+    if (!(file instanceof File)) throw new AppError('VALIDATION_FAILED', 'LOGO');
+    key = await storeLogo(slot, file);
+  } catch (error: unknown) {
+    const code = error instanceof AppError && error.message === 'LOGO' ? 'LOGO' : null;
+    redirect(
+      code
+        ? `${pageOf(localeOf(formData))}?error=LOGO`
+        : refused(pageOf(localeOf(formData)), error),
+    );
+  }
+  await apply(formData, 'LOGO', `Look & feel: a new ${slot} image`, (active) => ({
+    ...active,
+    look: { ...active.look, logo: { ...active.look.logo, [slot]: key } },
+  }));
+}
+
+export async function removeLogoAction(formData: FormData): Promise<void> {
+  let slot: LogoSlot;
+  try {
+    slot = slotOf(formData);
+  } catch (error: unknown) {
+    redirect(refused(pageOf(localeOf(formData)), error));
+  }
+  await apply(formData, 'LOGO', `Look & feel: removed the ${slot} image`, (active) => ({
+    ...active,
+    look: { ...active.look, logo: { ...active.look.logo, [slot]: null } },
+  }));
 }

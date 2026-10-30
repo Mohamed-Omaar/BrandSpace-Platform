@@ -148,3 +148,10 @@
 .lf-signin {
   background: var(--bs-surface);
 }
+
+.lf-logo {
+  max-inline-size: 100%;
+  max-block-size: var(--bsp-px-44);
+  inline-size: auto;
+  object-fit: contain;
+}

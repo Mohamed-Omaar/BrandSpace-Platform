@@ -65,6 +65,8 @@ export default async function LocaleLayout({
           and on any error.
         */}
         <link rel="stylesheet" href="/theme.css" />
+        {/* LF: the theme's favicon; without one it answers with the original icon. */}
+        <link rel="icon" href="/theme-assets/favicon.img" />
         {/*
           OPTIONAL WEBFONTS, and optional on purpose.
 

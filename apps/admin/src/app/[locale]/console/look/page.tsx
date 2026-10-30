@@ -10,7 +10,14 @@ import {
   getConfigService,
   requirePageActor,
 } from '../../../../server/platform-context';
-import { controlCenterLookAction, resetLookAction, undoLookAction } from './actions';
+import {
+  controlCenterLookAction,
+  removeLogoAction,
+  resetLookAction,
+  undoLookAction,
+  uploadLogoAction,
+} from './actions';
+import { LOGO_SLOTS } from '../../../../server/theme-logo';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +63,57 @@ export default async function Page({
         errorText={(code) => copy[`error.${code}` as LookKey] ?? null}
       />
       <LookEditor locale={locale} copy={copy} active={active} mayChange={mayChange} />
+
+      <Card title={t('logo.title')} description={t('logo.rules')} testId="lf-logo">
+        <div className="lf-grid">
+          {LOGO_SLOTS.map((slot) => {
+            const key = active.look.logo[slot];
+            return (
+              <div key={slot} className="lf-field" data-testid={`lf-logo-${slot}`}>
+                <strong>{t(`logo.${slot}` as LookKey)}</strong>
+                {key ? (
+                  <img
+                    className="lf-logo"
+                    src={`/theme-assets/${slot}.img?v=${encodeURIComponent(key.slice(-16))}`}
+                    alt={t(`logo.${slot}` as LookKey)}
+                  />
+                ) : (
+                  <span className="lf-muted">{t('logo.none')}</span>
+                )}
+                {mayChange ? (
+                  <div className="lf-row">
+                    <form action={uploadLogoAction} className="lf-inline-form">
+                      {localeField}
+                      {confirm}
+                      <input type="hidden" name="slot" value={slot} />
+                      <input
+                        type="file"
+                        name="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        required
+                        aria-label={t(`logo.${slot}` as LookKey)}
+                      />
+                      <button type="submit" className={buttonClass('neutral', 'sm')}>
+                        {t('logo.upload')}
+                      </button>
+                    </form>
+                    {key ? (
+                      <form action={removeLogoAction}>
+                        {localeField}
+                        {confirm}
+                        <input type="hidden" name="slot" value={slot} />
+                        <button type="submit" className={buttonClass('ghost', 'sm')}>
+                          {t('logo.remove')}
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </Card>
 
       <Card title={t('section.safety')} testId="lf-safety">
         <div className="lf-grid">

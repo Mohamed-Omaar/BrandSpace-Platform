@@ -245,6 +245,7 @@ export function themeVariables(look: ThemeLook): Array<[string, string]> {
     }
   }
   if (layout.contentWidth === 'wide') vars.set('--bs-shell-max-width', 'none');
+  if (layout.sidebarDefault === 'collapsed') vars.set('--bs-sidebar-default', 'collapsed');
 
   const face = FONT_FAMILY[text.font];
   if (face) {

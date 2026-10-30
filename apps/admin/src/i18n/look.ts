@@ -165,7 +165,7 @@ const en = {
   'logo.upload': 'Upload',
   'logo.remove': 'Remove',
   'logo.none': 'The wordmark',
-  'logo.rules': 'PNG, JPEG or WebP, up to 1 MB.',
+  'logo.rules': 'A PNG, JPEG or WebP image, within the upload limit for images.',
   'ok.SAVED': 'The new look is active. Customers see it within a minute.',
   'ok.PRESET': 'Your preset is saved.',
   'ok.PRESET_REMOVED': 'The preset is removed.',
@@ -180,7 +180,8 @@ const en = {
     'Someone has an unfinished change to the look open. Finish or discard it first.',
   'error.NOT_CONFIRMED': 'Tick the confirmation and give a reason first.',
   'error.NO_UNDO': 'There is no earlier look to go back to.',
-  'error.LOGO': 'That image cannot be used. Use a PNG, JPEG or WebP of up to 1 MB.',
+  'error.LOGO':
+    'That image cannot be used. Use a PNG, JPEG or WebP within the upload limit for images.',
   'error.NOT_OWNER':
     'Only the platform owner, signed in with the second step, can use the recovery link.',
 } as const;
@@ -348,7 +349,7 @@ const ar: Record<LookKey, string> = {
   'logo.upload': 'رفع',
   'logo.remove': 'إزالة',
   'logo.none': 'الشعار النصي',
-  'logo.rules': 'PNG أو JPEG أو WebP، حتى 1 ميغابايت.',
+  'logo.rules': 'صورة PNG أو JPEG أو WebP، ضمن حد رفع الصور.',
   'ok.SAVED': 'الشكل الجديد مفعّل. يراه العملاء خلال دقيقة.',
   'ok.PRESET': 'تم حفظ نمطك.',
   'ok.PRESET_REMOVED': 'تمت إزالة النمط.',
@@ -362,7 +363,7 @@ const ar: Record<LookKey, string> = {
   'error.DRAFT_OPEN': 'يوجد تغيير غير مكتمل على الشكل. أكمله أو تجاهله أولًا.',
   'error.NOT_CONFIRMED': 'ضع علامة التأكيد واكتب سببًا أولًا.',
   'error.NO_UNDO': 'لا يوجد شكل سابق للعودة إليه.',
-  'error.LOGO': 'لا يمكن استخدام هذه الصورة. استخدم PNG أو JPEG أو WebP حتى 1 ميغابايت.',
+  'error.LOGO': 'لا يمكن استخدام هذه الصورة. استخدم PNG أو JPEG أو WebP ضمن حد رفع الصور.',
   'error.NOT_OWNER': 'رابط الاستعادة لمالك المنصة فقط بعد تسجيل الدخول بالخطوة الثانية.',
 };
 

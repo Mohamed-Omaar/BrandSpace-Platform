@@ -2308,6 +2308,25 @@ html[dir='rtl'] input[type='week'] {
 }
 
 /*
+ * LF — THE LOOK & FEEL LOGO, when the owner uploaded one: it takes the
+ * wordmark's place at the wordmark's height, and the small mark takes the
+ * brand glyph's 34px square. Without one, nothing here draws.
+ */
+.bs-theme-logo {
+  display: block;
+  block-size: var(--bsp-px-28);
+  inline-size: auto;
+  max-inline-size: 100%;
+  object-fit: contain;
+}
+.bs-theme-logo-mark {
+  display: block;
+  inline-size: var(--bsp-px-34);
+  block-size: var(--bsp-px-34);
+  object-fit: contain;
+}
+
+/*
  * THE TOOLTIP (design-system programme, S5). What `Tooltip` painted inline,
  * as classes: an ink label in the caption type, 8px off its trigger, below it
  * (`block-end`) or beside it (`inline-end`). The label sets no `display`, so
