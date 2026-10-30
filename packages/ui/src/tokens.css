@@ -702,6 +702,8 @@
   --bs-control-border-width: var(--bsp-px-1);
   --bs-line-body: 1.6;
   --bs-line-relaxed: 1.8;
+  --bs-hero-ground: #f9f7ff;
+  --bs-hero-blob-strength: 1;
   --bs-control-border-customer: #e4e4e8;
   --bs-control-border-customer-hover: #c9c9d1;
   --bsp-sidebar-expanded: var(--bsp-px-250);

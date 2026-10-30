@@ -123,6 +123,8 @@ function darkColours(look: ThemeLook): Map<string, string> {
     out.set(token.name, formatColour(darkCounterpart(parseColour(value)!)));
   }
   writeRoles(out, darkPalette(look));
+  // Home's hero canvas: pastel blobs stay soft on a dark ground.
+  out.set('--bs-hero-blob-strength', '0.35');
   return out;
 }
 
