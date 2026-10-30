@@ -113,6 +113,8 @@ const SIMPLE_NAV = [
   'nav-nav.system',
   'nav-nav.team',
   'nav-nav.changes',
+  // LF: Simple → Look & feel.
+  'nav-nav.look',
 ];
 
 const SIMPLE_SCREENS: readonly { path: string; marker: string }[] = [

@@ -2545,3 +2545,19 @@ draft alike.
   dialog on every panel, header and title property.
 - **One listed difference:** the close control keeps `Dialog`'s 18px icon (37px wide) where the
   prototype draws a `✕` glyph (30px). The Control Center look is unchanged.
+
+### 6.3.78 Look & feel (D-582)
+
+- **The original look is the prototype, unchanged.** The theme's empty document writes no light
+  override; every hook it added (`--bs-control-border-width`, `--bs-line-body`, `--bs-hero-ground`,
+  `--bs-hero-blob-strength`, `--bs-sidebar-default`) holds the value the stylesheet or canvas had.
+- **A theme is an owner-approved deviation** that exists only while the owner has one active.
+  "Reset to the original look" and the recovery link bring the prototype back.
+- **Dark mode is an approved design-system extension** (§4.2): generated from every colour token,
+  never a second stylesheet.
+- **Two added elements, listed:**
+  - the account menu's **Appearance** item (light / dark / device), beside **Language**;
+  - the rail draws an uploaded **logo** and **mark** in place of the wordmark and glyph, only when
+    the owner set them.
+- **The Look & feel page** in the Control Center is a design-system extension built from the
+  shared components (`docs/DESIGN-SYSTEM.md`).

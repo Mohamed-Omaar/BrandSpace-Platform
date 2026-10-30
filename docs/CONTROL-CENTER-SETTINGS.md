@@ -185,6 +185,29 @@ the credit reservation timeout) use it too. The E2E seed (`tests/e2e/seed-ai-app
 only) raises both per-address ceilings to 1,000 because every test connects from one address; a
 database that ran it shows those numbers, never staging or production.
 
+## Look & feel — `theme` (Simple: **Look & feel**, D-582)
+
+Every field defaults to the original look (the prototype, D-468): the empty document changes
+nothing on screen. A look that fails a WCAG AA contrast check, in light or dark, cannot be
+activated, and the page says which pair fails in plain words.
+
+| Setting                                                                   | What it does                                                                                                         | Simple before | Simple now | Owner? |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------- | ---------- | ------ |
+| `preset`, `savedPresets`                                                  | The look started from (original, calm, modern, premium, light and fast), and the owner's own saved looks (up to 12). | —             | edit       | safe   |
+| `look.colours.primary`                                                    | The one colour that recolours the product; its shades and a readable text colour are generated.                      | —             | edit       | safe   |
+| `look.colours.secondary`, `background`, `surface`, `text`, status colours | The other colours; `backgroundGradient` turns the soft glow behind the background on or off.                         | —             | edit       | safe   |
+| `look.dark.mode`                                                          | What people see first: light, dark or their device's setting. Each person can still choose (a cookie, per device).   | —             | edit       | safe   |
+| `look.dark.primary`, `background`, `surface`, `text`                      | Adjustments to the generated dark palette.                                                                           | —             | edit       | safe   |
+| `look.shape`, `look.buttons`, `look.fields`                               | Corners, shadows, spacing; button style and default size; field style and border.                                    | —             | edit       | safe   |
+| `look.text`                                                               | Font (from the bundled list that carries Arabic and Latin), text size and line spacing; Arabic is always relaxed.    | —             | edit       | safe   |
+| `look.logo`                                                               | Logos for light and dark surfaces, the small mark and the favicon (the upload rules of `assets` images; never SVG).  | —             | edit       | safe   |
+| `look.motion`, `look.effects`                                             | Motion level and speed (a device asking for less motion always wins); blur, gradients and glass on or off.           | —             | edit       | safe   |
+| `look.layout`                                                             | Side menu width and its state for someone who has never chosen; page width.                                          | —             | edit       | safe   |
+| `controlCenterOriginal`                                                   | Safe mode: the Control Center keeps the original look. ON by default.                                                | —             | edit       | safe   |
+
+The recovery link (`/<locale>/console/look/recover`, the platform owner with the second sign-in
+step) puts the original look back at once, discarding any unfinished theme draft.
+
 ## Everything else (Advanced only, listed so nothing is hidden)
 
 | Domain                                                                 | What it does                                                                   | Simple        | Owner?                   |
