@@ -1388,6 +1388,97 @@ html:has(.bs-topbar:not(.bsp-header)) {
 }
 
 /*
+ * S5 (D-579) — THE ONE STATUS BADGE (`StatusBadge` in data.tsx), two looks as
+ * variable sets on one rule set, inherited from the scope:
+ *
+ *   - THE CONSOLE LOOK (`:root`, and `.bs-gallery-console`): the Control
+ *     Center's badge, the values `StatusBadge` painted inline — 9px at 600,
+ *     the token palette.
+ *   - THE CUSTOMER LOOK (`.bsp-frame`): the prototype's `.pill` — 11.5px at
+ *     700, `3px 9px`, its own tints (`.bsp-p-ok`, `-info`, `-warn`, `-bad`,
+ *     `-neu`). `accent` (yellow) has no prototype pill and keeps the token tint.
+ */
+:root,
+.bs-gallery-console {
+  --bs-badge-gap: var(--bsp-rem-0-25);
+  --bs-badge-pad: var(--bsp-rem-0-1875) var(--bsp-rem-0-5);
+  --bs-badge-font-size: var(--bsp-fs-9);
+  --bs-badge-line-height: var(--bsp-rem-0-75);
+  --bs-badge-font-weight: 600;
+  --bs-badge-radius: var(--bs-radius-full);
+  /* No resting stroke: the fill and the WORD carry the meaning (WCAG 1.4.1). */
+  --bs-badge-border: 1px solid transparent;
+  --bs-badge-neutral-bg: var(--bs-surface-muted);
+  --bs-badge-neutral-fg: var(--bs-text-secondary);
+  --bs-badge-success-bg: var(--bs-success-tint);
+  --bs-badge-success-fg: var(--bs-success);
+  --bs-badge-warning-bg: var(--bs-warning-tint);
+  --bs-badge-warning-fg: var(--bs-warning);
+  --bs-badge-danger-bg: var(--bs-danger-tint);
+  --bs-badge-danger-fg: var(--bs-danger);
+  --bs-badge-info-bg: var(--bs-info-tint);
+  --bs-badge-info-fg: var(--bs-info);
+  --bs-badge-accent-bg: var(--bs-brand-yellow-tint);
+  --bs-badge-accent-fg: var(--bs-brand-yellow-text);
+}
+.bsp-frame:not(.bs-gallery-console) {
+  --bs-badge-gap: var(--bsp-px-6);
+  --bs-badge-pad: var(--bsp-px-3) var(--bsp-px-9);
+  --bs-badge-font-size: var(--bsp-fs-11-5);
+  --bs-badge-line-height: normal;
+  --bs-badge-font-weight: 700;
+  --bs-badge-radius: var(--bsp-px-99);
+  --bs-badge-border: 0;
+  --bs-badge-neutral-bg: var(--bs-lit-f0f0f2);
+  --bs-badge-neutral-fg: var(--bs-lit-55555c);
+  --bs-badge-success-bg: var(--bs-lit-e6f6ee);
+  --bs-badge-warning-bg: var(--bs-lit-fff3cc);
+  --bs-badge-warning-fg: var(--bs-lit-7a5600);
+  --bs-badge-info-bg: var(--bs-lit-eaf3ff);
+}
+.bs-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bs-badge-gap);
+  padding: var(--bs-badge-pad);
+  border-radius: var(--bs-badge-radius);
+  font-size: var(--bs-badge-font-size);
+  line-height: var(--bs-badge-line-height);
+  font-weight: var(--bs-badge-font-weight);
+  white-space: nowrap;
+  border: var(--bs-badge-border);
+  background: var(--bs-badge-neutral-bg);
+  color: var(--bs-badge-neutral-fg);
+}
+.bs-badge[data-tone='success'] {
+  background: var(--bs-badge-success-bg);
+  color: var(--bs-badge-success-fg);
+}
+.bs-badge[data-tone='warning'] {
+  background: var(--bs-badge-warning-bg);
+  color: var(--bs-badge-warning-fg);
+}
+.bs-badge[data-tone='danger'] {
+  background: var(--bs-badge-danger-bg);
+  color: var(--bs-badge-danger-fg);
+}
+.bs-badge[data-tone='info'] {
+  background: var(--bs-badge-info-bg);
+  color: var(--bs-badge-info-fg);
+}
+.bs-badge[data-tone='accent'] {
+  background: var(--bs-badge-accent-bg);
+  color: var(--bs-badge-accent-fg);
+}
+.bs-badge-dot {
+  inline-size: var(--bsp-rem-0-375);
+  block-size: var(--bsp-rem-0-375);
+  border-radius: var(--bs-radius-full);
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/*
  * S5 (D-577) — ONE TICK COLOUR. Every native checkbox and radio, in both apps,
  * draws its tick in `--bs-check-accent` (ink), instead of three colours: purple
  * in two places, ink in one, the browser's blue everywhere else.

@@ -2529,3 +2529,9 @@ draft alike.
 - **Posts grid (KNOWN bug 16), owner-decided:** a text-only post's picture is the soft abstract art
   instead of the prototype's purple (supersedes D-306 §23 for that tile), its excerpt in the
   palette's dark ink and never the title; the cards of a row share one height.
+
+### 6.3.76 Design-system programme S5 — one status badge (D-579)
+
+- **A literal port, now everywhere in the customer app.** `StatusBadge` draws the prototype's `.pill`
+  on customer screens (it drew the older token palette at 9px/600 beside the ported pills). The
+  Control Center keeps its own badge look.

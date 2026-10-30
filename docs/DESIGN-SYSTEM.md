@@ -602,6 +602,13 @@ One component per family, used by both apps; a family's PR deletes the CSS it re
 
   The post and campaign cards' fixes (KNOWN bugs 15, 16) are D-578; `tests/unit/card.test.ts`.
 
+- **Badge** (`StatusBadge`, D-579). One class (`.bs-badge`, `data-tone`) for both apps, its look a
+  variable set inherited from the scope: in the customer frame the prototype's `.pill` (11.5px at
+  700, `3px 9px`, the pill tints); in the Control Center the token palette at 9px/600. The prototype
+  pills written as classes (`.bsp-pill` + `.bsp-p-*`, 73 uses) keep their classes and now share their
+  values with `StatusBadge` (`tests/unit/badge.test.ts`). `.bsp-chip` (64 uses) is the prototype's
+  chip, a different element (a selectable filter), and stays. The unused `.cs-status` is deleted.
+
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 
 - **`tokens.ts` is the source.** tokens.css's `:root` block is generated from `cssRootTokens`

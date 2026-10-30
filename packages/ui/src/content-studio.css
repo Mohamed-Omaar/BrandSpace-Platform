@@ -255,27 +255,6 @@
   background: var(--bs-gradient-lit-16);
 }
 
-/* --- the status pill ------------------------------------------------- */
-
-.cs-status {
-  padding: var(--bsp-px-6) var(--bsp-px-8);
-  border-radius: var(--bsp-px-99);
-  background: var(--bs-success-tint);
-  color: var(--cs-success);
-  font-size: var(--bsp-fs-8);
-  font-weight: 800;
-}
-
-.cs-status.review {
-  background: var(--bs-warning-tint);
-  color: var(--cs-warning);
-}
-
-.cs-status.draft {
-  background: var(--cs-soft);
-  color: var(--cs-muted);
-}
-
 /* --- the composer ---------------------------------------------------- */
 
 .cs-composer {

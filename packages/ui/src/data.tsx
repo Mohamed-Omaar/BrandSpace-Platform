@@ -240,84 +240,15 @@ export function StatusBadge({
   readonly dot?: boolean;
   readonly testId?: string | undefined;
 }) {
-  const palette = badgePalette(tone);
+  // S5 (D-579): the look is the scope's (`.bs-badge` in tokens.css) — the
+  // prototype's pill in the customer frame, the token palette in the Control
+  // Center; the tone is an attribute.
   return (
-    <span
-      data-testid={testId}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: spacingTokens.xs,
-        paddingInline: spacingTokens.sm,
-        paddingBlock: spacingTokens['2xs'],
-        borderRadius: radiusTokens.full,
-        ...typographyTokens.caption,
-        fontWeight: 600,
-        whiteSpace: 'nowrap',
-        background: palette.background,
-        color: palette.color,
-        // No resting stroke: the fill and the WORD carry the meaning, and the
-        // word survives greyscale and colour-blindness (WCAG 1.4.1).
-        border: '1px solid transparent',
-      }}
-    >
-      {dot ? (
-        <span
-          aria-hidden="true"
-          style={{
-            inlineSize: 'var(--bsp-rem-0-375)',
-            blockSize: 'var(--bsp-rem-0-375)',
-            borderRadius: radiusTokens.full,
-            background: palette.color,
-            flexShrink: 0,
-          }}
-        />
-      ) : null}
+    <span data-testid={testId} className="bs-badge" data-tone={tone}>
+      {dot ? <span aria-hidden="true" className="bs-badge-dot" /> : null}
       {label}
     </span>
   );
-}
-
-function badgePalette(tone: BadgeTone): { background: string; color: string; border: string } {
-  switch (tone) {
-    case 'success':
-      return {
-        background: colorTokens.successTint,
-        color: colorTokens.success,
-        border: colorTokens.successBorder,
-      };
-    case 'warning':
-      return {
-        background: colorTokens.warningTint,
-        color: colorTokens.warning,
-        border: colorTokens.warningBorder,
-      };
-    case 'danger':
-      return {
-        background: colorTokens.dangerTint,
-        color: colorTokens.danger,
-        border: colorTokens.dangerBorder,
-      };
-    case 'info':
-      return {
-        background: colorTokens.infoTint,
-        color: colorTokens.info,
-        border: colorTokens.infoBorder,
-      };
-    case 'accent':
-      // Yellow as an accent surface: near-black ink at 15.3:1. Never white.
-      return {
-        background: colorTokens.brandYellowTint,
-        color: colorTokens.brandYellowText,
-        border: colorTokens.brandYellow,
-      };
-    case 'neutral':
-      return {
-        background: colorTokens.surfaceMuted,
-        color: colorTokens.textSecondary,
-        border: colorTokens.border,
-      };
-  }
 }
 
 /**
