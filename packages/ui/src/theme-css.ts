@@ -1,4 +1,5 @@
 import {
+  BUNDLED_FONTS,
   ORIGINAL_ROLES,
   darkCounterpart,
   darkPalette,
@@ -334,6 +335,14 @@ function declarations(vars: Iterable<[string, string]>): string {
 export interface ThemeStylesheetOptions {
   /** `:root` for an app; a selector for the Control Center's preview box. */
   readonly scope?: string;
+  /**
+   * Which palette the scope draws. `attribute` (the default) keys the dark
+   * palette on `data-color-scheme` on the scope, for the preview; an app
+   * resolves the user's choice on the server instead: `light` writes no dark
+   * palette, `dark` writes it on the scope, `system` under
+   * `prefers-color-scheme: dark`.
+   */
+  readonly scheme?: 'attribute' | 'light' | 'dark' | 'system';
 }
 
 /**
@@ -354,21 +363,37 @@ export function themeStylesheet(input: unknown, options: ThemeStylesheetOptions 
     out.push(...scopedRules(look, scope));
   }
 
-  const dark = declarations(darkColours(look));
-  const darkScope =
-    scope === ':root'
-      ? ":root:root[data-color-scheme='dark']"
-      : `${scope}[data-color-scheme='dark']`;
-  const systemScope =
-    scope === ':root'
-      ? ":root:root[data-color-scheme='system']"
-      : `${scope}[data-color-scheme='system']`;
-  out.push(`${darkScope} {\n  color-scheme: dark;\n${dark}\n}`);
-  out.push(
-    `@media (prefers-color-scheme: dark) {\n  ${systemScope} {\n    color-scheme: dark;\n${dark
+  const scheme = options.scheme ?? 'attribute';
+  if (scheme === 'light') return out.join('\n');
+  const dark = `  color-scheme: dark;\n${declarations(darkColours(look))}`;
+  const nested = (selector: string) =>
+    `@media (prefers-color-scheme: dark) {\n  ${selector} {\n${dark
       .split('\n')
       .map((line) => `  ${line}`)
-      .join('\n')}\n  }\n}`,
-  );
+      .join('\n')}\n  }\n}`;
+  if (scheme === 'dark') out.push(`${root} {\n${dark}\n}`);
+  else if (scheme === 'system') out.push(nested(root));
+  else {
+    out.push(`${root}[data-color-scheme='dark'] {\n${dark}\n}`);
+    out.push(nested(`${root}[data-color-scheme='system']`));
+  }
   return out.join('\n');
+}
+
+/**
+ * The `@font-face` rules for a look's font, from the self-hosted files both
+ * apps serve under `/fonts` (the same files Brand fonts use). Empty for the
+ * original look's system stacks.
+ */
+export function themeFontFaces(input: unknown, base = '/fonts'): string {
+  const look = themeLookSchema.parse(input ?? {});
+  if (look.text.font === 'original') return '';
+  const font = BUNDLED_FONTS.find((f) => f.key === look.text.font);
+  if (!font) return '';
+  return font.faces
+    .map(
+      (face) =>
+        `@font-face {\n  font-family: '${font.family}';\n  font-weight: ${face.weight};\n  font-display: swap;\n  src: url('${base}/${font.directory}/${encodeURIComponent(face.file)}') format('${face.format}');\n}`,
+    )
+    .join('\n');
 }
