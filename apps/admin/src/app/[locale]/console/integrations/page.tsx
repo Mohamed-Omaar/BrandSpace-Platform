@@ -4,8 +4,14 @@ import {
   type ConnectionState,
   type IntegrationView,
 } from '@brandspace/integrations';
-import { SectionHeader, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import {
+  SectionHeader,
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+  StateMessage,
+} from '@brandspace/ui';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import { SimpleIntegrations } from '../../../../components/simple/integrations';
 import { getConsoleMode } from '../../../../server/console-mode-cookie';
 import { SocialAddresses } from '../../../../components/social-addresses';
@@ -121,8 +127,8 @@ export default async function IntegrationsPage({
               }
             />
             {rows.length === 0 ? (
-              <EmptyState
-                message={
+              <StateMessage
+                title={
                   isArabic
                     ? 'لا يوجد محوّل لهذه الفئة في هذا الإصدار. إضافة مزود تعني كتابة محوّل له.'
                     : 'No adapter for this category in this build. Adding a provider means writing its adapter.'

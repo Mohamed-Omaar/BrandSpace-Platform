@@ -1,5 +1,5 @@
-import { colorTokens } from '@brandspace/ui';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import { colorTokens, StateMessage } from '@brandspace/ui';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import {
   currentEnvironment,
   getConfigService,
@@ -43,8 +43,8 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
           : `Hosts allowed besides each provider’s official one: ${allowedHosts.length > 0 ? allowedHosts.join(', ') : 'none'}. Connections are https only, to public addresses only. maxConcurrency is recorded but not enforced: concurrency is limited per workspace in AI spending limits, and by the provider’s own rate limits.`}
       </p>
       {rows.length === 0 ? (
-        <EmptyState
-          message={
+        <StateMessage
+          title={
             isArabic
               ? 'لا توجد قيم مُفعّلة بعد — أنشئ مسودة وفعّلها من صفحة الإعدادات.'
               : 'Nothing activated yet — create and activate a draft on the Configuration page.'

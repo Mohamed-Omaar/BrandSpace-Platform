@@ -12,8 +12,9 @@ import {
   spacingTokens,
   typographyTokens,
   buttonClass,
+  StateMessage,
 } from '@brandspace/ui';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../../../components/admin-shell';
+import { Cell, DataTable, PageIntro } from '../../../../../../components/admin-shell';
 import { inputStyle } from '../../../../../../components/console-ui';
 import { SimpleIntegrationSetup } from '../../../../../../components/simple/integrations';
 import {
@@ -255,8 +256,8 @@ export default async function IntegrationDetailPage({
           }
         />
         {view.credentials.length === 0 ? (
-          <EmptyState
-            message={
+          <StateMessage
+            title={
               isArabic
                 ? 'هذا المزود لا يحتاج أي بيانات اعتماد — وهذا ما يجعله مزود تطوير.'
                 : 'This provider needs no credentials, which is part of what makes it a development double.'
@@ -587,8 +588,8 @@ export default async function IntegrationDetailPage({
           }
         />
         {history.length === 0 ? (
-          <EmptyState
-            message={isArabic ? 'لم يُجرَ أي فحص بعد.' : 'Nothing has been checked yet.'}
+          <StateMessage
+            title={isArabic ? 'لم يُجرَ أي فحص بعد.' : 'Nothing has been checked yet.'}
           />
         ) : (
           <DataTable

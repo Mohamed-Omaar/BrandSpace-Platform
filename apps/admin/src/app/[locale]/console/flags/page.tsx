@@ -4,10 +4,11 @@ import {
   spacingTokens,
   typographyTokens,
   buttonClass,
+  StateMessage,
 } from '@brandspace/ui';
 import { rolloutBucket } from '@brandspace/entitlements';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import { Banner, Card, Field, StatusPill, inputStyle } from '../../../../components/console-ui';
 import { requirePageActor } from '../../../../server/platform-context';
 import { loadDomainEditor } from '../../../../server/config-draft';
@@ -172,7 +173,7 @@ export default async function FlagsPage({
           }
         />
         {activeFlags.length === 0 ? (
-          <EmptyState message={isArabic ? 'لا توجد مفاتيح مُفعّلة.' : 'No flags are active.'} />
+          <StateMessage title={isArabic ? 'لا توجد مفاتيح مُفعّلة.' : 'No flags are active.'} />
         ) : (
           <FlagTable
             flags={activeFlags}
@@ -299,7 +300,7 @@ export default async function FlagsPage({
       <Card>
         <SectionHeader title={isArabic ? 'سجل الإصدارات' : 'Version history'} />
         {state.versions.length === 0 ? (
-          <EmptyState message={isArabic ? 'لا توجد إصدارات بعد.' : 'No versions yet.'} />
+          <StateMessage title={isArabic ? 'لا توجد إصدارات بعد.' : 'No versions yet.'} />
         ) : (
           <DataTable
             headers={

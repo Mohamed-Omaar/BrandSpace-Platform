@@ -8,6 +8,7 @@ import {
   spacingTokens,
   typographyTokens,
   buttonClass,
+  StateMessage,
 } from '@brandspace/ui';
 import { UsageService } from '@brandspace/entitlements';
 import {
@@ -28,7 +29,6 @@ import { errorMessage, successMessage } from '../../../../../i18n/status-message
 import {
   Banner,
   Card,
-  EmptyState,
   Field,
   StatusPill,
   TableScroll,
@@ -395,8 +395,8 @@ export default async function WorkspaceDetailPage({
         testId="workspace-entitlements"
       >
         {effective.decisions.length === 0 ? (
-          <EmptyState
-            message={
+          <StateMessage
+            title={
               locale === 'ar'
                 ? 'لا توجد ميزات مُعرّفة في الإعدادات النشطة بعد.'
                 : 'No features are defined in the active configuration yet.'
@@ -439,8 +439,8 @@ export default async function WorkspaceDetailPage({
       {may('platform.entitlement.override') && (
         <Card title={t('ws.override')} testId="workspace-overrides">
           {overrides.length === 0 ? (
-            <EmptyState
-              message={locale === 'ar' ? 'لا توجد استثناءات نشطة.' : 'No active overrides.'}
+            <StateMessage
+              title={locale === 'ar' ? 'لا توجد استثناءات نشطة.' : 'No active overrides.'}
             />
           ) : (
             <TableScroll>
@@ -615,8 +615,8 @@ export default async function WorkspaceDetailPage({
         testId="workspace-subscription"
       >
         {!subscription ? (
-          <EmptyState
-            message={
+          <StateMessage
+            title={
               locale === 'ar'
                 ? 'لا يوجد اشتراك بعد. يُنشأ عند تعيين خطة أو بدء تجربة.'
                 : 'No subscription yet. One is created when a plan is assigned or a trial starts.'
@@ -698,8 +698,8 @@ export default async function WorkspaceDetailPage({
           testId="workspace-credit-grants"
         >
           {grants.length === 0 ? (
-            <EmptyState
-              message={locale === 'ar' ? 'لا توجد دفعات رصيد نشطة.' : 'No live credit allocations.'}
+            <StateMessage
+              title={locale === 'ar' ? 'لا توجد دفعات رصيد نشطة.' : 'No live credit allocations.'}
             />
           ) : (
             <TableScroll>
@@ -767,10 +767,8 @@ export default async function WorkspaceDetailPage({
         testId="workspace-quota-usage"
       >
         {counters.length === 0 ? (
-          <EmptyState
-            message={
-              locale === 'ar' ? 'لم يُسجَّل استهلاك بعد.' : 'No usage has been recorded yet.'
-            }
+          <StateMessage
+            title={locale === 'ar' ? 'لم يُسجَّل استهلاك بعد.' : 'No usage has been recorded yet.'}
           />
         ) : (
           <TableScroll>
@@ -815,8 +813,8 @@ export default async function WorkspaceDetailPage({
           testId="workspace-cohorts"
         >
           {cohortMemberships.length === 0 ? (
-            <EmptyState
-              message={
+            <StateMessage
+              title={
                 locale === 'ar'
                   ? 'مساحة العمل ليست في أي مجموعة تجربة.'
                   : 'This workspace is in no beta cohort.'
@@ -894,7 +892,7 @@ export default async function WorkspaceDetailPage({
       {/* --- Members -------------------------------------------------- */}
       <Card title={t('ws.members')} testId="workspace-members">
         {members.length === 0 ? (
-          <EmptyState message={t('ws.noData')} />
+          <StateMessage title={t('ws.noData')} />
         ) : (
           <TableScroll>
             <table style={tableStyle()}>
@@ -925,7 +923,7 @@ export default async function WorkspaceDetailPage({
       {may('platform.workspace.invite') && (
         <Card title={t('ws.invitations')} testId="workspace-invitations">
           {invitations.length === 0 ? (
-            <EmptyState message={locale === 'ar' ? 'لا توجد دعوات بعد.' : 'No invitations yet.'} />
+            <StateMessage title={locale === 'ar' ? 'لا توجد دعوات بعد.' : 'No invitations yet.'} />
           ) : (
             <TableScroll>
               <table style={tableStyle()}>
@@ -1001,7 +999,7 @@ export default async function WorkspaceDetailPage({
       {/* --- Activity ------------------------------------------------- */}
       <Card title={t('ws.activity')} testId="workspace-activity">
         {activity.length === 0 ? (
-          <EmptyState message={t('ws.noData')} />
+          <StateMessage title={t('ws.noData')} />
         ) : (
           <TableScroll>
             <table style={tableStyle()}>

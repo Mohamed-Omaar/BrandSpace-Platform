@@ -13,8 +13,9 @@ import {
   fontTokens,
   spacingTokens,
   typographyTokens,
+  StateMessage,
 } from '@brandspace/ui';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import {
   currentEnvironment,
   getConfigService,
@@ -221,10 +222,8 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
           }
         />
         {models.length === 0 ? (
-          <EmptyState
-            message={
-              isArabic ? 'لا توجد نماذج في الكتالوج بعد.' : 'No models in the catalogue yet.'
-            }
+          <StateMessage
+            title={isArabic ? 'لا توجد نماذج في الكتالوج بعد.' : 'No models in the catalogue yet.'}
           />
         ) : (
           <DataTable
@@ -273,8 +272,8 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
           }
         />
         {routing.rules.length === 0 ? (
-          <EmptyState
-            message={
+          <StateMessage
+            title={
               isArabic
                 ? 'لا توجد قواعد مهام — تُوجَّه كل مهمة عبر قدرتها.'
                 : 'No task rules. Every task routes through its capability.'

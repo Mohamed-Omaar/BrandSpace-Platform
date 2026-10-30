@@ -9,6 +9,7 @@ import {
   colorTokens,
   statusTone,
   typographyTokens,
+  StateMessage,
 } from '@brandspace/ui';
 import { AppError } from '@brandspace/shared';
 import {
@@ -17,7 +18,7 @@ import {
   serviceActor,
 } from '../../../../../server/platform-context';
 import { translator } from '../../../../../i18n/messages';
-import { Card, EmptyState } from '../../../../../components/console-ui';
+import { Card } from '../../../../../components/console-ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -177,8 +178,8 @@ export default async function AiRequestPage({
 
         <Card testId="ai-request-ledger">
           {detail.ledger.length === 0 ? (
-            <EmptyState
-              message={
+            <StateMessage
+              title={
                 isArabic
                   ? 'لا توجد قيود في سجل الاستخدام لهذا الطلب.'
                   : 'No usage ledger entries for this request.'

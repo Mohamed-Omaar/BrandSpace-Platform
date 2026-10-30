@@ -469,14 +469,6 @@
  * rule 5 — only the tokens already declared above.
  */
 
-.cs-empty {
-  padding: var(--bsp-px-48) var(--bsp-px-22);
-  text-align: center;
-  color: var(--cs-muted);
-  font-size: var(--bsp-fs-10);
-  line-height: 1.6;
-}
-
 .cs-notice {
   border-radius: calc(var(--bsp-px-13) * var(--bs-radius-scale));
   padding: var(--bsp-px-12);

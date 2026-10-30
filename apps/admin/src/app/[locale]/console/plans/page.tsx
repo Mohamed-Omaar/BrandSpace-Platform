@@ -6,10 +6,11 @@ import {
   spacingTokens,
   typographyTokens,
   buttonClass,
+  StateMessage,
 } from '@brandspace/ui';
 import { readPlanCatalogue, type PlanDetail } from '@brandspace/entitlements';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import { Banner, Card, Field, StatusPill, inputStyle } from '../../../../components/console-ui';
 import {
   currentEnvironment,
@@ -159,8 +160,8 @@ export default async function PlansPage({
             }
           />
           {activePlans.length === 0 ? (
-            <EmptyState
-              message={
+            <StateMessage
+              title={
                 isArabic
                   ? 'لم تُفعَّل أي خطة بعد. أنشئ خطة في المسودة أدناه ثم فعّلها.'
                   : 'No plan has been activated yet. Create one in the draft below, then activate it.'
@@ -371,7 +372,7 @@ export default async function PlansPage({
               </div>
             </>
           ) : (
-            <EmptyState message={isArabic ? 'لا توجد مسودة مفتوحة.' : 'No draft is open.'} />
+            <StateMessage title={isArabic ? 'لا توجد مسودة مفتوحة.' : 'No draft is open.'} />
           )}
         </Card>
 
@@ -407,7 +408,7 @@ export default async function PlansPage({
         <Card>
           <SectionHeader title={isArabic ? 'سجل الإصدارات' : 'Version history'} />
           {state.versions.length === 0 ? (
-            <EmptyState message={isArabic ? 'لا توجد إصدارات بعد.' : 'No versions yet.'} />
+            <StateMessage title={isArabic ? 'لا توجد إصدارات بعد.' : 'No versions yet.'} />
           ) : (
             <DataTable
               headers={

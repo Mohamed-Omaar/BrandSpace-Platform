@@ -1,5 +1,5 @@
-import { typographyTokens, fontTokens } from '@brandspace/ui';
-import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import { typographyTokens, fontTokens, StateMessage } from '@brandspace/ui';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import { getPlatformPrisma, requirePageActor } from '../../../../server/platform-context';
 
 export const dynamic = 'force-dynamic';
@@ -46,7 +46,7 @@ export default async function AuditPage({ params }: { params: Promise<{ locale: 
         }
       />
       {events.length === 0 ? (
-        <EmptyState message={isArabic ? 'لا توجد أحداث.' : 'No events recorded.'} />
+        <StateMessage title={isArabic ? 'لا توجد أحداث.' : 'No events recorded.'} />
       ) : (
         <DataTable
           headers={[
