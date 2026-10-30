@@ -1703,6 +1703,68 @@ html[dir='rtl'] input[type='week'] {
 }
 
 /*
+ * THE TABLE (design-system programme, S5). What `thStyle()`, `tdStyle()`,
+ * `tableStyle()` and `customerTableStyle()` painted inline, now classes both
+ * apps load. Same declarations, same tokens, so neither look changes. No other
+ * rule names `table`, `th` or `td`, so losing the inline style's precedence
+ * changes nothing.
+ */
+:is(.bs-th, .bs-td) {
+  --bs-table-rule: 1px solid var(--bs-hairline);
+  --bs-table-head-tracking: 0.04em;
+}
+.bs-table-scroll {
+  overflow-x: auto;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  position: relative;
+  /* A soft container, not a bordered box (D-54). */
+  border-radius: var(--bsp-rem-0-6875);
+  background: var(--bs-surface);
+}
+.bs-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--bsp-fs-11);
+  /* `start`, not `left`, so Arabic mirrors. */
+  text-align: start;
+}
+/* DataTable's table carries the rest of the small body type. */
+.bs-table.bs-table-body {
+  line-height: var(--bsp-rem-1);
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.bs-th {
+  text-align: start;
+  padding-block: var(--bsp-rem-0-5);
+  padding-inline: var(--bsp-rem-1);
+  /* No filled header band and no grid: one hairline under the header row. */
+  background: transparent;
+  border-block-end: var(--bs-table-rule);
+  color: var(--bs-text-muted);
+  font-size: var(--bsp-fs-9);
+  line-height: var(--bsp-rem-0-75);
+  font-weight: 600;
+  letter-spacing: var(--bs-table-head-tracking);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.bs-td {
+  padding-block: var(--bsp-rem-1);
+  padding-inline: var(--bsp-rem-1);
+  /* A row separator, not a cell grid. */
+  border-block-end: var(--bs-table-rule);
+  vertical-align: middle;
+  color: var(--bs-text-primary);
+}
+/* The selected row keeps its fill under the pointer, as the inline style did. */
+.bs-row[aria-selected='true'],
+.bs-row[aria-selected='true']:hover {
+  background: var(--bs-surface-lavender);
+}
+
+/*
  * MO14 — A CLICKABLE CARD LIFTS 2 px with a softer, larger shadow (220 ms).
  * `.bs-liftable` is a flat item (a list row, a tile): it takes the card's
  * shadow. `.bs-card-liftable` is a surface card, already resting on the card

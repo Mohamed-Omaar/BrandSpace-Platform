@@ -1,12 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import {
-  StatusBadge,
-  scrollContainerStyle,
-  statusTone,
-  tdStyle as sharedTdStyle,
-  thStyle as sharedThStyle,
-  typographyTokens,
-} from '@brandspace/ui';
+import { StatusBadge, scrollContainerStyle, statusTone } from '@brandspace/ui';
 
 /**
  * Control Center primitives — now a THIN ADAPTER over `@brandspace/ui`.
@@ -45,24 +38,6 @@ export function TableScroll({ children }: { children: ReactNode }) {
  */
 export function inputStyle(): CSSProperties {
   return { maxInlineSize: '28rem' };
-}
-
-export function tableStyle(): CSSProperties {
-  return {
-    inlineSize: '100%',
-    borderCollapse: 'collapse',
-    fontSize: typographyTokens.bodySm.fontSize,
-    // `text-align: start` rather than `left`, so Arabic mirrors correctly.
-    textAlign: 'start',
-  };
-}
-
-export function thStyle(): CSSProperties {
-  return sharedThStyle();
-}
-
-export function tdStyle(): CSSProperties {
-  return sharedTdStyle();
 }
 
 /**

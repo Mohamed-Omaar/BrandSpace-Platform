@@ -1,7 +1,14 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { formatMoneyDisplay, type Money, systemClock } from '@brandspace/shared';
-import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import {
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+  TABLE_CLASS,
+  TD_CLASS,
+  TH_CLASS,
+} from '@brandspace/ui';
 import { requireWorkspace } from '../../../../../server/customer-context';
 import { paymentsSwitchedOn } from '../../../../../server/payments-switch';
 import { commerceSnapshotFor, invoiceDetailFor } from '../../../../../server/commerce-context';
@@ -11,9 +18,6 @@ import {
   CustomerCard,
   CustomerEmpty,
   WorkspaceShell,
-  customerTableStyle,
-  customerTdStyle,
-  customerThStyle,
 } from '../../../../../components/workspace-shell';
 import { dayLabel } from '../../../../../server/prototype-dates';
 
@@ -98,13 +102,13 @@ export default async function InvoicePage({
       </CustomerCard>
 
       <CustomerCard title={t('billing.invoiceLines')} testId="invoice-lines">
-        <table style={customerTableStyle()}>
+        <table className={TABLE_CLASS}>
           <thead>
             <tr>
-              <th style={customerThStyle()}>{t('billing.invoiceLines')}</th>
-              <th style={customerThStyle()}>{t('billing.invoiceQuantity')}</th>
-              <th style={customerThStyle()}>{t('billing.invoiceUnit')}</th>
-              <th style={customerThStyle()}>{t('billing.invoiceAmount')}</th>
+              <th className={TH_CLASS}>{t('billing.invoiceLines')}</th>
+              <th className={TH_CLASS}>{t('billing.invoiceQuantity')}</th>
+              <th className={TH_CLASS}>{t('billing.invoiceUnit')}</th>
+              <th className={TH_CLASS}>{t('billing.invoiceAmount')}</th>
             </tr>
           </thead>
           <tbody>
@@ -112,12 +116,12 @@ export default async function InvoicePage({
               <tr key={line.id} data-testid={`invoice-line-${line.id}`}>
                 {/* WRITTEN IN BOTH LANGUAGES AT ISSUE TIME. Neither is derived
                     now from a catalogue that may have moved on. */}
-                <td style={customerTdStyle()}>
+                <td className={TD_CLASS}>
                   {locale === 'ar' ? line.description.ar : line.description.en}
                 </td>
-                <td style={customerTdStyle()}>{line.quantity}</td>
-                <td style={customerTdStyle()}>{show(line.unitAmount)}</td>
-                <td style={customerTdStyle()}>{show(line.amount)}</td>
+                <td className={TD_CLASS}>{line.quantity}</td>
+                <td className={TD_CLASS}>{show(line.unitAmount)}</td>
+                <td className={TD_CLASS}>{show(line.amount)}</td>
               </tr>
             ))}
           </tbody>
@@ -162,26 +166,26 @@ export default async function InvoicePage({
       {detail.creditNotes.length > 0 ? (
         <CustomerCard title={t('billing.creditNotes')} testId="invoice-credit-notes">
           <p style={mutedStyle}>{t('billing.creditNoteNotice')}</p>
-          <table style={customerTableStyle()}>
+          <table className={TABLE_CLASS}>
             <thead>
               <tr>
-                <th style={customerThStyle()}>{t('billing.invoiceNumber')}</th>
-                <th style={customerThStyle()}>{t('billing.invoiceDate')}</th>
-                <th style={customerThStyle()}>{t('billing.creditNoteReason')}</th>
-                <th style={customerThStyle()}>{t('billing.status')}</th>
-                <th style={customerThStyle()}>{t('billing.invoiceTotal')}</th>
+                <th className={TH_CLASS}>{t('billing.invoiceNumber')}</th>
+                <th className={TH_CLASS}>{t('billing.invoiceDate')}</th>
+                <th className={TH_CLASS}>{t('billing.creditNoteReason')}</th>
+                <th className={TH_CLASS}>{t('billing.status')}</th>
+                <th className={TH_CLASS}>{t('billing.invoiceTotal')}</th>
               </tr>
             </thead>
             <tbody>
               {detail.creditNotes.map((note) => (
                 <tr key={note.id} data-testid={`credit-note-${note.id}`}>
-                  <td style={customerTdStyle()}>{note.number ?? '—'}</td>
-                  <td style={customerTdStyle()}>{day(note.issuedAt)}</td>
-                  <td style={customerTdStyle()}>{note.reason}</td>
-                  <td style={customerTdStyle()}>
+                  <td className={TD_CLASS}>{note.number ?? '—'}</td>
+                  <td className={TD_CLASS}>{day(note.issuedAt)}</td>
+                  <td className={TD_CLASS}>{note.reason}</td>
+                  <td className={TD_CLASS}>
                     {t(`billing.creditNoteStatus.${note.status}` as MessageKey)}
                   </td>
-                  <td style={customerTdStyle()}>{show(note.total)}</td>
+                  <td className={TD_CLASS}>{show(note.total)}</td>
                 </tr>
               ))}
             </tbody>

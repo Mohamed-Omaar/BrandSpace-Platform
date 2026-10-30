@@ -9,6 +9,9 @@ import {
   typographyTokens,
   buttonClass,
   StateMessage,
+  TABLE_CLASS,
+  TD_CLASS,
+  TH_CLASS,
 } from '@brandspace/ui';
 import { UsageService } from '@brandspace/entitlements';
 import {
@@ -33,9 +36,6 @@ import {
   StatusPill,
   TableScroll,
   inputStyle,
-  tableStyle,
-  tdStyle,
-  thStyle,
 } from '../../../../../components/console-ui';
 import {
   addCohortAction,
@@ -404,22 +404,22 @@ export default async function WorkspaceDetailPage({
           />
         ) : (
           <TableScroll>
-            <table style={tableStyle()} data-testid="entitlement-table">
+            <table className={TABLE_CLASS} data-testid="entitlement-table">
               <thead>
                 <tr>
-                  <th style={thStyle()}>{t('ws.feature')}</th>
-                  <th style={thStyle()}>{t('ws.status')}</th>
-                  <th style={thStyle()}>{t('ws.limit')}</th>
-                  <th style={thStyle()}>{t('ws.trace')}</th>
+                  <th className={TH_CLASS}>{t('ws.feature')}</th>
+                  <th className={TH_CLASS}>{t('ws.status')}</th>
+                  <th className={TH_CLASS}>{t('ws.limit')}</th>
+                  <th className={TH_CLASS}>{t('ws.trace')}</th>
                 </tr>
               </thead>
               <tbody>
                 {effective.decisions.map((d) => (
                   <tr key={d.featureKey} data-testid={`entitlement-${d.featureKey}`}>
-                    <td style={tdStyle()}>{d.featureKey}</td>
-                    <td style={tdStyle()}>{d.enabled ? t('ws.enabled') : t('ws.disabled')}</td>
-                    <td style={tdStyle()}>{d.limitValue ?? t('ws.unlimited')}</td>
-                    <td style={{ ...tdStyle(), color: colorTokens.textSecondary }}>
+                    <td className={TD_CLASS}>{d.featureKey}</td>
+                    <td className={TD_CLASS}>{d.enabled ? t('ws.enabled') : t('ws.disabled')}</td>
+                    <td className={TD_CLASS}>{d.limitValue ?? t('ws.unlimited')}</td>
+                    <td className={TD_CLASS} style={{ color: colorTokens.textSecondary }}>
                       <code data-testid={`entitlement-source-${d.featureKey}`}>{d.source}</code>
                       <br />
                       {d.trace
@@ -444,24 +444,24 @@ export default async function WorkspaceDetailPage({
             />
           ) : (
             <TableScroll>
-              <table style={tableStyle()}>
+              <table className={TABLE_CLASS}>
                 <thead>
                   <tr>
-                    <th style={thStyle()}>{t('ws.feature')}</th>
-                    <th style={thStyle()}>{t('ws.status')}</th>
-                    <th style={thStyle()}>{t('ws.limit')}</th>
-                    <th style={thStyle()}>{t('ws.reason')}</th>
-                    <th style={thStyle()} />
+                    <th className={TH_CLASS}>{t('ws.feature')}</th>
+                    <th className={TH_CLASS}>{t('ws.status')}</th>
+                    <th className={TH_CLASS}>{t('ws.limit')}</th>
+                    <th className={TH_CLASS}>{t('ws.reason')}</th>
+                    <th className={TH_CLASS} />
                   </tr>
                 </thead>
                 <tbody>
                   {overrides.map((o) => (
                     <tr key={o.featureKey}>
-                      <td style={tdStyle()}>{o.featureKey}</td>
-                      <td style={tdStyle()}>{o.enabled ? t('ws.enabled') : t('ws.disabled')}</td>
-                      <td style={tdStyle()}>{o.limitValue ?? t('ws.unlimited')}</td>
-                      <td style={tdStyle()}>{o.reason}</td>
-                      <td style={tdStyle()}>
+                      <td className={TD_CLASS}>{o.featureKey}</td>
+                      <td className={TD_CLASS}>{o.enabled ? t('ws.enabled') : t('ws.disabled')}</td>
+                      <td className={TD_CLASS}>{o.limitValue ?? t('ws.unlimited')}</td>
+                      <td className={TD_CLASS}>{o.reason}</td>
+                      <td className={TD_CLASS}>
                         <form action={revokeOverrideAction}>
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="workspaceId" value={workspaceId} />
@@ -580,22 +580,22 @@ export default async function WorkspaceDetailPage({
 
         {ledger.length > 0 && (
           <TableScroll>
-            <table style={{ ...tableStyle(), marginBlockStart: spacingTokens.md }}>
+            <table className={TABLE_CLASS} style={{ marginBlockStart: spacingTokens.md }}>
               <thead>
                 <tr>
-                  <th style={thStyle()}>{t('common.created')}</th>
-                  <th style={thStyle()}>{t('ws.creditsAmount')}</th>
-                  <th style={thStyle()}>{t('ws.reason')}</th>
+                  <th className={TH_CLASS}>{t('common.created')}</th>
+                  <th className={TH_CLASS}>{t('ws.creditsAmount')}</th>
+                  <th className={TH_CLASS}>{t('ws.reason')}</th>
                 </tr>
               </thead>
               <tbody>
                 {ledger.map((entry) => (
                   <tr key={entry.id}>
-                    <td style={tdStyle()}>
+                    <td className={TD_CLASS}>
                       {entry.occurredAt.toISOString().slice(0, 16).replace('T', ' ')}
                     </td>
-                    <td style={tdStyle()}>{Number(entry.amountMilliCredits / 1000n)}</td>
-                    <td style={tdStyle()}>{entry.reason}</td>
+                    <td className={TD_CLASS}>{Number(entry.amountMilliCredits / 1000n)}</td>
+                    <td className={TD_CLASS}>{entry.reason}</td>
                   </tr>
                 ))}
               </tbody>
@@ -624,40 +624,42 @@ export default async function WorkspaceDetailPage({
           />
         ) : (
           <TableScroll>
-            <table style={tableStyle()} data-testid="subscription-table">
+            <table className={TABLE_CLASS} data-testid="subscription-table">
               <tbody>
                 <tr>
-                  <th style={thStyle()}>{locale === 'ar' ? 'الخطة' : 'Plan'}</th>
-                  <td style={tdStyle()} data-testid="subscription-plan">
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'الخطة' : 'Plan'}</th>
+                  <td className={TD_CLASS} data-testid="subscription-plan">
                     {subscription.planKey}
                   </td>
                 </tr>
                 <tr>
-                  <th style={thStyle()}>{locale === 'ar' ? 'الحالة' : 'Status'}</th>
-                  <td style={tdStyle()}>
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'الحالة' : 'Status'}</th>
+                  <td className={TD_CLASS}>
                     <StatusPill status={subscription.status} />
                   </td>
                 </tr>
                 <tr>
-                  <th style={thStyle()}>
+                  <th className={TH_CLASS}>
                     {locale === 'ar' ? 'السعر المثبَّت (شهري)' : 'Pinned price (monthly)'}
                   </th>
-                  <td style={tdStyle()} data-testid="subscription-pinned-price">
+                  <td className={TD_CLASS} data-testid="subscription-pinned-price">
                     {/* Minor units in the currency that was agreed. Nothing
                         converts it (D-08). */}
                     {(subscription.pinnedMonthlyMinor / 100).toFixed(2)} {subscription.currency}
                   </td>
                 </tr>
                 <tr>
-                  <th style={thStyle()}>{locale === 'ar' ? 'الدورة الحالية' : 'Current period'}</th>
-                  <td style={tdStyle()}>
+                  <th className={TH_CLASS}>
+                    {locale === 'ar' ? 'الدورة الحالية' : 'Current period'}
+                  </th>
+                  <td className={TD_CLASS}>
                     {subscription.currentPeriodStart.toISOString().slice(0, 10)} →{' '}
                     {subscription.currentPeriodEnd.toISOString().slice(0, 10)}
                   </td>
                 </tr>
                 <tr>
-                  <th style={thStyle()}>{locale === 'ar' ? 'التجربة' : 'Trial'}</th>
-                  <td style={tdStyle()} data-testid="subscription-trial">
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'التجربة' : 'Trial'}</th>
+                  <td className={TD_CLASS} data-testid="subscription-trial">
                     {subscription.trialStartedAt
                       ? `${subscription.trialStartedAt.toISOString().slice(0, 10)} → ${
                           subscription.trialEndsAt?.toISOString().slice(0, 10) ?? '—'
@@ -669,10 +671,10 @@ export default async function WorkspaceDetailPage({
                 </tr>
                 {subscription.pendingPlanKey ? (
                   <tr>
-                    <th style={thStyle()}>
+                    <th className={TH_CLASS}>
                       {locale === 'ar' ? 'تغيير مجدول' : 'Scheduled change'}
                     </th>
-                    <td style={tdStyle()} data-testid="subscription-pending">
+                    <td className={TD_CLASS} data-testid="subscription-pending">
                       {/* A downgrade takes effect at period end (D-12). Nothing
                           is removed at request time and nothing is deleted. */}
                       {subscription.pendingPlanKey} —{' '}
@@ -703,24 +705,24 @@ export default async function WorkspaceDetailPage({
             />
           ) : (
             <TableScroll>
-              <table style={tableStyle()}>
+              <table className={TABLE_CLASS}>
                 <thead>
                   <tr>
-                    <th style={thStyle()}>{locale === 'ar' ? 'المصدر' : 'Source'}</th>
-                    <th style={thStyle()}>{locale === 'ar' ? 'مُنح' : 'Granted'}</th>
-                    <th style={thStyle()}>{locale === 'ar' ? 'المتبقي' : 'Remaining'}</th>
-                    <th style={thStyle()}>{locale === 'ar' ? 'محجوز' : 'Reserved'}</th>
-                    <th style={thStyle()}>{locale === 'ar' ? 'ينتهي' : 'Expires'}</th>
+                    <th className={TH_CLASS}>{locale === 'ar' ? 'المصدر' : 'Source'}</th>
+                    <th className={TH_CLASS}>{locale === 'ar' ? 'مُنح' : 'Granted'}</th>
+                    <th className={TH_CLASS}>{locale === 'ar' ? 'المتبقي' : 'Remaining'}</th>
+                    <th className={TH_CLASS}>{locale === 'ar' ? 'محجوز' : 'Reserved'}</th>
+                    <th className={TH_CLASS}>{locale === 'ar' ? 'ينتهي' : 'Expires'}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {grants.map((grant) => (
                     <tr key={grant.id} data-testid={`grant-${grant.id}`}>
-                      <td style={tdStyle()}>{grant.source}</td>
-                      <td style={tdStyle()}>{Number(grant.amountMilliCredits / 1000n)}</td>
-                      <td style={tdStyle()}>{Number(grant.remainingMilliCredits / 1000n)}</td>
-                      <td style={tdStyle()}>{Number(grant.reservedMilliCredits / 1000n)}</td>
-                      <td style={tdStyle()}>
+                      <td className={TD_CLASS}>{grant.source}</td>
+                      <td className={TD_CLASS}>{Number(grant.amountMilliCredits / 1000n)}</td>
+                      <td className={TD_CLASS}>{Number(grant.remainingMilliCredits / 1000n)}</td>
+                      <td className={TD_CLASS}>{Number(grant.reservedMilliCredits / 1000n)}</td>
+                      <td className={TD_CLASS}>
                         {grant.expiresAt
                           ? grant.expiresAt.toISOString().slice(0, 10)
                           : locale === 'ar'
@@ -772,13 +774,13 @@ export default async function WorkspaceDetailPage({
           />
         ) : (
           <TableScroll>
-            <table style={tableStyle()}>
+            <table className={TABLE_CLASS}>
               <thead>
                 <tr>
-                  <th style={thStyle()}>{t('ws.feature')}</th>
-                  <th style={thStyle()}>{locale === 'ar' ? 'المستهلك' : 'Used'}</th>
-                  <th style={thStyle()}>{t('ws.limit')}</th>
-                  <th style={thStyle()}>{locale === 'ar' ? 'تنتهي النافذة' : 'Window ends'}</th>
+                  <th className={TH_CLASS}>{t('ws.feature')}</th>
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'المستهلك' : 'Used'}</th>
+                  <th className={TH_CLASS}>{t('ws.limit')}</th>
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'تنتهي النافذة' : 'Window ends'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -788,10 +790,10 @@ export default async function WorkspaceDetailPage({
                   );
                   return (
                     <tr key={counter.featureKey} data-testid={`usage-${counter.featureKey}`}>
-                      <td style={tdStyle()}>{counter.featureKey}</td>
-                      <td style={tdStyle()}>{counter.used}</td>
-                      <td style={tdStyle()}>{decision?.limitValue ?? t('ws.unlimited')}</td>
-                      <td style={tdStyle()}>{counter.periodEnd.toISOString().slice(0, 10)}</td>
+                      <td className={TD_CLASS}>{counter.featureKey}</td>
+                      <td className={TD_CLASS}>{counter.used}</td>
+                      <td className={TD_CLASS}>{decision?.limitValue ?? t('ws.unlimited')}</td>
+                      <td className={TD_CLASS}>{counter.periodEnd.toISOString().slice(0, 10)}</td>
                     </tr>
                   );
                 })}
@@ -822,22 +824,22 @@ export default async function WorkspaceDetailPage({
             />
           ) : (
             <TableScroll>
-              <table style={tableStyle()}>
+              <table className={TABLE_CLASS}>
                 <thead>
                   <tr>
-                    <th style={thStyle()}>{locale === 'ar' ? 'المجموعة' : 'Cohort'}</th>
-                    <th style={thStyle()}>{t('ws.reason')}</th>
-                    <th style={thStyle()}>{t('common.created')}</th>
-                    <th style={thStyle()} />
+                    <th className={TH_CLASS}>{locale === 'ar' ? 'المجموعة' : 'Cohort'}</th>
+                    <th className={TH_CLASS}>{t('ws.reason')}</th>
+                    <th className={TH_CLASS}>{t('common.created')}</th>
+                    <th className={TH_CLASS} />
                   </tr>
                 </thead>
                 <tbody>
                   {cohortMemberships.map((membership) => (
                     <tr key={membership.cohortKey} data-testid={`cohort-${membership.cohortKey}`}>
-                      <td style={tdStyle()}>{membership.cohortKey}</td>
-                      <td style={tdStyle()}>{membership.reason}</td>
-                      <td style={tdStyle()}>{membership.addedAt.toISOString().slice(0, 10)}</td>
-                      <td style={tdStyle()}>
+                      <td className={TD_CLASS}>{membership.cohortKey}</td>
+                      <td className={TD_CLASS}>{membership.reason}</td>
+                      <td className={TD_CLASS}>{membership.addedAt.toISOString().slice(0, 10)}</td>
+                      <td className={TD_CLASS}>
                         <form action={removeCohortAction}>
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="workspaceId" value={workspaceId} />
@@ -895,20 +897,20 @@ export default async function WorkspaceDetailPage({
           <StateMessage title={t('ws.noData')} />
         ) : (
           <TableScroll>
-            <table style={tableStyle()}>
+            <table className={TABLE_CLASS}>
               <thead>
                 <tr>
-                  <th style={thStyle()}>{t('ws.inviteEmail')}</th>
-                  <th style={thStyle()}>{t('ws.inviteRole')}</th>
-                  <th style={thStyle()}>{t('ws.status')}</th>
+                  <th className={TH_CLASS}>{t('ws.inviteEmail')}</th>
+                  <th className={TH_CLASS}>{t('ws.inviteRole')}</th>
+                  <th className={TH_CLASS}>{t('ws.status')}</th>
                 </tr>
               </thead>
               <tbody>
                 {members.map((m) => (
                   <tr key={m.membershipId} data-testid={`member-${m.email}`}>
-                    <td style={tdStyle()}>{m.email}</td>
-                    <td style={tdStyle()}>{locale === 'ar' ? m.roleNameAr : m.roleNameEn}</td>
-                    <td style={tdStyle()}>
+                    <td className={TD_CLASS}>{m.email}</td>
+                    <td className={TD_CLASS}>{locale === 'ar' ? m.roleNameAr : m.roleNameEn}</td>
+                    <td className={TD_CLASS}>
                       <StatusPill status={m.status} />
                     </td>
                   </tr>
@@ -926,24 +928,24 @@ export default async function WorkspaceDetailPage({
             <StateMessage title={locale === 'ar' ? 'لا توجد دعوات بعد.' : 'No invitations yet.'} />
           ) : (
             <TableScroll>
-              <table style={tableStyle()}>
+              <table className={TABLE_CLASS}>
                 <thead>
                   <tr>
-                    <th style={thStyle()}>{t('ws.inviteEmail')}</th>
-                    <th style={thStyle()}>{t('ws.inviteRole')}</th>
-                    <th style={thStyle()}>{t('ws.status')}</th>
-                    <th style={thStyle()} />
+                    <th className={TH_CLASS}>{t('ws.inviteEmail')}</th>
+                    <th className={TH_CLASS}>{t('ws.inviteRole')}</th>
+                    <th className={TH_CLASS}>{t('ws.status')}</th>
+                    <th className={TH_CLASS} />
                   </tr>
                 </thead>
                 <tbody>
                   {invitations.map((i) => (
                     <tr key={i.id} data-testid={`invitation-${i.email}`}>
-                      <td style={tdStyle()}>{i.email}</td>
-                      <td style={tdStyle()}>{i.roleKey}</td>
-                      <td style={tdStyle()}>
+                      <td className={TD_CLASS}>{i.email}</td>
+                      <td className={TD_CLASS}>{i.roleKey}</td>
+                      <td className={TD_CLASS}>
                         <StatusPill status={i.status} />
                       </td>
-                      <td style={tdStyle()}>
+                      <td className={TD_CLASS}>
                         {i.status === 'PENDING' && (
                           <form action={revokeInvitationAction}>
                             <input type="hidden" name="locale" value={locale} />
@@ -1002,22 +1004,22 @@ export default async function WorkspaceDetailPage({
           <StateMessage title={t('ws.noData')} />
         ) : (
           <TableScroll>
-            <table style={tableStyle()}>
+            <table className={TABLE_CLASS}>
               <thead>
                 <tr>
-                  <th style={thStyle()}>{locale === 'ar' ? 'الإجراء' : 'Action'}</th>
-                  <th style={thStyle()}>{locale === 'ar' ? 'الفاعل' : 'Actor'}</th>
-                  <th style={thStyle()}>{locale === 'ar' ? 'النتيجة' : 'Outcome'}</th>
-                  <th style={thStyle()}>{locale === 'ar' ? 'التاريخ' : 'When'}</th>
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'الإجراء' : 'Action'}</th>
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'الفاعل' : 'Actor'}</th>
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'النتيجة' : 'Outcome'}</th>
+                  <th className={TH_CLASS}>{locale === 'ar' ? 'التاريخ' : 'When'}</th>
                 </tr>
               </thead>
               <tbody>
                 {activity.map((a) => (
                   <tr key={a.id}>
-                    <td style={tdStyle()}>{a.action}</td>
-                    <td style={tdStyle()}>{a.actorType}</td>
-                    <td style={tdStyle()}>{a.outcome}</td>
-                    <td style={tdStyle()}>
+                    <td className={TD_CLASS}>{a.action}</td>
+                    <td className={TD_CLASS}>{a.actorType}</td>
+                    <td className={TD_CLASS}>{a.outcome}</td>
+                    <td className={TD_CLASS}>
                       {a.occurredAt.toISOString().slice(0, 16).replace('T', ' ')}
                     </td>
                   </tr>

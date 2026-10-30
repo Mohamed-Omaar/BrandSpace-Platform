@@ -10,6 +10,9 @@ import {
   shadowTokens,
   spacingTokens,
   typographyTokens,
+  TABLE_CLASS,
+  TD_CLASS,
+  TH_CLASS,
 } from '@brandspace/ui';
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
@@ -17,13 +20,7 @@ import { OWNER_ONLY_PERMISSIONS, optionalMessage, translator } from '../../../i1
 import { permissionGroups } from '../../../server/permission-groups';
 import { PermissionGroupsList } from '../../../components/permission-groups-view';
 import { SettingsFrame } from '../../../components/settings-frame';
-import {
-  CustomerCard,
-  WorkspaceShell,
-  customerTableStyle,
-  customerTdStyle,
-  customerThStyle,
-} from '../../../components/workspace-shell';
+import { CustomerCard, WorkspaceShell } from '../../../components/workspace-shell';
 
 export const dynamic = 'force-dynamic';
 
@@ -194,11 +191,11 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
                 role="group"
                 aria-label={t('perms.permission')}
               >
-                <table style={customerTableStyle()} data-testid="permissions-table">
+                <table className={TABLE_CLASS} data-testid="permissions-table">
                   <thead>
                     <tr>
-                      <th style={customerThStyle()}>{t('perms.permission')}</th>
-                      <th style={customerThStyle()}>{t('members.status')}</th>
+                      <th className={TH_CLASS}>{t('perms.permission')}</th>
+                      <th className={TH_CLASS}>{t('members.status')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -206,12 +203,12 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
                       const held = workspace.permissionKeys.includes(p.key);
                       return (
                         <tr key={p.key} data-testid={`permission-${p.key}`}>
-                          <td style={customerTdStyle()}>
+                          <td className={TD_CLASS}>
                             {/* P6-14 — the catalogue's description is English only; the
                             dictionary carries both, and the catalogue is the fallback. */}
                             {optionalMessage(messageLocale, `perms.desc.${p.key}`) ?? p.description}
                           </td>
-                          <td style={customerTdStyle()}>
+                          <td className={TD_CLASS}>
                             <span data-testid={`permission-state-${p.key}`}>
                               {held ? t('common.enabled') : t('common.disabled')}
                             </span>

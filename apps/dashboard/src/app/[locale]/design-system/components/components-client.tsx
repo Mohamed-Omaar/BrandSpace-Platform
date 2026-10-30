@@ -40,8 +40,9 @@ import {
   menuItemStyle,
   radiusTokens,
   spacingTokens,
-  tdStyle,
-  thStyle,
+  TD_CLASS,
+  TH_CLASS,
+  TABLE_CLASS,
   typographyTokens,
   type BadgeTone,
   type ButtonVariant,
@@ -50,7 +51,6 @@ import {
 } from '@brandspace/ui';
 import { CheckboxRow } from '@/components/checkbox-row';
 import { EmptyAction } from '@/components/empty-action';
-import { customerTableStyle } from '@/components/customer-styles';
 import { GalleryFeatureCard } from '../showcase-client';
 import { LONG_AR, LONG_EN, galleryCopy, type Family } from './components-fixtures';
 
@@ -965,12 +965,6 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
             { id: '2', name: long, tone: 'warning' as const },
             { id: '3', name: c('Holiday push', 'حملة العطلة'), tone: 'neutral' as const },
           ];
-          const consoleTable: CSSProperties = {
-            inlineSize: '100%',
-            borderCollapse: 'collapse',
-            fontSize: typographyTokens.bodySm.fontSize,
-            textAlign: 'start',
-          };
           return (
             <>
               <Group title="DataTable">
@@ -998,15 +992,15 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                   {null}
                 </DataTable>
               </Group>
-              <Group title={look === 'customer' ? 'customerTableStyle()' : 'tableStyle()'}>
+              <Group title=".bs-table">
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={look === 'customer' ? customerTableStyle() : consoleTable}>
+                  <table className={TABLE_CLASS}>
                     <thead>
                       <tr>
-                        <th scope="col" style={thStyle()}>
+                        <th scope="col" className={TH_CLASS}>
                           {c('Name', 'الاسم')}
                         </th>
-                        <th scope="col" style={thStyle()}>
+                        <th scope="col" className={TH_CLASS}>
                           {c('Status', 'الحالة')}
                         </th>
                       </tr>
@@ -1014,8 +1008,8 @@ export function ComponentsGallery({ locale }: { readonly locale: string }) {
                     <tbody>
                       {rows.map((row) => (
                         <tr key={row.id}>
-                          <td style={tdStyle()}>{row.name}</td>
-                          <td style={tdStyle()}>
+                          <td className={TD_CLASS}>{row.name}</td>
+                          <td className={TD_CLASS}>
                             <StatusBadge label={row.tone} tone={row.tone} />
                           </td>
                         </tr>

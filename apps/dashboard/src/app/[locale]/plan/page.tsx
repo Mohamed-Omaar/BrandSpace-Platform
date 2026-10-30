@@ -5,6 +5,9 @@ import {
   spacingTokens,
   typographyTokens,
   visuallyHiddenStyle,
+  TABLE_CLASS,
+  TD_CLASS,
+  TH_CLASS,
 } from '@brandspace/ui';
 import { mayReadCreditBalance, systemClock } from '@brandspace/shared';
 import {
@@ -25,14 +28,7 @@ import { commerceSnapshotFor } from '../../../server/commerce-context';
 import { paymentsSwitchedOn } from '../../../server/payments-switch';
 import { SettingsFrame } from '../../../components/settings-frame';
 import { BillingTabs } from '../../../components/billing-tabs';
-import {
-  CustomerCard,
-  CustomerEmpty,
-  WorkspaceShell,
-  customerTableStyle,
-  customerTdStyle,
-  customerThStyle,
-} from '../../../components/workspace-shell';
+import { CustomerCard, CustomerEmpty, WorkspaceShell } from '../../../components/workspace-shell';
 import { dayLabel, rangeLabel } from '../../../server/prototype-dates';
 import { storageUsed } from '../../../components/storage-usage';
 
@@ -448,29 +444,25 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                 role="group"
                 aria-label={t('plan.allocations')}
               >
-                <table style={customerTableStyle()} data-testid="allocations-table">
+                <table className={TABLE_CLASS} data-testid="allocations-table">
                   <thead>
                     <tr>
-                      <th style={customerThStyle()}>{t('plan.allocSource')}</th>
-                      <th style={customerThStyle()}>{t('plan.allocRemaining')}</th>
-                      <th style={customerThStyle()}>{t('plan.reserved')}</th>
-                      <th style={customerThStyle()}>{t('plan.allocExpires')}</th>
+                      <th className={TH_CLASS}>{t('plan.allocSource')}</th>
+                      <th className={TH_CLASS}>{t('plan.allocRemaining')}</th>
+                      <th className={TH_CLASS}>{t('plan.reserved')}</th>
+                      <th className={TH_CLASS}>{t('plan.allocExpires')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {grants.map((grant) => (
                       <tr key={grant.id} data-testid={`allocation-${grant.id}`}>
-                        <td style={customerTdStyle()}>
+                        <td className={TD_CLASS}>
                           {optionalMessage(messageLocale, `plan.grantSource.${grant.source}`) ??
                             grant.source}
                         </td>
-                        <td style={customerTdStyle()}>
-                          {Number(grant.remainingMilliCredits / 1000n)}
-                        </td>
-                        <td style={customerTdStyle()}>
-                          {Number(grant.reservedMilliCredits / 1000n)}
-                        </td>
-                        <td style={customerTdStyle()}>
+                        <td className={TD_CLASS}>{Number(grant.remainingMilliCredits / 1000n)}</td>
+                        <td className={TD_CLASS}>{Number(grant.reservedMilliCredits / 1000n)}</td>
+                        <td className={TD_CLASS}>
                           {grant.expiresAt
                             ? ledgerDate.format(grant.expiresAt)
                             : t('plan.allocNever')}
@@ -512,12 +504,12 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
             <CustomerEmpty message={t('plan.quotaNone')} />
           ) : (
             <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.quotaTitle')}>
-              <table style={customerTableStyle()} data-testid="quota-table">
+              <table className={TABLE_CLASS} data-testid="quota-table">
                 <thead>
                   <tr>
-                    <th style={customerThStyle()}>{t('plan.quotaItem')}</th>
-                    <th style={customerThStyle()}>{t('plan.quotaUsed')}</th>
-                    <th style={customerThStyle()}>{t('plan.limit')}</th>
+                    <th className={TH_CLASS}>{t('plan.quotaItem')}</th>
+                    <th className={TH_CLASS}>{t('plan.quotaUsed')}</th>
+                    <th className={TH_CLASS}>{t('plan.limit')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -527,13 +519,13 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                     );
                     return (
                       <tr key={counter.featureKey} data-testid={`quota-${counter.featureKey}`}>
-                        <td style={customerTdStyle()}>{featureName(counter.featureKey)}</td>
-                        <td style={customerTdStyle()}>
+                        <td className={TD_CLASS}>{featureName(counter.featureKey)}</td>
+                        <td className={TD_CLASS}>
                           {counter.featureKey === QUOTA_FEATURES.storageGb
                             ? storageText(counter.usedBytes)
                             : amount(counter.featureKey, counter.used)}
                         </td>
-                        <td style={customerTdStyle()}>
+                        <td className={TD_CLASS}>
                           {decision?.limitValue === null || decision?.limitValue === undefined
                             ? t('plan.unlimited')
                             : amount(counter.featureKey, decision.limitValue)}
@@ -577,7 +569,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                   ] as const
                 ).map(([id, caption, lines]) => (
                   <div key={id} style={tableSurface} tabIndex={0} role="group" aria-label={caption}>
-                    <table style={customerTableStyle()} data-testid={`storage-by-${id}`}>
+                    <table className={TABLE_CLASS} data-testid={`storage-by-${id}`}>
                       <caption
                         style={{
                           ...typographyTokens.label,
@@ -593,8 +585,8 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                           ...(storage.other > 0n ? [{ key: 'OTHER', bytes: storage.other }] : []),
                         ].map((line) => (
                           <tr key={line.key} data-testid={`storage-${id}-${line.key}`}>
-                            <td style={customerTdStyle()}>{t(storageLabelKey(id, line.key))}</td>
-                            <td style={{ ...customerTdStyle(), textAlign: 'end' }}>
+                            <td className={TD_CLASS}>{t(storageLabelKey(id, line.key))}</td>
+                            <td className={TD_CLASS} style={{ textAlign: 'end' }}>
                               {formatBytes(Number(line.bytes), locale)}
                             </td>
                           </tr>
@@ -615,19 +607,19 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
               <CustomerEmpty message={t('plan.historyNone')} />
             ) : (
               <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.history')}>
-                <table style={customerTableStyle()} data-testid="credit-history-table">
+                <table className={TABLE_CLASS} data-testid="credit-history-table">
                   <tbody>
                     {ledger.map((entry) => (
                       <tr key={entry.id} data-testid={`ledger-${entry.id}`}>
-                        <td style={customerTdStyle()}>{ledgerDate.format(entry.occurredAt)}</td>
-                        <td style={customerTdStyle()}>
+                        <td className={TD_CLASS}>{ledgerDate.format(entry.occurredAt)}</td>
+                        <td className={TD_CLASS}>
                           {number.format(Number(entry.amountMilliCredits / 1000n))}
                         </td>
                         {/* P6-14 — the entry's KIND in the reader's language. The
                           stored reason is English written by the system, so it is
                           shown only where a person wrote it (an adjustment or a
                           promotional grant), marked as its own direction. */}
-                        <td style={customerTdStyle()}>
+                        <td className={TD_CLASS}>
                           {optionalMessage(messageLocale, `plan.ledgerType.${entry.type}`) ??
                             entry.type}
                           {HUMAN_REASON_TYPES.has(entry.type) && entry.reason ? (
@@ -657,19 +649,19 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
             <CustomerEmpty message={t('plan.noFeatures')} />
           ) : (
             <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.features')}>
-              <table style={customerTableStyle()} data-testid="features-table">
+              <table className={TABLE_CLASS} data-testid="features-table">
                 <thead>
                   <tr>
-                    <th style={customerThStyle()}>{t('plan.features')}</th>
-                    <th style={customerThStyle()}>{t('plan.featureAvailability')}</th>
-                    <th style={customerThStyle()}>{t('plan.limit')}</th>
+                    <th className={TH_CLASS}>{t('plan.features')}</th>
+                    <th className={TH_CLASS}>{t('plan.featureAvailability')}</th>
+                    <th className={TH_CLASS}>{t('plan.limit')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {effective.decisions.map((d) => (
                     <tr key={d.featureKey} data-testid={`feature-${d.featureKey}`}>
-                      <td style={customerTdStyle()}>{featureName(d.featureKey)}</td>
-                      <td style={customerTdStyle()}>
+                      <td className={TD_CLASS}>{featureName(d.featureKey)}</td>
+                      <td className={TD_CLASS}>
                         {d.enabled ? t('common.enabled') : t('common.disabled')}
                       </td>
                       {/*
@@ -678,7 +670,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                         a limit: both read "—", said as "Not applicable", instead
                         of an "Unlimited" that promised what was not there.
                       */}
-                      <td style={customerTdStyle()} data-testid={`feature-limit-${d.featureKey}`}>
+                      <td className={TD_CLASS} data-testid={`feature-limit-${d.featureKey}`}>
                         {!d.enabled || valueTypeOf(d.featureKey) === 'boolean' ? (
                           <>
                             <span aria-hidden="true">—</span>
