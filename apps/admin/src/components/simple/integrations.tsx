@@ -38,6 +38,7 @@ import {
   testIntegrationAction,
 } from '../../app/[locale]/console/integrations/actions';
 import { AdvancedLink } from '../mode-switch';
+import { AiPrivacyFields, RefusedFields, aiPrivacyOf } from './ai-privacy';
 import { SocialAddresses } from '../social-addresses';
 import {
   ActionLink,
@@ -429,6 +430,10 @@ export async function SimpleIntegrationSetup({
           {copy('int.allIntegrations')}
         </ActionLink>
       </p>
+      <RefusedFields
+        locale={locale}
+        fields={typeof query['fields'] === 'string' ? query['fields'] : null}
+      />
       <ActionOutcome
         locale={locale}
         ok={ok}
@@ -742,6 +747,10 @@ export async function SimpleIntegrationSetup({
                   <input type="checkbox" required data-testid="switch-off-confirm" />
                   {fill(copy('setup.switchOffConfirm'), { area })}
                 </label>
+              ) : null}
+              {/* PR A2 (item 8): the D-13 questions, asked before an AI provider goes live. */}
+              {definition.category === 'ai' && !view.enabled ? (
+                <AiPrivacyFields locale={locale} current={await aiPrivacyOf(providerKey)} />
               ) : null}
               <div>
                 <button
