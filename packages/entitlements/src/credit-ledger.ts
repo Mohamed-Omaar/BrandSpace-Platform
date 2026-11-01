@@ -1,6 +1,7 @@
 // The client TYPE comes from @brandspace/database, the only package permitted
 // to import @prisma/client directly (docs/ARCHITECTURE.md §4.1).
 import type { PrismaClient } from '@brandspace/database';
+import { trialEndedError, trialHasEnded } from './workspace-access';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
 import {
   allocateFifo,
@@ -483,6 +484,9 @@ export class CreditLedgerService {
           reason: 'WORKSPACE_PENDING_DELETION',
         });
       }
+      // D-584: no AI once the free trial has ended — every credit spend
+      // reserves here, so this is the one place it has to be said.
+      if (await trialHasEnded(tx, input.workspaceId, now)) throw trialEndedError();
 
       const available = wallet.balanceMilliCredits - wallet.reservedMilliCredits;
       if (available < input.estimateMilliCredits) {

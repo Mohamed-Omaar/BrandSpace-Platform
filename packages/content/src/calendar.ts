@@ -9,6 +9,7 @@ import {
   type TenantScopedClient,
 } from '@brandspace/database';
 import { brandIdQueryFilter, isAppError, systemClock, type Clock } from '@brandspace/shared';
+import { assertWorkspaceMayCreate } from '@brandspace/entitlements';
 import { lockCalendarCapacity } from './calendar-capacity-lock';
 import { defaultPublishingTime, suggestedPostingTimes } from './calendar-markers';
 import {
@@ -423,6 +424,8 @@ export class ContentCalendarService {
      *
      * Minting the id up front costs nothing: it is a v4 uuid either way.
      */
+    // D-584: a workspace whose free trial has ended schedules nothing.
+    await assertWorkspaceMayCreate(this.#db, this.#workspaceId, this.#clock.now());
     const slotId = randomUUID();
     // A new slot is attempt 0 (review item 13): the same key as ever.
     const usageIdempotencyKey = scheduleUsageKey(this.#workspaceId, slotId, 0);

@@ -44,13 +44,53 @@ export function mayProcessInline(): boolean {
 function redis(): Redis {
   const url = queueUrl();
   if (!url) throw new Error('REDIS_URL is not configured.');
+  /*
+   * A PRODUCER FAILS FAST; ONLY A CONSUMER WAITS (check-up 2026-10-28, M-7).
+   *
+   * This connection only ever issues non-blocking commands (`add`, `getJob`,
+   * `remove`). `maxRetriesPerRequest: null` is what BullMQ requires of a
+   * WORKER's blocking connection — the worker opens its own, in
+   * `apps/worker/src/main.ts` — and on a producer it meant that with Redis
+   * unreachable every `add()` waited in ioredis's offline queue for the whole
+   * outage, so an upload or a queued action span instead of saving. With a
+   * finite limit a queued command is failed after one reconnect attempt, and
+   * `DISPATCH_DEADLINE_MS` below bounds the caller's wait either way.
+   */
   connection ??= new IORedis(url, {
-    // BullMQ requires this: with a retry limit, a blocking command that outlives
-    // a reconnect is dropped and the worker silently stops consuming.
-    maxRetriesPerRequest: null,
+    maxRetriesPerRequest: 1,
     enableReadyCheck: false,
   });
   return connection;
+}
+
+/**
+ * The longest a caller waits for Redis to accept a dispatch.
+ *
+ * TRANSPORT, NOT POLICY: a healthy Redis answers in milliseconds (31 ms was
+ * measured against a live one), and a dispatch that misses this deadline is
+ * reported as not dispatched, which every caller already handles — the row is
+ * recorded, and the reconciliation sweep dispatches it later. The job id is the
+ * idempotency key, so a late `add` that does land is never a second job.
+ */
+export const DISPATCH_DEADLINE_MS = 2_000;
+
+class DispatchDeadlineError extends Error {
+  override readonly name = 'DispatchDeadlineError';
+}
+
+async function withinDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new DispatchDeadlineError()), DISPATCH_DEADLINE_MS);
+    timer.unref?.();
+  });
+  // The losing side of the race must not surface as an unhandled rejection.
+  work.catch(() => undefined);
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function queueFor(name: QueueName): Queue {
@@ -110,13 +150,15 @@ export async function enqueue<Payload extends { readonly idempotencyKey: string 
   }
 
   try {
-    await queueFor(name).add(jobName, payload, {
-      // THE IDEMPOTENCY KEY IS THE JOB ID. BullMQ refuses a duplicate id, so a
-      // double dispatch — a retried server action, a reconciler racing the
-      // producer — becomes a no-op in Redis rather than a second parse.
-      jobId: payload.idempotencyKey,
-      ...options,
-    });
+    await withinDeadline(
+      queueFor(name).add(jobName, payload, {
+        // THE IDEMPOTENCY KEY IS THE JOB ID. BullMQ refuses a duplicate id, so a
+        // double dispatch — a retried server action, a reconciler racing the
+        // producer — becomes a no-op in Redis rather than a second parse.
+        jobId: payload.idempotencyKey,
+        ...options,
+      }),
+    );
     return { dispatched: true };
   } catch (error: unknown) {
     log.error('could not dispatch a job', {
@@ -154,10 +196,14 @@ export async function enqueueReplacingFinished<Payload extends { readonly idempo
   if (!queueUrl()) return { dispatched: false };
   if (payload.idempotencyKey.includes(':')) return enqueue(name, jobName, payload);
   try {
-    const existing = await queueFor(name).getJob(payload.idempotencyKey);
-    if (existing && ((await existing.isCompleted()) || (await existing.isFailed()))) {
-      await existing.remove();
-    }
+    await withinDeadline(
+      (async () => {
+        const existing = await queueFor(name).getJob(payload.idempotencyKey);
+        if (existing && ((await existing.isCompleted()) || (await existing.isFailed()))) {
+          await existing.remove();
+        }
+      })(),
+    );
   } catch (error: unknown) {
     log.error('could not inspect a finished job before re-dispatching it', {
       queue: name,

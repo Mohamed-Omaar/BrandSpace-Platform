@@ -4,6 +4,13 @@ const nextConfig = {
   poweredByHeader: false,
   transpilePackages: ['@brandspace/ui', '@brandspace/shared'],
   /*
+   * NO IMAGE OPTIMISER. No screen renders through `next/image` (the asset
+   * grid uses a plain `img` on purpose), so `/_next/image` would serve nobody
+   * and is an unauthenticated endpoint that has carried critical advisories
+   * (GHSA-2464-fhr4-w9xw, GHSA-cjq9-62q9-8jv4). `unoptimized` turns it off.
+   */
+  images: { unoptimized: true },
+  /*
    * PHASE 2C-4 — THE TRANSPORT CEILING FOR A 20 MiB BRAND BRAIN SOURCE.
    *
    * Next.js refuses a Server Action body over 1 MB, and buffers at most 10 MB

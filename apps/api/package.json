@@ -34,7 +34,7 @@
     "@brandspace/social-connectors": "workspace:*",
     "@brandspace/storage": "workspace:*",
     "@modelcontextprotocol/sdk": "1.32.1",
-    "fastify": "5.12.1",
+    "fastify": "5.12.7",
     "ioredis": "5.11.1",
     "tsx": "4.23.13",
     "zod": "3.25.76"

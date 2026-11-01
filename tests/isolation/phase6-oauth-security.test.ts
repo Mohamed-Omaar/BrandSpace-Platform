@@ -159,14 +159,26 @@ async function startFlow(provider: SocialProvider = 'TIKTOK'): Promise<string> {
 async function completeSingle(
   state: string,
   code: string,
-): Promise<Extract<CompleteConnectionResult, { outcome: 'connected' }>> {
+): Promise<{
+  connection: Awaited<ReturnType<SocialOAuthService['chooseTarget']>>;
+  targets: CompleteConnectionResult['targets'];
+  missingScopes: readonly string[];
+}> {
   const result = await serviceIn(fixtures.a.workspaceId, (service) =>
     service.complete({ state, code, redirectUri: REDIRECT }),
   );
-  if (result.outcome !== 'connected') {
-    throw new Error(`expected a single-target grant, got ${result.outcome}`);
+  if (result.targets.length !== 1) {
+    throw new Error(`expected a single-target grant, got ${result.targets.length}`);
   }
-  return result;
+  // M-2: every grant pauses; the starter confirms the lone target, as the dashboard does.
+  const connection = await serviceIn(fixtures.a.workspaceId, (service) =>
+    service.chooseTarget({
+      selectionToken: result.selectionToken,
+      externalAccountId: result.targets[0]!.externalAccountId,
+      actor: { userId: fixtures.a.userId, brandScope: [] },
+    }),
+  );
+  return { connection, targets: result.targets, missingScopes: result.missingScopes };
 }
 
 /** The message a refusal produces, so two refusals can be compared. */
@@ -702,12 +714,40 @@ describe('P6-R2 — refreshing a token is brand-scoped, as a query predicate', (
  * posts, publicly, to the wrong page of their own.
  */
 describe('P6-R5 — a grant offering several targets pauses for an explicit choice', () => {
-  it('A ONE-TARGET GRANT STILL CONNECTS IN ONE STEP', async () => {
+  it('A ONE-TARGET GRANT ALSO PAUSES: nothing is connected until the starter confirms (M-2)', async () => {
+    const before = await connectionCount();
     const state = await startFlow('TIKTOK');
     const result = await serviceIn(fixtures.a.workspaceId, (service) =>
       service.complete({ state, code: `code-${randomUUID()}`, redirectUri: REDIRECT }),
     );
-    expect(result.outcome).toBe('connected');
+    expect(result.outcome).toBe('selection_required');
+    expect(result.targets.length).toBe(1);
+    // THE CHECK-UP M-2 ASSERTION: the callback alone binds nothing.
+    expect(await connectionCount()).toBe(before);
+
+    // SOMEONE OTHER THAN THE STARTER — the person whose browser completed the
+    // consent, in the attack — cannot turn the grant into a connection.
+    await expect(
+      serviceIn(fixtures.a.workspaceId, (service) =>
+        service.chooseTarget({
+          selectionToken: result.selectionToken,
+          externalAccountId: result.targets[0]!.externalAccountId,
+          actor: { userId: randomUUID(), brandScope: [] },
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(await connectionCount()).toBe(before);
+
+    // The starter confirms, and only then is the account connected.
+    const connection = await serviceIn(fixtures.a.workspaceId, (service) =>
+      service.chooseTarget({
+        selectionToken: result.selectionToken,
+        externalAccountId: result.targets[0]!.externalAccountId,
+        actor: { userId: fixtures.a.userId, brandScope: [] },
+      }),
+    );
+    expect(connection.status).toBe('ACTIVE');
+    expect(await connectionCount()).toBe(before + 1);
   });
 
   it('A TWO-TARGET GRANT CONNECTS NOTHING AND ASKS', async () => {

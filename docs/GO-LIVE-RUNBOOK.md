@@ -122,7 +122,7 @@ The readiness rule used by all four: every name in `EXPECTED_MIGRATIONS` is in
 
 ### migration job (already up)
 
-Start command `pnpm --filter @brandspace/database exec prisma migrate deploy`, variables
+Start command `pnpm --filter @brandspace/database --fail-if-no-match exec prisma migrate deploy`, variables
 `DATABASE_MIGRATION_URL` and `NODE_ENV` only, no domain, no healthcheck, restart `NEVER`
 (`docs/RAILWAY-DEPLOYMENT.md` §4.1). `prisma.config.ts` reads `DATABASE_MIGRATION_URL` first and
 falls back to `DATABASE_URL`; with only the former set, a mistake fails instead of migrating as
@@ -151,7 +151,7 @@ rather than assume it.
    (and `WORKER_PORT`), the healthcheck path, the **pre-deploy command** below and the variables in §5,
    then deploy.
    - **Pre-deploy command** (Settings → Deploy → Pre-deploy Command), the same on all four:
-     `pnpm --filter @brandspace/database wait-for-migrations`. It waits, before the release starts,
+     `pnpm --filter @brandspace/database --fail-if-no-match wait-for-migrations`. It waits, before the release starts,
      until the database holds every migration that release needs, so the healthcheck clock never runs
      out on a migration that is merely slower than the deploy (the #80 race, where admin was marked
      FAILED; `docs/RAILWAY-DEPLOYMENT.md` §4.5). It reads `_prisma_migrations` with the service's own

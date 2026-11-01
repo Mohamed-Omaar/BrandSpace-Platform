@@ -50,7 +50,9 @@ import { defineRailway, github, postgres, redis, ref, service } from 'railway/ia
  * `deploy.preDeployCommand` in Railway's config-as-code, and this DSL was not
  * read from a live project.
  */
-const WAIT_FOR_MIGRATIONS = ['pnpm --filter @brandspace/database wait-for-migrations'];
+const WAIT_FOR_MIGRATIONS = [
+  'pnpm --filter @brandspace/database --fail-if-no-match wait-for-migrations',
+];
 
 /** The GitHub source every service builds from. One repository, five processes. */
 const REPO = 'Mohamed-Omaar/BrandSpace-Platform';

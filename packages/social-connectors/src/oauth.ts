@@ -124,31 +124,22 @@ export interface StartConnectionResult {
 /**
  * What a completed callback produced.
  *
- * TWO OUTCOMES, NOT ONE (D-142). A grant that offered exactly one target is
- * `connected` and a connection exists. A grant that offered several is
- * `selection_required`: the token is sealed on the authorization row, the
- * offered targets are recorded, and NOTHING is connected until the customer
- * says which of their pages they meant.
+ * ALWAYS A PAUSE (D-142, check-up M-2). The token is sealed on the
+ * authorization row, the offered targets are recorded, and NOTHING is
+ * connected until the signed-in person who started the flow confirms which
+ * target they meant — even when the provider offered only one.
  */
-export type CompleteConnectionResult =
-  | {
-      readonly outcome: 'connected';
-      readonly connection: SocialConnection;
-      readonly targets: readonly PublishTarget[];
-      /** True when the provider granted less than we asked for. */
-      readonly missingScopes: readonly string[];
-    }
-  | {
-      readonly outcome: 'selection_required';
-      /**
-       * The single-use secret authorising the choice. Returned ONCE, handed to
-       * the browser that completed the callback, and never stored in the clear
-       * — only its hash is, exactly as the state is.
-       */
-      readonly selectionToken: string;
-      readonly targets: readonly PublishTarget[];
-      readonly missingScopes: readonly string[];
-    };
+export type CompleteConnectionResult = {
+  readonly outcome: 'selection_required';
+  /**
+   * The single-use secret authorising the choice. Returned ONCE, handed to
+   * the browser that completed the callback, and never stored in the clear
+   * — only its hash is, exactly as the state is.
+   */
+  readonly selectionToken: string;
+  readonly targets: readonly PublishTarget[];
+  readonly missingScopes: readonly string[];
+};
 
 /** One choice on offer, as a screen renders it. Identity only, never a token. */
 export interface PendingSelectionView {
@@ -456,31 +447,30 @@ export class SocialOAuthService {
     // W10: the granting USER, kept only as a keyed, versioned hash.
     const providerSubjectHash = await this.#hashSubject(bundle.subjectId);
 
-    if (targets.length > 1) {
-      return this.#pauseForSelection({
-        record,
-        stateHash,
-        bundle,
-        targets,
-        missingScopes,
-        now,
-        providerSubjectHash,
-      });
-    }
-
-    const only = targets[0];
-    if (!only) throw oauthStateInvalid();
-
-    const connection = await this.#connect({
+    /*
+     * EVERY GRANT PAUSES FOR THE SIGNED-IN STARTER, EVEN A SINGLE TARGET
+     * (check-up 2026-10-28, M-2).
+     *
+     * This callback has no session (D-141): whoever's browser completes the
+     * consent is not known here. Connecting a lone target at this point let a
+     * member send their authorization URL to someone signed in to Facebook or
+     * TikTok, and the victim's approval bound the victim's account to the
+     * member's workspace. The pause is the hand-off to the dashboard, where the
+     * session lives: `pendingSelection` and `chooseTarget` require the person
+     * choosing to be the person who started the flow, so a grant completed in
+     * anyone else's browser can never become a connection. The selection token
+     * travels only to the browser that completed the consent, never to the
+     * starter, so the starter cannot finish someone else's grant either.
+     */
+    return this.#pauseForSelection({
       record,
-      target: only,
+      stateHash,
       bundle,
+      targets,
       missingScopes,
       now,
       providerSubjectHash,
     });
-
-    return { outcome: 'connected', connection, targets, missingScopes };
   }
 
   /**

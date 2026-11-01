@@ -605,25 +605,17 @@ export function registerSocialRoutes(app: FastifyInstance): void {
           }),
         );
 
-        if (result.outcome === 'selection_required') {
-          /*
-           * SEVERAL PAGES WERE OFFERED AND NOBODY HAS CHOSEN (D-142). The
-           * selection secret goes back through the browser that completed the
-           * callback — over the dashboard's own origin, where the session lives
-           * — and the choice is made there, authenticated, before any
-           * connection exists.
-           */
-          return redirectToDashboard(reply, 'select', {
-            select: result.selectionToken,
-            provider: provider.toLowerCase(),
-          });
-        }
-
-        return redirectToDashboard(
-          reply,
-          result.missingScopes.length > 0 ? 'partial' : 'connected',
-          { provider: provider.toLowerCase() },
-        );
+        /*
+         * NOTHING IS CONNECTED YET, EVEN FOR ONE TARGET (D-142, check-up M-2).
+         * The selection secret goes back through the browser that completed
+         * the callback — over the dashboard's own origin, where the session
+         * lives — and the signed-in person who started the flow confirms the
+         * target there, authenticated, before any connection exists.
+         */
+        return redirectToDashboard(reply, 'select', {
+          select: result.selectionToken,
+          provider: provider.toLowerCase(),
+        });
       } catch (error: unknown) {
         /*
          * ONE OUTCOME FOR EVERY FAILURE. An expired state, a state already

@@ -372,8 +372,19 @@ restart policy `NEVER`, run manually or by the deployment pipeline, whose start
 command is:
 
 ```
-pnpm --filter @brandspace/database exec prisma migrate deploy
+pnpm --filter @brandspace/database --fail-if-no-match exec prisma migrate deploy
 ```
+
+**`--fail-if-no-match` is load-bearing** (check-up 2026-10-28, M-8): without it a misspelt filter
+prints "No projects matched the filters" and exits **0**, so the job reports success having
+migrated nothing. The same flag is on every `wait-for-migrations` pre-deploy command, where a typo
+would otherwise silently switch the race guard off.
+
+**A green job is not evidence the migration ran.** A service with no healthcheck is marked
+SUCCESS, and reported to GitHub, as soon as its container starts; a `migrate deploy` that exits 1
+seconds later shows only as a later Crashed/stopped state. Set the same command as the job's
+**pre-deploy command** as well, so a non-zero exit marks the deployment FAILED, and always confirm
+with `prisma migrate status` (GO-LIVE-RUNBOOK §4).
 
 It needs exactly two variables: `DATABASE_MIGRATION_URL` and `NODE_ENV`.
 `packages/database/prisma.config.ts` reads `DATABASE_MIGRATION_URL` first and
@@ -498,7 +509,7 @@ Railway runs after the build and before the new deployment starts — so the hea
 only once the schema is there:
 
 ```
-pnpm --filter @brandspace/database wait-for-migrations
+pnpm --filter @brandspace/database --fail-if-no-match wait-for-migrations
 ```
 
 (`packages/database/prisma/wait-for-migrations.ts`). It polls `_prisma_migrations` every 5 s with the
@@ -509,12 +520,12 @@ after `WAIT_FOR_MIGRATIONS_TIMEOUT_SECONDS` (default 1800); a failed pre-deploy 
 the previous release keeps serving — redeploy once the migration job has finished. The readiness gate
 (§4.4) stays exactly as it is: the wait is the first line, the gate the second.
 
-| Service     | Pre-deploy command                                       | Variable it reads |
-| ----------- | -------------------------------------------------------- | ----------------- |
-| `dashboard` | `pnpm --filter @brandspace/database wait-for-migrations` | `DATABASE_URL`    |
-| `admin`     | `pnpm --filter @brandspace/database wait-for-migrations` | `DATABASE_URL`    |
-| `api`       | `pnpm --filter @brandspace/database wait-for-migrations` | `DATABASE_URL`    |
-| `worker`    | `pnpm --filter @brandspace/database wait-for-migrations` | `DATABASE_URL`    |
+| Service     | Pre-deploy command                                                          | Variable it reads |
+| ----------- | --------------------------------------------------------------------------- | ----------------- |
+| `dashboard` | `pnpm --filter @brandspace/database --fail-if-no-match wait-for-migrations` | `DATABASE_URL`    |
+| `admin`     | `pnpm --filter @brandspace/database --fail-if-no-match wait-for-migrations` | `DATABASE_URL`    |
+| `api`       | `pnpm --filter @brandspace/database --fail-if-no-match wait-for-migrations` | `DATABASE_URL`    |
+| `worker`    | `pnpm --filter @brandspace/database --fail-if-no-match wait-for-migrations` | `DATABASE_URL`    |
 
 `.railway/railway.ts` declares it (`WAIT_FOR_MIGRATIONS`); on an existing project it is an owner action
 (GO-LIVE-RUNBOOK §4, step 4). Tests: `tests/unit/wait-for-migrations.test.ts`.
@@ -1399,7 +1410,7 @@ in the repository.
 6. **Create the migration job** — the one Railway service this blueprint
    deliberately leaves out of IaC:
    - Source: this repository, root directory `/`
-   - Start command: `pnpm --filter @brandspace/database exec prisma migrate deploy`
+   - Start command: `pnpm --filter @brandspace/database --fail-if-no-match exec prisma migrate deploy`
    - Variables: `DATABASE_MIGRATION_URL`, `NODE_ENV=production`
    - No domain, no healthcheck, restart policy `NEVER`
 7. **DNS.** Add each custom domain in Railway, then create the CNAME it gives

@@ -2554,7 +2554,20 @@ export class MaintenanceScheduler {
     const cadence = await this.#cadence();
 
     const every = (seconds: number, name: string, run: () => Promise<number>): void => {
+      /*
+       * ONE PASS AT A TIME PER SWEEP (check-up 2026-10-28, M-7). A pass that is
+       * still waiting — on a Redis that went away, a slow database, a provider —
+       * must not have the next tick start a second copy beside it, or hung
+       * passes pile up for the whole outage. The skipped tick costs nothing:
+       * the next one after the pass finishes reconciles whatever is due.
+       */
+      let inFlight = false;
       const timer = setInterval(() => {
+        if (inFlight) {
+          log.warn('maintenance pass skipped: previous pass still running', { sweep: name });
+          return;
+        }
+        inFlight = true;
         void run()
           .then((count) => {
             // Logged only when it did something, so a quiet platform does not
@@ -2566,6 +2579,9 @@ export class MaintenanceScheduler {
             // A failing sweep must not stop the timer: the next pass reconciles
             // whatever this one could not (F-65's lesson).
             log.error('maintenance pass failed', { sweep: name, ...internalErrorFields(error) });
+          })
+          .finally(() => {
+            inFlight = false;
           });
       }, seconds * 1_000);
       // The process should not be held open by a maintenance timer.
@@ -2627,6 +2643,17 @@ export class MaintenanceScheduler {
     every(cadence.ingestionReconcileSeconds, 'inbound-events', () => this.processInboundEvents());
     every(cadence.retentionPurgeSeconds, 'inbound-event-retention', () =>
       this.purgeInboundEvents(),
+    );
+    /*
+     * CONNECTED AI APPS RETENTION (D-566; check-up 2026-10-28, M-15). It was
+     * reachable only from `runOnce`, so in a deployment expired codes, spent
+     * tokens, rate windows and never-connected clients were never deleted —
+     * the same gap `sweepPublishing` once had. Rows past their window answer
+     * to the purge cadence. `tests/unit/scheduler-timer-parity.test.ts` now
+     * fails when a `runOnce` sweep has no timer here.
+     */
+    every(cadence.retentionPurgeSeconds, 'ai-apps-purge', () =>
+      this.purgeAiApps(cadence.retentionPurgeBatch),
     );
     /*
      * THE AUTOMATION SWEEP (A1) — the timer the whole feature was missing.

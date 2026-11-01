@@ -620,10 +620,17 @@ GET  {PUBLIC_API_BASE_URL}/v1/social/callback/{provider}?code=…&state=…
 - **Both public base URLs are environment-driven.** Staging needs no code change, and an unset
   dashboard URL fails closed rather than guessing an origin.
 
-### 15.2 A multi-target grant pauses for the customer (D-142)
+### 15.2 Every grant pauses for the customer (D-142, D-583)
+
+**Since D-583 this applies to a grant with ONE target too.** The callback has no session, so it
+cannot tell whose browser completed the consent; connecting a lone target there let a member send
+their authorization URL to someone signed in to Facebook or TikTok and bind that person's account to
+the member's workspace (check-up 2026-10-28, M-2). Now nothing is connected until the signed-in
+person who started the flow confirms the target in the dashboard, and the selection secret reaches
+only the browser that completed the consent.
 
 ```
-callback → several targets → seal token on social_oauth_state, mint selection secret
+callback → one or more targets → seal token on social_oauth_state, mint selection secret
          → 303 …/integrations?social=select&select={secret}
 POST /v1/social/connections/selection  { selectionToken }        → the offered pages
 POST /v1/social/connections/select     { selectionToken, externalAccountId } → the connection
