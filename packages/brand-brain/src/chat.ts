@@ -14,13 +14,14 @@ import {
 } from '@brandspace/shared';
 import {
   answerLanguageInstruction,
+  OutputRejectedError,
   type AiGateway,
+  type AiGatewayRequest,
   type AiGatewayResult,
 } from '@brandspace/ai-gateway';
-import { AppError } from '@brandspace/shared';
 import { z } from 'zod';
 import { fenceUntrusted, type Citation } from './retrieval';
-import { groundingFor, keyQuestionAnswered } from './grounding';
+import { groundingFor, keyQuestionAnswered, type Grounding } from './grounding';
 import { conversationNotFound } from './errors';
 import { closestKeyQuestion, type KeyQuestion } from './completion';
 
@@ -152,6 +153,52 @@ const SYSTEM_INSTRUCTION = [
   'Respond with JSON only, exactly matching: {"kind":"answer"|"job","answer":string}.',
 ].join(' ');
 
+export interface ChatSendInput {
+  brandId: string;
+  conversationId?: string | undefined;
+  area?: BrandKnowledgeArea | undefined;
+  message: string;
+  idempotencyKey: string;
+  actorUserId: string;
+  planKey: string | null;
+  /**
+   * The member's brand scope — docs/SECURITY.md §4.2, F-74. REQUIRED for the
+   * same reason as everywhere else: an optional field would default to
+   * unrestricted and a forgetful call site would grant every brand.
+   */
+  actorBrandScope: readonly string[];
+  /**
+   * D7 — the configured key questions, so a request nothing answers can
+   * name what is missing. Optional: without it a miss is the plain refusal.
+   */
+  keyQuestions?: {
+    readonly areas: Readonly<Partial<Record<BrandKnowledgeArea, readonly KeyQuestion[]>>>;
+    readonly offersSets: Readonly<Record<string, readonly KeyQuestion[]>>;
+  };
+  /**
+   * D-573 — the language to answer in when the question does not make it
+   * clear: the brand's own (`Brand.defaultLocale`). The answer otherwise
+   * follows the question's language, never fixed to English.
+   */
+  fallbackLocale?: string | null;
+}
+
+/** PR A (H-4) — run `fn` against a chat service bound to a SHORT tenant transaction. */
+export type ChatRun = <T>(fn: (chat: BrandBrainChatService) => Promise<T>) => Promise<T>;
+
+interface ReadyTurn {
+  readonly kind: 'ready';
+  readonly now: Date;
+  readonly expiresAt: Date;
+  readonly conversation: { readonly id: string };
+  readonly userMessage: BrandBrainMessage;
+  readonly retrieval: Grounding;
+  readonly gateway: AiGateway;
+  readonly request: AiGatewayRequest;
+}
+
+type PreparedTurn = { readonly kind: 'done'; readonly turn: ChatTurn } | ReadyTurn;
+
 export class BrandBrainChatService {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
@@ -167,35 +214,33 @@ export class BrandBrainChatService {
     this.#clock = options.clock ?? systemClock;
   }
 
-  async send(input: {
-    brandId: string;
-    conversationId?: string | undefined;
-    area?: BrandKnowledgeArea | undefined;
-    message: string;
-    idempotencyKey: string;
-    actorUserId: string;
-    planKey: string | null;
-    /**
-     * The member's brand scope — docs/SECURITY.md §4.2, F-74. REQUIRED for the
-     * same reason as everywhere else: an optional field would default to
-     * unrestricted and a forgetful call site would grant every brand.
-     */
-    actorBrandScope: readonly string[];
-    /**
-     * D7 — the configured key questions, so a request nothing answers can
-     * name what is missing. Optional: without it a miss is the plain refusal.
-     */
-    keyQuestions?: {
-      readonly areas: Readonly<Partial<Record<BrandKnowledgeArea, readonly KeyQuestion[]>>>;
-      readonly offersSets: Readonly<Record<string, readonly KeyQuestion[]>>;
-    };
-    /**
-     * D-573 — the language to answer in when the question does not make it
-     * clear: the brand's own (`Brand.defaultLocale`). The answer otherwise
-     * follows the question's language, never fixed to English.
-     */
-    fallbackLocale?: string | null;
-  }): Promise<ChatTurn> {
+  async send(input: ChatSendInput): Promise<ChatTurn> {
+    return BrandBrainChatService.sendWith((fn) => fn(this), input);
+  }
+
+  /**
+   * PR A (check-up H-3, H-4) — ONE TURN, IN THREE STEPS. `run` hands each step
+   * a chat service bound to its own SHORT tenant transaction: the question is
+   * recorded and the facts retrieved in one; the provider is called with NO
+   * transaction open; the answer is written in a second. An answer that is not
+   * the agreed JSON is refused in the gateway's `accept` — released, never
+   * charged — and the customer is told so in the assistant message.
+   */
+  static async sendWith(run: ChatRun, input: ChatSendInput): Promise<ChatTurn> {
+    const prepared = await run((chat) => chat.#prepare(input));
+    if (prepared.kind === 'done') return prepared.turn;
+    let structured: ReturnType<typeof parseAskAnswer> = null;
+    const result: AiGatewayResult = await prepared.gateway.execute({
+      ...prepared.request,
+      accept: (output) => {
+        structured = output.kind === 'text' ? parseAskAnswer(output.text) : null;
+        if (!structured) throw new OutputRejectedError('The answer was not the agreed JSON shape.');
+      },
+    });
+    return run((chat) => chat.#finish(input, prepared, result, structured));
+  }
+
+  async #prepare(input: ChatSendInput): Promise<PreparedTurn> {
     /*
      * SCOPE FIRST, BEFORE THE REPLAY CHECK.
      *
@@ -237,7 +282,7 @@ export class BrandBrainChatService {
     });
     if (existing) {
       const replay = await this.#replayTurn(existing, input);
-      if (replay) return replay;
+      if (replay) return { kind: 'done', turn: replay };
     }
 
     const now = this.#clock.now();
@@ -292,44 +337,63 @@ export class BrandBrainChatService {
       });
       await this.#touch(conversation.id, now);
       return {
-        kind: 'missing',
-        areas: [],
-        missing: await this.#missing(input),
-        conversationId: conversation.id,
-        userMessage,
-        assistantMessage: assistant,
-        citations: [],
-        insufficientKnowledge: true,
-        aiRequestId: null,
-        creditsChargedMilli: 0n,
-        replayed: false,
+        kind: 'done',
+        turn: {
+          kind: 'missing',
+          areas: [],
+          missing: await this.#missing(input),
+          conversationId: conversation.id,
+          userMessage,
+          assistantMessage: assistant,
+          citations: [],
+          insufficientKnowledge: true,
+          aiRequestId: null,
+          creditsChargedMilli: 0n,
+          replayed: false,
+        },
       };
     }
 
-    const result: AiGatewayResult = await this.#gateway.execute({
-      workspaceId: this.#workspaceId,
-      userId: input.actorUserId,
-      taskKey: 'copilot.chat',
-      planKey: input.planKey,
-      // The gateway's own idempotency, derived from the client's so a retry
-      // reaches the SAME gateway request rather than a second one.
-      idempotencyKey: `brand-brain-chat:${input.idempotencyKey}`,
-      input: {
-        kind: 'text',
-        // The question is the customer's own words: fenced like every other
-        // piece of customer text in a prompt.
-        prompt: `${SYSTEM_INSTRUCTION} ${answerLanguageInstruction(input.fallbackLocale)}\n\n${fenceUntrusted('CUSTOMER QUESTION', input.message)}`,
-        // Retrieved content goes here, NOT into the prompt.
-        untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
+    return {
+      kind: 'ready',
+      now,
+      expiresAt,
+      conversation,
+      userMessage,
+      retrieval,
+      gateway: this.#gateway,
+      request: {
+        workspaceId: this.#workspaceId,
+        userId: input.actorUserId,
+        taskKey: 'copilot.chat',
+        planKey: input.planKey,
+        // The gateway's own idempotency, derived from the client's so a retry
+        // reaches the SAME gateway request rather than a second one.
+        idempotencyKey: `brand-brain-chat:${input.idempotencyKey}`,
+        input: {
+          kind: 'text',
+          // The question is the customer's own words: fenced like every other
+          // piece of customer text in a prompt.
+          prompt: `${SYSTEM_INSTRUCTION} ${answerLanguageInstruction(input.fallbackLocale)}\n\n${fenceUntrusted('CUSTOMER QUESTION', input.message)}`,
+          // Retrieved content goes here, NOT into the prompt.
+          untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
+        },
       },
-    });
+    };
+  }
 
+  async #finish(
+    input: ChatSendInput,
+    prepared: ReadyTurn,
+    result: AiGatewayResult,
+    accepted: ReturnType<typeof parseAskAnswer>,
+  ): Promise<ChatTurn> {
+    const { now, expiresAt, conversation, userMessage, retrieval } = prepared;
     const structured =
       result.status === 'SUCCEEDED' && result.output?.kind === 'text'
-        ? parseAskAnswer(result.output.text)
+        ? (accepted ?? parseAskAnswer(result.output.text))
         : null;
-
-    if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
+    if (!structured || result.status !== 'SUCCEEDED') {
       const assistant = await this.#writeAssistant({
         brandId: input.brandId,
         conversationId: conversation.id,
@@ -355,15 +419,6 @@ export class BrandBrainChatService {
         creditsChargedMilli: result.creditsChargedMilli,
         replayed: result.replayed,
       };
-    }
-
-    /*
-     * AN ANSWER THAT IS NOT THE AGREED SHAPE IS NOT STORED. The gateway has
-     * already settled the call exactly as for any other completed request;
-     * nothing half-read becomes a message.
-     */
-    if (!structured) {
-      throw new AppError('CONFLICT', 'The answer could not be read. Please try again.');
     }
 
     const assistant = await this.#writeAssistant({

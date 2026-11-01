@@ -112,6 +112,7 @@ export {
 export type { ParsedContentGap, ParsedExplanation, ParsedStrategy } from './schemas';
 
 export { AnalyticsInsightService, toEvidenceItem } from './insights';
+export type { InsightRun } from './insights';
 export type {
   ExplainInput,
   ExplainResult,

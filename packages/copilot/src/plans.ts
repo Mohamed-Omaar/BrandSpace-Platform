@@ -294,7 +294,19 @@ export class CopilotPlanService {
 
       // PARSE, DO NOT VALIDATE. The parsed value is what is stored and what is
       // hashed, so the plan records exactly what would run.
-      const parsed = tool.input.parse(proposed.arguments) as Record<string, unknown>;
+      /*
+       * KNOWN BUG (2026-10-28): `parse` threw a raw ZodError here, which the
+       * route turned into a 500. The orchestrator now validates every step
+       * before the turn is charged; this is the second line, and it refuses
+       * with a typed 422 that names the tool, never a stack of Zod issues.
+       */
+      const checked = tool.input.safeParse(proposed.arguments);
+      if (!checked.success) {
+        throw new AppError('VALIDATION_FAILED', `The arguments for ${tool.key} are not valid.`, {
+          toolKey: tool.key,
+        });
+      }
+      const parsed = checked.data as Record<string, unknown>;
 
       if (!holds(input.authorization, tool.permission)) throw copilotPlanNotFound();
       if (tool.brandScope === 'required') {

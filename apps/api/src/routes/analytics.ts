@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   AnalyticsInsightService,
+  type InsightRun,
   AnalyticsQueryService,
   TenantAnalyticsPolicySource,
   createAnalyticsRegistry,
@@ -9,6 +10,7 @@ import {
 import {
   LearningWriteBackService,
   StrategyService,
+  type StrategyRun,
   acknowledgeKnowledgeChange,
 } from '@brandspace/intelligence';
 import { BrandKnowledgeService } from '@brandspace/brand-brain';
@@ -133,46 +135,50 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
         const now = systemClock.now();
         const period = periodFromDays(body.periodDays, now);
 
-        const result = await withWorkspace(
-          caller.workspaceId,
-          async (db) => {
-            const policy = await new TenantAnalyticsPolicySource(db, currentEnvironment()).load();
-            const queries = new AnalyticsQueryService({
-              db,
-              workspaceId: caller.workspaceId,
-              policy,
-              registry: createAnalyticsRegistry({ environment: currentEnvironment() }),
-            });
-            const insights = new AnalyticsInsightService({
-              db,
-              workspaceId: caller.workspaceId,
-              policy,
-              queries,
-              gateway: gateway(),
-              // AN UNGROUNDED GENERATION MUST OUTLIVE THE TRANSACTION THAT
-              // REFUSED IT. See `insightDenialSink`.
-              denialSink: insightDenialSink(caller.workspaceId),
-            });
-            return insights.explain({
-              brandId: body.brandId,
-              scope: {
-                brandId: body.brandId,
-                ...(body.campaignId ? { campaignId: body.campaignId } : {}),
-              },
-              period,
-              ...(body.compareToPrevious ? { comparison: previousPeriod(period) } : {}),
-              idempotencyKey: body.idempotencyKey,
-              actorUserId: caller.userId,
-              planKey: facts.planKey,
-              actorBrandScope: caller.brandScope,
-              // D-116 / D-117: resolved by the SAME function the Content Studio
-              // uses, so an insight and a draft made on the same day are kept for
-              // the same length of time.
-              expiresAt: resolveContentExpiry(contentPolicy, facts, systemClock),
-            });
+        // H-4: short tenant transactions around the provider call, never one
+        // that spans it (`AnalyticsInsightService.explainWith`).
+        const run: InsightRun = (fn) =>
+          withWorkspace(
+            caller.workspaceId,
+            async (db) => {
+              const policy = await new TenantAnalyticsPolicySource(db, currentEnvironment()).load();
+              const queries = new AnalyticsQueryService({
+                db,
+                workspaceId: caller.workspaceId,
+                policy,
+                registry: createAnalyticsRegistry({ environment: currentEnvironment() }),
+              });
+              const insights = new AnalyticsInsightService({
+                db,
+                workspaceId: caller.workspaceId,
+                policy,
+                queries,
+                gateway: gateway(),
+                // AN UNGROUNDED GENERATION MUST OUTLIVE THE TRANSACTION THAT
+                // REFUSED IT. See `insightDenialSink`.
+                denialSink: insightDenialSink(caller.workspaceId),
+              });
+              return fn(insights);
+            },
+            { prisma: getPrisma() },
+          );
+        const result = await AnalyticsInsightService.explainWith(run, {
+          brandId: body.brandId,
+          scope: {
+            brandId: body.brandId,
+            ...(body.campaignId ? { campaignId: body.campaignId } : {}),
           },
-          { prisma: getPrisma() },
-        );
+          period,
+          ...(body.compareToPrevious ? { comparison: previousPeriod(period) } : {}),
+          idempotencyKey: body.idempotencyKey,
+          actorUserId: caller.userId,
+          planKey: facts.planKey,
+          actorBrandScope: caller.brandScope,
+          // D-116 / D-117: resolved by the SAME function the Content Studio
+          // uses, so an insight and a draft made on the same day are kept for
+          // the same length of time.
+          expiresAt: resolveContentExpiry(contentPolicy, facts, systemClock),
+        });
 
         return reply.send({
           insightId: result.insight?.id ?? null,
@@ -231,37 +237,41 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
         const now = systemClock.now();
         const period = periodFromDays(body.periodDays, now);
 
-        const result = await withWorkspace(
-          caller.workspaceId,
-          async (db) => {
-            const policy = await new TenantAnalyticsPolicySource(db, currentEnvironment()).load();
-            const queries = new AnalyticsQueryService({
-              db,
-              workspaceId: caller.workspaceId,
-              policy,
-              registry: createAnalyticsRegistry({ environment: currentEnvironment() }),
-            });
-            const strategy = new StrategyService({
-              db,
-              workspaceId: caller.workspaceId,
-              policy,
-              queries,
-              gateway: gateway(),
-              denialSink: insightDenialSink(caller.workspaceId),
-            });
-            return strategy.generate({
-              brandId: body.brandId,
-              period,
-              objective: body.objective,
-              idempotencyKey: body.idempotencyKey,
-              actorUserId: caller.userId,
-              planKey: facts.planKey,
-              actorBrandScope: caller.brandScope,
-              expiresAt: resolveContentExpiry(contentPolicy, facts, systemClock),
-            });
-          },
-          { prisma: getPrisma() },
-        );
+        // H-4: short tenant transactions around the provider call, never one
+        // that spans it (`StrategyService.generateWith`).
+        const run: StrategyRun = (fn) =>
+          withWorkspace(
+            caller.workspaceId,
+            async (db) => {
+              const policy = await new TenantAnalyticsPolicySource(db, currentEnvironment()).load();
+              const queries = new AnalyticsQueryService({
+                db,
+                workspaceId: caller.workspaceId,
+                policy,
+                registry: createAnalyticsRegistry({ environment: currentEnvironment() }),
+              });
+              const strategy = new StrategyService({
+                db,
+                workspaceId: caller.workspaceId,
+                policy,
+                queries,
+                gateway: gateway(),
+                denialSink: insightDenialSink(caller.workspaceId),
+              });
+              return fn(strategy);
+            },
+            { prisma: getPrisma() },
+          );
+        const result = await StrategyService.generateWith(run, {
+          brandId: body.brandId,
+          period,
+          objective: body.objective,
+          idempotencyKey: body.idempotencyKey,
+          actorUserId: caller.userId,
+          planKey: facts.planKey,
+          actorBrandScope: caller.brandScope,
+          expiresAt: resolveContentExpiry(contentPolicy, facts, systemClock),
+        });
 
         return reply.send({
           insightId: result.insight?.id ?? null,
@@ -328,37 +338,41 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
         const now = systemClock.now();
         const period = periodFromDays(body.periodDays, now);
 
-        const result = await withWorkspace(
-          caller.workspaceId,
-          async (db) => {
-            const policy = await new TenantAnalyticsPolicySource(db, currentEnvironment()).load();
-            const queries = new AnalyticsQueryService({
-              db,
-              workspaceId: caller.workspaceId,
-              policy,
-              registry: createAnalyticsRegistry({ environment: currentEnvironment() }),
-            });
-            const strategy = new StrategyService({
-              db,
-              workspaceId: caller.workspaceId,
-              policy,
-              queries,
-              gateway: gateway(),
-              denialSink: insightDenialSink(caller.workspaceId),
-            });
-            return strategy.analyseContentGaps({
-              brandId: body.brandId,
-              period,
-              objective: body.objective,
-              idempotencyKey: body.idempotencyKey,
-              actorUserId: caller.userId,
-              planKey: facts.planKey,
-              actorBrandScope: caller.brandScope,
-              expiresAt: resolveContentExpiry(contentPolicy, facts, systemClock),
-            });
-          },
-          { prisma: getPrisma() },
-        );
+        // H-4: short tenant transactions around the provider call, never one
+        // that spans it (`StrategyService.analyseContentGapsWith`).
+        const run: StrategyRun = (fn) =>
+          withWorkspace(
+            caller.workspaceId,
+            async (db) => {
+              const policy = await new TenantAnalyticsPolicySource(db, currentEnvironment()).load();
+              const queries = new AnalyticsQueryService({
+                db,
+                workspaceId: caller.workspaceId,
+                policy,
+                registry: createAnalyticsRegistry({ environment: currentEnvironment() }),
+              });
+              const strategy = new StrategyService({
+                db,
+                workspaceId: caller.workspaceId,
+                policy,
+                queries,
+                gateway: gateway(),
+                denialSink: insightDenialSink(caller.workspaceId),
+              });
+              return fn(strategy);
+            },
+            { prisma: getPrisma() },
+          );
+        const result = await StrategyService.analyseContentGapsWith(run, {
+          brandId: body.brandId,
+          period,
+          objective: body.objective,
+          idempotencyKey: body.idempotencyKey,
+          actorUserId: caller.userId,
+          planKey: facts.planKey,
+          actorBrandScope: caller.brandScope,
+          expiresAt: resolveContentExpiry(contentPolicy, facts, systemClock),
+        });
 
         return reply.send({
           insightId: result.insight?.id ?? null,

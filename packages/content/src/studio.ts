@@ -15,8 +15,11 @@ import {
 } from '@brandspace/shared';
 import {
   languageInstruction,
+  OutputRejectedError,
   type AiGateway,
+  type AiGatewayRequest,
   type AiGatewayResult,
+  type AiOutput,
   type AiQuote,
 } from '@brandspace/ai-gateway';
 import {
@@ -47,6 +50,7 @@ import {
   type TemplateSource,
 } from './templates';
 import { parseGeneratedContent, type GeneratedContent } from './schemas';
+import { normaliseHashtags } from './hashtags';
 
 /**
  * AI Content Studio — Phase 5 scope item 3, docs/PRODUCT.md §5 module 7.
@@ -203,6 +207,80 @@ export interface GenerationResult {
   readonly replayed: boolean;
 }
 
+/**
+ * PR A (H-4) — run `fn` against a studio bound to a SHORT tenant transaction.
+ * A route passes one that opens a fresh `withWorkspace` per call; `generate()`
+ * and `applyTool()` pass one that reuses the studio's own transaction.
+ */
+export type StudioRun = <T>(fn: (studio: ContentStudioService) => Promise<T>) => Promise<T>;
+
+interface ReadyGeneration {
+  readonly kind: 'ready';
+  readonly input: GenerateInput;
+  readonly template: TemplateSource | null;
+  readonly platforms: ReturnType<ContentStudioService['assertPlatforms']>;
+  readonly dialect: ContentDialect;
+  readonly expiresAt: Date | null;
+  readonly retrieval: Grounding;
+  readonly gateway: AiGateway;
+  readonly request: AiGatewayRequest;
+  readonly parse: (output: AiOutput) => GeneratedContent;
+}
+
+type PreparedGeneration =
+  { readonly kind: 'done'; readonly result: GenerationResult } | ReadyGeneration;
+
+/**
+ * PR A (H-3) — a parser's refusal, as the gateway's "do not charge". The reason
+ * names the KIND of problem for the operator; it never quotes the output.
+ */
+export function rejectUnusable<T>(parse: () => T): T {
+  try {
+    return parse();
+  } catch (error) {
+    if (error instanceof OutputRejectedError) throw error;
+    throw new OutputRejectedError(
+      error instanceof AppError
+        ? `The model's answer failed validation (${error.code}).`
+        : 'The model’s answer could not be parsed.',
+    );
+  }
+}
+
+export interface ApplyToolInput {
+  variantId: string;
+  tool: ContentTool;
+  /** For `tone`, the requested tone. For `translate`, the target locale. */
+  argument?: string | undefined;
+  targetLocale?: Locale | undefined;
+  idempotencyKey: string;
+  actorUserId: string;
+  planKey: string | null;
+  actorBrandScope: readonly string[];
+  /** Q8 — whether this editor may schedule decides what the edit does to a scheduled post. */
+  actorPermissionKeys: readonly string[];
+}
+
+interface ToolRequest {
+  readonly variant: ContentVariant;
+  readonly platform: NonNullable<ReturnType<typeof findPlatform>>;
+  readonly dialect: ContentDialect;
+  readonly targetLocale: Locale;
+  readonly retrieval: Grounding;
+  readonly refreshKey: string | null;
+  readonly request: {
+    readonly kind: 'text';
+    readonly prompt: string;
+    readonly untrustedContext: readonly string[];
+  };
+}
+
+export interface ApplyToolResult {
+  readonly variant: ContentVariant;
+  readonly aiRequestId: string;
+  readonly creditsChargedMilli: bigint;
+}
+
 export class ContentStudioService extends ContentLibraryService {
   readonly #gateway: AiGateway;
   readonly #clock: Clock;
@@ -259,6 +337,46 @@ export class ContentStudioService extends ContentLibraryService {
 
   /** AC-11.1 to AC-11.9 — one generation, end to end. */
   async generate(input: GenerateInput): Promise<GenerationResult> {
+    return ContentStudioService.generateWith((fn) => fn(this), input);
+  }
+
+  /**
+   * PR A (check-up H-3, H-4) — ONE GENERATION, IN THREE STEPS.
+   *
+   * `run` opens a SHORT tenant transaction and hands it a studio bound to it.
+   * The reads (scope, replay, headroom, grounding) run in one; the provider is
+   * called with NO transaction open, so a slow generation can no longer expire
+   * the tenant transaction (P2028), lose the draft and hold a pooled
+   * connection; and the draft is written in a second. The output is parsed
+   * INSIDE the gateway's `accept`, before any charge, so a reply that does not
+   * parse is released, never charged, and the same key runs again.
+   *
+   * `generate()` passes a runner that reuses its own transaction, which keeps
+   * every caller that already holds one (and the tests) working unchanged.
+   */
+  static async generateWith(run: StudioRun, input: GenerateInput): Promise<GenerationResult> {
+    const prepared = await run((studio) => studio.#prepareGeneration(input));
+    if (prepared.kind === 'done') return prepared.result;
+    const { gateway, request, parse } = prepared;
+    let parsed: GeneratedContent | null = null;
+    const result: AiGatewayResult = await gateway.execute({
+      ...request,
+      accept: (output) => {
+        parsed = parse(output);
+      },
+    });
+    if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
+      /*
+       * AC-11.9. A failed or malformed generation NEVER becomes a draft. The
+       * gateway already released the credits; there is nothing to persist.
+       */
+      throw generationFailed(result.failureMessage);
+    }
+    const accepted: GeneratedContent = parsed ?? prepared.parse(result.output);
+    return run((studio) => studio.#persistGeneration(prepared, result, accepted));
+  }
+
+  async #prepareGeneration(input: GenerateInput): Promise<PreparedGeneration> {
     /*
      * SCOPE FIRST, BEFORE THE REPLAY CHECK — the F-74 ordering. A member who
      * may not act on this brand must not learn whether a draft for it exists,
@@ -307,13 +425,16 @@ export class ContentStudioService extends ContentLibraryService {
     });
     if (replay) {
       return {
-        item: replay,
-        variants: replay.variants,
-        citations: (replay.citations as unknown as Citation[] | null) ?? [],
-        insufficientKnowledge: replay.insufficientKnowledge,
-        aiRequestId: replay.aiRequestId,
-        creditsChargedMilli: 0n,
-        replayed: true,
+        kind: 'done',
+        result: {
+          item: replay,
+          variants: replay.variants,
+          citations: (replay.citations as unknown as Citation[] | null) ?? [],
+          insufficientKnowledge: replay.insufficientKnowledge,
+          aiRequestId: replay.aiRequestId,
+          creditsChargedMilli: 0n,
+          replayed: true,
+        },
       };
     }
 
@@ -346,46 +467,57 @@ export class ContentStudioService extends ContentLibraryService {
       });
       await this.#audit(item, input.actorUserId, { insufficientKnowledge: true });
       return {
-        item,
-        variants: [],
-        citations: [],
-        insufficientKnowledge: true,
-        aiRequestId: null,
-        creditsChargedMilli: 0n,
-        replayed: false,
+        kind: 'done',
+        result: {
+          item,
+          variants: [],
+          citations: [],
+          insufficientKnowledge: true,
+          aiRequestId: null,
+          creditsChargedMilli: 0n,
+          replayed: false,
+        },
       };
     }
 
-    const result: AiGatewayResult = await this.#gateway.execute({
-      workspaceId: this.workspaceId,
-      userId: input.actorUserId,
-      taskKey: 'caption.generate',
-      planKey: input.planKey,
-      idempotencyKey: `content-studio:${input.idempotencyKey}`,
-      input: {
-        kind: 'text',
-        prompt: await this.#generationPrompt({ ...input, dialect }),
-        untrustedContext: brandBrainContext(retrieval),
+    const maxVariants = this.policy.generation.maxVariantsPerRequest;
+    const platformKeys = input.platformKeys;
+    return {
+      kind: 'ready',
+      input,
+      template,
+      platforms,
+      dialect,
+      expiresAt,
+      retrieval,
+      gateway: this.#gateway,
+      request: {
+        workspaceId: this.workspaceId,
+        userId: input.actorUserId,
+        taskKey: 'caption.generate',
+        planKey: input.planKey,
+        idempotencyKey: `content-studio:${input.idempotencyKey}`,
+        input: {
+          kind: 'text',
+          prompt: await this.#generationPrompt({ ...input, dialect }),
+          untrustedContext: brandBrainContext(retrieval),
+        },
       },
-    });
+      // AC-11.9 — parsed before persisted, and before the charge (H-3).
+      parse: (output) =>
+        rejectUnusable(() => {
+          if (output.kind !== 'text') throw new Error('not text');
+          return parseGeneratedContent(output.text, { platformKeys, maxVariants });
+        }),
+    };
+  }
 
-    if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
-      /*
-       * AC-11.9. A failed or malformed generation NEVER becomes a draft. The
-       * gateway already settled or released the credits; there is nothing to
-       * persist here, and persisting a half-generation would leave the customer
-       * with a row they have to work out how to interpret.
-       */
-      throw generationFailed(result.failureMessage);
-    }
-
-    // AC-11.9 — parsed before persisted. A provider that returned prose instead
-    // of JSON is a retryable failure, not a row.
-    const parsed: GeneratedContent = parseGeneratedContent(result.output.text, {
-      platformKeys: input.platformKeys,
-      maxVariants: this.policy.generation.maxVariantsPerRequest,
-    });
-
+  async #persistGeneration(
+    prepared: ReadyGeneration,
+    result: AiGatewayResult,
+    parsed: GeneratedContent,
+  ): Promise<GenerationResult> {
+    const { input, template, platforms, dialect, expiresAt, retrieval } = prepared;
     const item = await this.#createItem({
       input,
       dialect,
@@ -458,24 +590,41 @@ export class ContentStudioService extends ContentLibraryService {
    * into an ungrounded one, and the customer would see only that the words
    * changed.
    */
-  async applyTool(input: {
-    variantId: string;
-    tool: ContentTool;
-    /** For `tone`, the requested tone. For `translate`, the target locale. */
-    argument?: string | undefined;
-    targetLocale?: Locale | undefined;
-    idempotencyKey: string;
-    actorUserId: string;
-    planKey: string | null;
-    actorBrandScope: readonly string[];
-    /** Q8 — whether this editor may schedule decides what the edit does to a scheduled post. */
-    actorPermissionKeys: readonly string[];
-  }): Promise<{ variant: ContentVariant; aiRequestId: string; creditsChargedMilli: bigint }> {
-    const { variant, platform, dialect, targetLocale, request, retrieval, refreshKey } =
-      await this.#toolRequest({ ...input, lockForRewrite: input.tool === 'refresh_facts' });
+  async applyTool(input: ApplyToolInput): Promise<ApplyToolResult> {
+    return ContentStudioService.applyToolWith((fn) => fn(this), input);
+  }
 
-    const result = await this.#gateway.execute({
-      workspaceId: this.workspaceId,
+  /**
+   * PR A (check-up H-3, H-4) — the same edit, in three steps: read the variant
+   * and build the request in one short transaction, call the provider with no
+   * transaction open, write in a second. The parse is the gateway's `accept`,
+   * so an answer that does not parse is never charged.
+   *
+   * D10's ROW LOCK across the model call is replaced by a check: before the
+   * charge, `accept` re-reads the variant, and a post that changed while the
+   * model was working is refused (released, not charged). The server-derived
+   * refresh key still makes a double click the same gateway request.
+   */
+  static async applyToolWith(run: StudioRun, input: ApplyToolInput): Promise<ApplyToolResult> {
+    const prepared = await run(async (studio) => ({
+      ...(await studio.#toolRequest({ ...input, lockForRewrite: false })),
+      gateway: studio.#gateway,
+      workspaceId: studio.workspaceId,
+    }));
+    const { variant, request, refreshKey, gateway } = prepared;
+    let parsed: GeneratedContent | null = null;
+    const parse = (output: AiOutput): GeneratedContent =>
+      rejectUnusable(() => {
+        if (output.kind !== 'text') throw new Error('not text');
+        return parseGeneratedContent(output.text, {
+          platformKeys: [variant.platformKey],
+          maxVariants: 1,
+          singleBody: true,
+        });
+      });
+
+    const result = await gateway.execute({
+      workspaceId: prepared.workspaceId,
       userId: input.actorUserId,
       taskKey: 'caption.generate',
       planKey: input.planKey,
@@ -488,12 +637,41 @@ export class ContentStudioService extends ContentLibraryService {
        */
       idempotencyKey: refreshKey ?? `content-tool:${input.idempotencyKey}`,
       input: request,
+      accept: async (output) => {
+        parsed = parse(output);
+        const current = await run((studio) =>
+          studio.db.contentVariant.findUnique({
+            where: { id: variant.id },
+            select: { body: true, updatedAt: true },
+          }),
+        );
+        if (
+          !current ||
+          current.body !== variant.body ||
+          current.updatedAt.getTime() !== variant.updatedAt.getTime()
+        ) {
+          throw new OutputRejectedError(
+            'The post changed while the model was working.',
+            'The post changed while the AI was working, so nothing was charged. Please try again.',
+          );
+        }
+      },
     });
 
     if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
       throw generationFailed(result.failureMessage);
     }
+    const accepted: GeneratedContent = parsed ?? parse(result.output);
+    return run((studio) => studio.#persistTool(input, prepared, result, accepted));
+  }
 
+  async #persistTool(
+    input: ApplyToolInput,
+    prepared: ToolRequest,
+    result: AiGatewayResult,
+    parsed: GeneratedContent,
+  ): Promise<ApplyToolResult> {
+    const { variant, platform, dialect, targetLocale, retrieval } = prepared;
     /*
      * A REPLAYED EDIT IS NOT WRITTEN TWICE. The gateway handed back a request
      * this variant already carries: the words, the usage set and the approval
@@ -502,12 +680,6 @@ export class ContentStudioService extends ContentLibraryService {
     if (result.replayed && variant.aiRequestId === result.requestId) {
       return { variant, aiRequestId: result.requestId, creditsChargedMilli: 0n };
     }
-
-    const parsed = parseGeneratedContent(result.output.text, {
-      platformKeys: [variant.platformKey],
-      maxVariants: 1,
-      singleBody: true,
-    });
     const produced = parsed.variants[0];
     /* c8 ignore next -- the parser guarantees one variant under singleBody. */
     if (!produced) throw generationFailed(null);
@@ -973,13 +1145,6 @@ function brandBrainContext(grounding: Grounding): string[] {
 
 /** The post's own tags first, then new ones, each once regardless of case. */
 export function mergeHashtags(existing: readonly string[], proposed: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const tag of [...existing, ...proposed]) {
-    const key = tag.toLocaleLowerCase();
-    if (tag === '' || seen.has(key)) continue;
-    seen.add(key);
-    out.push(tag);
-  }
-  return out;
+  // Item 7 — `#a` and `a` are one tag: normalised before they are compared.
+  return normaliseHashtags([...existing, ...proposed]);
 }

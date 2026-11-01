@@ -18,6 +18,7 @@ import {
   transitionNotAllowed,
   unsupportedPlatform,
 } from './errors';
+import { normaliseHashtags } from './hashtags';
 import { ContentApprovalService } from './approvals';
 import { SLOT_BUSY_JOB_STATUSES } from './calendar';
 import { findPlatform, resolveDialect, type ContentDialect, type ContentPolicy } from './policy';
@@ -615,7 +616,7 @@ export class ContentLibraryService {
             platformKey: variant.platformKey,
             locale: input.locale,
             body: variant.body,
-            hashtags: variant.hashtags ? [...variant.hashtags] : [],
+            hashtags: variant.hashtags ? normaliseHashtags(variant.hashtags) : [],
             firstComment: variant.firstComment ?? null,
             linkUrl: variant.linkUrl ?? null,
             assetIds: resolvedMedia.get(variant.platformKey) ?? [],
@@ -858,7 +859,7 @@ export class ContentLibraryService {
         }
       }
       const body = source?.body ?? '';
-      const hashtags = source?.hashtags ?? [];
+      const hashtags = normaliseHashtags(source?.hashtags ?? []);
       const firstComment = platform.allowsFirstComment ? (source?.firstComment ?? null) : null;
       const validation = validateVariant(platform, { body, hashtags, firstComment });
       const slides =
@@ -1000,7 +1001,7 @@ export class ContentLibraryService {
       input.firstComment === undefined ? variant.firstComment : input.firstComment || null;
     const validation = validateVariant(platform, {
       body: input.body,
-      ...(input.hashtags ? { hashtags: input.hashtags } : {}),
+      ...(input.hashtags ? { hashtags: normaliseHashtags(input.hashtags) } : {}),
       firstComment,
     });
 
@@ -1066,7 +1067,7 @@ export class ContentLibraryService {
           : { slides: slides === null ? Prisma.DbNull : (slides as Prisma.InputJsonValue) }),
         ...(cover === undefined ? {} : { coverAssetId: cover }),
         ...(media === undefined ? {} : { assetIds: media.map((asset) => asset.id) }),
-        ...(input.hashtags ? { hashtags: [...input.hashtags] } : {}),
+        ...(input.hashtags ? { hashtags: normaliseHashtags(input.hashtags) } : {}),
         ...(input.platformOptions === undefined
           ? {}
           : { platformOptions: { ...input.platformOptions } as Prisma.InputJsonValue }),

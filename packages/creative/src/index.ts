@@ -24,6 +24,7 @@ export {
 } from './studio';
 export type {
   BrandIdentityInput,
+  CreativeRun,
   CreativeStudioOptions,
   GenerateCreativeInput,
   GeneratedCreative,

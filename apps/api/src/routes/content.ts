@@ -3,6 +3,7 @@ import {
   ContentApprovalService,
   ContentCalendarService,
   ContentStudioService,
+  type StudioRun,
   contentGenerateRequestSchema,
   contentQuoteRequestSchema,
   contentToolQuoteRequestSchema,
@@ -221,6 +222,17 @@ async function studioFor(caller: Caller, db: Parameters<Parameters<typeof withWo
   });
 }
 
+/**
+ * PR A (check-up H-4) — each call is its own short tenant transaction, with a
+ * studio (and its calendar) bound to it. A provider call never runs inside one.
+ */
+function studioRun(caller: Caller): StudioRun {
+  return (fn) =>
+    withWorkspace(caller.workspaceId, async (db) => fn(await studioFor(caller, db)), {
+      prisma: getPrisma(),
+    });
+}
+
 export function registerContentRoutes(app: FastifyInstance): void {
   /*
    * AC-11.1 — the price BEFORE it is spent.
@@ -303,24 +315,21 @@ export function registerContentRoutes(app: FastifyInstance): void {
 
       const facts = await workspaceFacts(caller.workspaceId);
       try {
-        const result = await withWorkspace(
-          caller.workspaceId,
-          async (db) =>
-            (await studioFor(caller, db)).generate({
-              brandId: parsed.data.brandId,
-              brief: parsed.data.brief,
-              ...(parsed.data.contentType ? { contentType: parsed.data.contentType } : {}),
-              locale: parsed.data.locale,
-              platformKeys: parsed.data.platformKeys,
-              idempotencyKey: parsed.data.idempotencyKey,
-              ...(parsed.data.templateId ? { templateId: parsed.data.templateId } : {}),
-              actorUserId: caller.userId,
-              planKey: facts.planKey,
-              actorBrandScope: caller.brandScope,
-              retention: facts,
-            }),
-          { prisma: getPrisma() },
-        );
+        // H-4: short tenant transactions around the provider call, never one
+        // that spans it (`ContentStudioService.generateWith`).
+        const result = await ContentStudioService.generateWith(studioRun(caller), {
+          brandId: parsed.data.brandId,
+          brief: parsed.data.brief,
+          ...(parsed.data.contentType ? { contentType: parsed.data.contentType } : {}),
+          locale: parsed.data.locale,
+          platformKeys: parsed.data.platformKeys,
+          idempotencyKey: parsed.data.idempotencyKey,
+          ...(parsed.data.templateId ? { templateId: parsed.data.templateId } : {}),
+          actorUserId: caller.userId,
+          planKey: facts.planKey,
+          actorBrandScope: caller.brandScope,
+          retention: facts,
+        });
 
         return reply.send({
           itemId: result.item.id,
@@ -412,22 +421,17 @@ export function registerContentRoutes(app: FastifyInstance): void {
 
       const facts = await workspaceFacts(caller.workspaceId);
       try {
-        const result = await withWorkspace(
-          caller.workspaceId,
-          async (db) =>
-            (await studioFor(caller, db)).applyTool({
-              variantId: parsed.data.variantId,
-              tool: parsed.data.tool,
-              argument: parsed.data.argument,
-              targetLocale: parsed.data.targetLocale,
-              idempotencyKey: parsed.data.idempotencyKey,
-              actorUserId: caller.userId,
-              planKey: facts.planKey,
-              actorBrandScope: caller.brandScope,
-              actorPermissionKeys: caller.permissionKeys,
-            }),
-          { prisma: getPrisma() },
-        );
+        const result = await ContentStudioService.applyToolWith(studioRun(caller), {
+          variantId: parsed.data.variantId,
+          tool: parsed.data.tool,
+          argument: parsed.data.argument,
+          targetLocale: parsed.data.targetLocale,
+          idempotencyKey: parsed.data.idempotencyKey,
+          actorUserId: caller.userId,
+          planKey: facts.planKey,
+          actorBrandScope: caller.brandScope,
+          actorPermissionKeys: caller.permissionKeys,
+        });
 
         return reply.send({
           variant: {
