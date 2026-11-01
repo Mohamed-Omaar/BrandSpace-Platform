@@ -24,14 +24,22 @@
  *
  * Bounded: `WAIT_FOR_MIGRATIONS_TIMEOUT_SECONDS` (default 1800). Past it, it
  * exits 1 naming what is still pending, the deployment stops, and nothing is
- * lost — redeploy once the migration job has finished.
+ * lost — redeploy once the migration job has finished. A migration Prisma
+ * recorded as FAILED exits 1 at once, naming it, instead of waiting out the
+ * timeout.
  */
 import { pathToFileURL } from 'node:url';
 import { Client } from 'pg';
 import { schemaReadinessFrom, type SchemaReadiness } from '../src/schema-readiness';
 
+/**
+ * What one read of `_prisma_migrations` says. `failed` names the migrations
+ * Prisma recorded as FAILED (unfinished, not rolled back, with logs).
+ */
+export type MigrationReadState = SchemaReadiness & { readonly failed?: readonly string[] };
+
 export interface WaitForMigrationsOptions {
-  readonly read: () => Promise<SchemaReadiness>;
+  readonly read: () => Promise<MigrationReadState>;
   readonly timeoutMs: number;
   readonly intervalMs?: number;
   readonly now?: () => number;
@@ -51,6 +59,20 @@ export async function waitForMigrations(options: WaitForMigrationsOptions): Prom
   for (;;) {
     try {
       const readiness = await options.read();
+      /*
+       * A FAILED MIGRATION IS NOT "PENDING" (check-up 2026-10-28, L-24). It
+       * will never finish by itself — `prisma migrate deploy` refuses to run
+       * past it (P3009) until someone resolves it — so waiting the full
+       * timeout only delays the failure and then hides its cause behind
+       * "gave up". Stop now and say what to do.
+       */
+      if (readiness.failed && readiness.failed.length > 0) {
+        log(
+          `wait-for-migrations: migration failed: ${readiness.failed.join(', ')}; ` +
+            'fix it and run `prisma migrate resolve` before redeploying',
+        );
+        return false;
+      }
       if (readiness.ready) {
         log('wait-for-migrations: every migration this build needs is applied');
         return true;
@@ -87,7 +109,7 @@ async function main(): Promise<void> {
     console.error('wait-for-migrations: DATABASE_URL is required');
     process.exit(1);
   }
-  const read = async (): Promise<SchemaReadiness> => {
+  const read = async (): Promise<MigrationReadState> => {
     const client = new Client({ connectionString, connectionTimeoutMillis: 5_000 });
     try {
       await client.connect();
@@ -95,7 +117,15 @@ async function main(): Promise<void> {
         `SELECT "migration_name" FROM "_prisma_migrations"
           WHERE "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL`,
       );
-      return schemaReadinessFrom(result.rows.map((row) => row.migration_name));
+      // Prisma writes `logs` when a migration fails; one still running has none.
+      const failed = await client.query<{ migration_name: string }>(
+        `SELECT "migration_name" FROM "_prisma_migrations"
+          WHERE "finished_at" IS NULL AND "rolled_back_at" IS NULL AND "logs" IS NOT NULL`,
+      );
+      return {
+        ...schemaReadinessFrom(result.rows.map((row) => row.migration_name)),
+        failed: failed.rows.map((row) => row.migration_name),
+      };
     } finally {
       await client.end().catch(() => undefined);
     }
