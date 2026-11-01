@@ -250,7 +250,10 @@ export interface TurnResult {
 /** PR A (H-4) — run `fn` against an orchestrator bound to a SHORT tenant transaction. */
 export type OrchestratorRun = <T>(fn: (copilot: CopilotOrchestrator) => Promise<T>) => Promise<T>;
 
-type AcceptedPlan = z.infer<typeof planResponseSchema>;
+type AcceptedPlan = z.infer<typeof planResponseSchema> & {
+  /** Steps whose arguments did not fit their tool — only ever set when lenient. */
+  readonly invalidToolKeys?: readonly string[];
+};
 
 interface PreparedTurn {
   readonly session: { readonly id: string; readonly brandId: string | null };
@@ -275,7 +278,11 @@ class PlanRejectedError extends OutputRejectedError {
  * A brand tool's missing `brandId` is the SESSION's brand — the only brand this
  * conversation may act on — never one the model chose.
  */
-function acceptPlan(output: AiOutput, sessionBrandId: string | null): AcceptedPlan {
+function acceptPlan(
+  output: AiOutput,
+  sessionBrandId: string | null,
+  mode: 'strict' | 'lenient' = 'strict',
+): AcceptedPlan {
   if (output.kind !== 'text') throw new OutputRejectedError('The reply was not text.');
   let plan: AcceptedPlan;
   try {
@@ -311,8 +318,18 @@ function acceptPlan(output: AiOutput, sessionBrandId: string | null): AcceptedPl
     }
     return { toolKey: step.toolKey, arguments: checked.data as Record<string, unknown> };
   });
-  if (notes.length > 0) throw new PlanRejectedError(notes);
-  return { ...plan, steps };
+  if (notes.length > 0 && mode === 'strict') throw new PlanRejectedError(notes);
+  /*
+   * LENIENT ONLY AFTER THE FACT: a reply the gateway already accepted (or a
+   * recorded one) is never failed once it has been charged. A step that does not
+   * fit its tool is dropped and reported as rejected, never run.
+   */
+  const invalid = notes.map((note) => note.split(':')[0] ?? note);
+  return {
+    ...plan,
+    steps: steps.filter((step) => !invalid.includes(step.toolKey)),
+    invalidToolKeys: invalid,
+  };
 }
 
 /** The one extra line a repair attempt carries. Tool keys and field paths only. */
@@ -577,7 +594,7 @@ export class CopilotOrchestrator {
     if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
       throw copilotGenerationFailed(result.failureMessage);
     }
-    const parsed = accepted ?? acceptPlan(result.output, prepared.brandId);
+    const parsed = accepted ?? acceptPlan(result.output, prepared.brandId, 'lenient');
     return run((copilot) => copilot.#finishTurn(input, prepared, result, parsed));
   }
 
@@ -742,7 +759,7 @@ export class CopilotOrchestrator {
       }).map((t) => t.key),
     );
     const steps: ProposedStep[] = [];
-    const rejectedToolKeys: string[] = [];
+    const rejectedToolKeys: string[] = [...(parsed.invalidToolKeys ?? [])];
 
     /*
      * A BRAND QUESTION WHILE BRAND BRAIN IS OFF gets the notice, not an answer

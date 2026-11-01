@@ -294,8 +294,20 @@ export class AnalyticsInsightService {
       }
       throw explanationFailed(result.failureMessage);
     }
-    const accepted: ParsedExplanation =
-      parsed ?? parseJsonResponse(explanationSchema, result.output.text);
+    let accepted: ParsedExplanation;
+    if (parsed) {
+      accepted = parsed;
+    } else {
+      // A result the gateway did not pass through `accept` (a recorded one): the
+      // same gate, after the fact. It never becomes an insight unchecked.
+      accepted = parseJsonResponse(explanationSchema, result.output.text);
+      try {
+        await service.#gate(input, built, accepted, prepared.requestRef);
+      } catch (error) {
+        if (error instanceof OutputRejectedError) throw ungroundedExplanation();
+        throw error;
+      }
+    }
     return run((insights) => insights.#finishExplain(input, built, accepted, result));
   }
 

@@ -607,7 +607,11 @@ export class ContentStudioService extends ContentLibraryService {
    */
   static async applyToolWith(run: StudioRun, input: ApplyToolInput): Promise<ApplyToolResult> {
     const prepared = await run(async (studio) => ({
-      ...(await studio.#toolRequest({ ...input, lockForRewrite: false })),
+      // D10 — held for this transaction. When `run` reuses one transaction for
+      // the whole edit (`applyTool`), that is the old serialisation; when each
+      // step is its own short transaction, the server-derived gateway key and
+      // the re-read in `#persistTool` keep it to one charge and one write.
+      ...(await studio.#toolRequest({ ...input, lockForRewrite: input.tool === 'refresh_facts' })),
       gateway: studio.#gateway,
       workspaceId: studio.workspaceId,
     }));
@@ -677,7 +681,20 @@ export class ContentStudioService extends ContentLibraryService {
      * this variant already carries: the words, the usage set and the approval
      * consequences were written when it first ran.
      */
-    if (result.replayed && variant.aiRequestId === result.requestId) {
+    /*
+     * READ AGAIN, IN THIS TRANSACTION. D10's row lock no longer spans the model
+     * call (H-4), so a second tab or a double click that reached the same
+     * gateway request (the server-derived key) must find the first write here
+     * and stop: one charge, one write.
+     */
+    const current = await this.db.contentVariant.findUnique({
+      where: { id: variant.id },
+      select: { aiRequestId: true },
+    });
+    if (
+      (result.replayed && variant.aiRequestId === result.requestId) ||
+      current?.aiRequestId === result.requestId
+    ) {
       return { variant, aiRequestId: result.requestId, creditsChargedMilli: 0n };
     }
     const produced = parsed.variants[0];

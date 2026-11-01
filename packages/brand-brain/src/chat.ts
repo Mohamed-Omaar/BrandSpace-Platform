@@ -7,6 +7,7 @@ import {
   type TenantScopedClient,
 } from '@brandspace/database';
 import {
+  AppError,
   assertBrandInScope,
   brandIdQueryFilter,
   type Clock,
@@ -393,6 +394,15 @@ export class BrandBrainChatService {
       result.status === 'SUCCEEDED' && result.output?.kind === 'text'
         ? (accepted ?? parseAskAnswer(result.output.text))
         : null;
+    /*
+     * AN ANSWER THAT IS NOT THE AGREED SHAPE IS NOT STORED. With the gateway's
+     * `accept` such an answer is refused before the charge and lands in the
+     * failure branch below; one that reached here SUCCEEDED regardless (a
+     * recorded result) is refused as before, never written as a message.
+     */
+    if (result.status === 'SUCCEEDED' && !structured) {
+      throw new AppError('CONFLICT', 'The answer could not be read. Please try again.');
+    }
     if (!structured || result.status !== 'SUCCEEDED') {
       const assistant = await this.#writeAssistant({
         brandId: input.brandId,

@@ -405,8 +405,20 @@ export class StrategyService {
       if (ref.ungrounded) throw ungroundedExplanation();
       throw generationFailed(result.failureMessage);
     }
-    const accepted =
-      parsed ?? (parseJsonResponse(schema, result.output.text) as ReturnType<S['parse']>);
+    let accepted: ReturnType<S['parse']>;
+    if (parsed) {
+      accepted = parsed;
+    } else {
+      // A result the gateway did not pass through `accept` (a recorded one): the
+      // same grounding gate, after the fact.
+      accepted = parseJsonResponse(schema, result.output.text) as ReturnType<S['parse']>;
+      try {
+        await prepared.service.#gate(input, type, prepared.grounding, accepted, ref);
+      } catch (error) {
+        if (error instanceof OutputRejectedError) throw ungroundedExplanation();
+        throw error;
+      }
+    }
     return run((service) =>
       service.#finishGenerate(
         input,
