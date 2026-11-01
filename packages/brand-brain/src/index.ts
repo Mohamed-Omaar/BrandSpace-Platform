@@ -260,3 +260,4 @@ export type {
   UsageState,
   VariantUsageEntry,
 } from './usage';
+export * from './profile';

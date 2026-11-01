@@ -491,3 +491,41 @@ export function fontFormatFor(mimeType: string): 'woff2' | 'woff' | 'truetype' |
       return null;
   }
 }
+
+/**
+ * THE BRAND'S TYPE, AS THE PROFILE STORES IT (D-301). Brand Profile writes
+ * `{ heading, body }`; the generation route read it as an array, so every
+ * image was sent no typography at all. Both shapes are read, duplicates
+ * dropped; nothing is invented.
+ *
+ * PHASE 2C-2: the v2 four-slot shape is read too — its catalogue fonts by
+ * their family names. An uploaded font carries no name in the stored value,
+ * so it contributes nothing here rather than a guessed name.
+ */
+export function brandTypography(value: unknown): readonly string[] {
+  const stored = readStoredTypography(value);
+  if (stored.version === 2) {
+    return [
+      ...new Set(
+        [
+          stored.slots.en.heading,
+          stored.slots.en.body,
+          stored.slots.ar.heading,
+          stored.slots.ar.body,
+        ]
+          .map((ref) => (ref?.kind === 'catalogue' ? bundledFont(ref.key)?.family : undefined))
+          .filter((family): family is string => typeof family === 'string'),
+      ),
+    ];
+  }
+  const fonts: unknown[] = Array.isArray(value)
+    ? value
+    : typeof value === 'object' && value !== null
+      ? [(value as Record<string, unknown>)['heading'], (value as Record<string, unknown>)['body']]
+      : [];
+  return [
+    ...new Set(
+      fonts.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== ''),
+    ),
+  ];
+}
