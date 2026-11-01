@@ -1,3 +1,5 @@
+import type { ImageQuality } from './adapter';
+import type { ImageSizing } from './image-sizing';
 import { AppError } from '@brandspace/shared';
 
 import type { AiModality } from './adapter';
@@ -42,6 +44,8 @@ export interface RoutingRule {
     readonly persistOutput: boolean;
     /** Null when nothing is persisted; required by config when it is. */
     readonly outputRetentionDays: number | null;
+    /** PR A (item 6, F-106) — the image quality when the caller names none. */
+    readonly imageQuality?: ImageQuality;
   };
   readonly retryPolicy: {
     readonly maxAttempts: number;
@@ -79,6 +83,8 @@ export interface RegisteredModel {
   readonly inputCostPerUnitMicroMinor?: number | null;
   readonly outputCostPerUnitMicroMinor?: number | null;
   readonly imageCostPerImageMicroMinor?: number | null;
+  /** PR A (item 6) — the sizes an image model accepts. Absent: the standard GPT sizes. */
+  readonly imageSizing?: ImageSizing;
 }
 
 /**

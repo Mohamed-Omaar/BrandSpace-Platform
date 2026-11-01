@@ -46,6 +46,8 @@ export interface CreditRule {
   readonly baseMilliCredits: number;
   readonly perUnitMilliCredits: number;
   readonly unit: AiBillingUnit;
+  /** PR A (item 6) — prices only this image quality; null/absent prices any. */
+  readonly imageQuality?: 'low' | 'medium' | 'high' | null;
 }
 
 export class PricingError extends AppError {
@@ -153,8 +155,14 @@ export function findCreditRule(
   rules: readonly CreditRule[],
   taskKey: string,
   modelKey: string,
+  imageQuality?: 'low' | 'medium' | 'high',
 ): CreditRule {
-  const rule = rules.find((r) => r.taskKey === taskKey && r.modelKey === modelKey);
+  const forModel = rules.filter((r) => r.taskKey === taskKey && r.modelKey === modelKey);
+  // PR A (item 6): a rule for this exact quality wins; a rule naming no
+  // quality prices the rest. A rule for ANOTHER quality never applies.
+  const rule =
+    (imageQuality ? forModel.find((r) => r.imageQuality === imageQuality) : undefined) ??
+    forModel.find((r) => r.imageQuality === null || r.imageQuality === undefined);
   if (!rule) {
     // Serving a task with no price is serving it for free, permanently and
     // silently. An operator who has not priced a model has not finished

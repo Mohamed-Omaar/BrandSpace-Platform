@@ -17,6 +17,7 @@ import {
   type AiGatewayResult,
   type AiOutput,
   type GeneratedImage,
+  type ImageQuality,
 } from '@brandspace/ai-gateway';
 import type { AssetActor, AssetUploadService } from '@brandspace/assets';
 import { CREATIVE_FORMATS, findCreativeFormat, type CreativeFormat } from './formats';
@@ -114,6 +115,8 @@ export interface GenerateCreativeInput {
   readonly brief: string;
   /** A key from `CREATIVE_FORMATS`. Decides the size and the aspect. */
   readonly formatKey: string;
+  /** PR A (item 6, F-106). Absent: the route's default, medium. */
+  readonly quality?: ImageQuality | undefined;
   readonly identity: BrandIdentityInput;
   readonly idempotencyKey: string;
   readonly actorUserId: string;
@@ -224,6 +227,7 @@ export class CreativeStudioService {
   async quote(input: {
     readonly formatKey: string;
     readonly planKey: string | null;
+    readonly quality?: ImageQuality | undefined;
   }): Promise<{ estimateMilli: bigint }> {
     const format = findCreativeFormat(input.formatKey);
     if (!format) throw unknownCreativeFormat();
@@ -231,7 +235,13 @@ export class CreativeStudioService {
       workspaceId: this.#workspaceId,
       taskKey: 'image.generate',
       planKey: input.planKey,
-      input: { kind: 'image', prompt: '', count: 1, size: format.size },
+      input: {
+        kind: 'image',
+        prompt: '',
+        count: 1,
+        size: format.size,
+        ...(input.quality ? { quality: input.quality } : {}),
+      },
     });
     return { estimateMilli: quote.estimateMilli };
   }
@@ -333,6 +343,7 @@ export class CreativeStudioService {
           prompt: this.#prompt(brief.slice(0, BRIEF_MAX), format, input.identity),
           count: 1,
           size: format.size,
+          ...(input.quality ? { quality: input.quality } : {}),
         },
       },
     };
@@ -470,6 +481,14 @@ export class CreativeStudioService {
       lines.push(fenceUntrusted('BRAND BRAIN CONTEXT', identity.knowledge.join('\n')));
     }
     lines.push('Do not render a logo, a wordmark or any brand lettering.');
+    /*
+     * PR A (item 6): the image is delivered at the model's nearest accepted
+     * size with this aspect ratio and never cropped, but a platform may still
+     * trim its edges in a feed — so the subject is kept central with margin.
+     */
+    lines.push(
+      'Keep the main subject centred, with generous safe margins on every side; nothing important near the edges.',
+    );
     lines.push(`Request: ${brief}`);
     return lines.join('\n');
   }

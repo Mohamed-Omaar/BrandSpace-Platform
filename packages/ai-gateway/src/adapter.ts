@@ -100,11 +100,16 @@ export interface TextResult {
   readonly modelKey: string;
 }
 
+/** PR A (item 6, F-106) — the provider's image quality setting. */
+export type ImageQuality = 'low' | 'medium' | 'high';
+
 export interface ImageRequest {
   readonly modelKey: string;
   readonly prompt: string;
   readonly count: number;
+  /** A size the model ACCEPTS — resolved by the gateway from the caller's request. */
   readonly size: string;
+  readonly quality?: ImageQuality;
 }
 
 /** One generated image, as the provider handed it back. */

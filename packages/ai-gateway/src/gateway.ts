@@ -6,7 +6,14 @@ import { AppError, type Clock, createLogger, redact, systemClock } from '@brands
 
 const log = createLogger({ context: { component: 'ai.gateway' } });
 
-import type { AdapterContext, AdapterRegistry, GeneratedImage, UsageUnits } from './adapter';
+import type {
+  AdapterContext,
+  AdapterRegistry,
+  GeneratedImage,
+  ImageQuality,
+  UsageUnits,
+} from './adapter';
+import { DEFAULT_IMAGE_SIZING, resolveImageSize } from './image-sizing';
 import {
   assessBudget,
   assessPlatformBudget,
@@ -156,7 +163,10 @@ export interface AiImageInput {
   readonly kind: 'image';
   readonly prompt: string;
   readonly count: number;
+  /** The size the CALLER wants (a Studio format); the gateway sends what the model accepts. */
   readonly size: string;
+  /** PR A (item 6, F-106). Absent: the route's `imageQuality` (medium by default). */
+  readonly quality?: ImageQuality;
 }
 
 export type AiInput = AiTextInput | AiImageInput;
@@ -376,7 +386,12 @@ export class AiGateway {
      * the customer with nothing after we already paid the provider.
      */
     const reservationEstimate = chain.reduce((highest, candidate) => {
-      const rule = findCreditRule(config.creditRules, request.taskKey, candidate);
+      const rule = findCreditRule(
+        config.creditRules,
+        request.taskKey,
+        candidate,
+        imageQualityOf(request.input, route),
+      );
       const estimate = estimateReservationMilli(rule, worstCase, multiplier);
       return estimate > highest ? estimate : highest;
     }, 0n);
@@ -479,7 +494,12 @@ export class AiGateway {
     );
 
     const estimateMilli = route.chain.reduce((highest, candidate) => {
-      const rule = findCreditRule(config.creditRules, request.taskKey, candidate);
+      const rule = findCreditRule(
+        config.creditRules,
+        request.taskKey,
+        candidate,
+        imageQualityOf(request.input, route),
+      );
       const estimate = estimateReservationMilli(rule, worstCase, multiplier);
       return estimate > highest ? estimate : highest;
     }, 0n);
@@ -845,7 +865,12 @@ export class AiGateway {
       }
 
       lastProviderKey = model.providerKey;
-      const creditRule = findCreditRule(config.creditRules, request.taskKey, modelKey);
+      const creditRule = findCreditRule(
+        config.creditRules,
+        request.taskKey,
+        modelKey,
+        imageQualityOf(request.input, route),
+      );
 
       for (let attempt = 1; attempt <= route.retryPolicy.maxAttempts; attempt += 1) {
         const remainingMs = deadline - this.#clock.now().getTime();
@@ -901,13 +926,7 @@ export class AiGateway {
             allowedHosts: config.allowedHosts ?? [],
           };
 
-          const { output, usage } = await this.#invoke(
-            adapter,
-            modelKey,
-            route,
-            request.input,
-            ctx,
-          );
+          const { output, usage } = await this.#invoke(adapter, model, route, request.input, ctx);
 
           /*
            * H-3 — VALIDATE, THEN SETTLE. The caller parses and checks the
@@ -1064,7 +1083,7 @@ export class AiGateway {
 
   async #invoke(
     adapter: NonNullable<ReturnType<AdapterRegistry['get']>>,
-    modelKey: string,
+    model: RegisteredModel,
     route: ResolvedRoute,
     input: AiInput,
     ctx: AdapterContext,
@@ -1080,7 +1099,7 @@ export class AiGateway {
         }
         const result = await adapter.generateText(
           {
-            modelKey,
+            modelKey: model.key,
             prompt: input.prompt,
             maxOutputTokens: route.parameters.maxOutputTokens,
             temperature: route.parameters.temperature,
@@ -1105,8 +1124,19 @@ export class AiGateway {
           `Adapter "${adapter.key}" does not implement image generation.`,
         );
       }
+      /*
+       * PR A (item 6) — THE SIZE THE MODEL ACCEPTS, with the caller's aspect
+       * ratio, and the QUALITY (F-106): the caller's, else the route's
+       * (medium by default). Nothing is cropped afterwards.
+       */
       const result = await adapter.generateImage(
-        { modelKey, prompt: input.prompt, count: input.count, size: input.size },
+        {
+          modelKey: model.key,
+          prompt: input.prompt,
+          count: input.count,
+          size: resolveImageSize(input.size, model.imageSizing ?? DEFAULT_IMAGE_SIZING),
+          quality: input.quality ?? route.parameters.imageQuality ?? 'medium',
+        },
         ctx,
       );
       return {
@@ -1674,7 +1704,8 @@ function worstCaseUsage(request: AiGatewayRequest, route: ResolvedRoute): UsageU
 /** Audit-safe metadata. Never the prompt itself — §11. */
 function summariseInput(input: AiInput): Prisma.InputJsonValue {
   if (input.kind === 'image') {
-    return { kind: 'image', count: input.count, size: input.size };
+    // The size ASKED for and the quality: metadata, never the prompt (§11).
+    return { kind: 'image', count: input.count, size: input.size, quality: input.quality ?? null };
   }
   return {
     kind: 'text',
@@ -1769,6 +1800,12 @@ interface SettleArgs {
   readonly latencyMs: number;
   readonly attempted: readonly string[];
   readonly retries: number;
+}
+
+/** PR A (item 6) — the quality an image request is priced and sent at. */
+function imageQualityOf(input: AiInput, route: ResolvedRoute): ImageQuality | undefined {
+  if (input.kind !== 'image') return undefined;
+  return input.quality ?? route.parameters.imageQuality ?? 'medium';
 }
 
 function failureClassOf(error: unknown): AiFailureClass {

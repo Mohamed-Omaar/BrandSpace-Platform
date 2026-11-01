@@ -46,6 +46,12 @@ export interface CreativeStudioLabels {
   readonly briefPlaceholder: string;
   readonly format: string;
   readonly formatHint: string;
+  /** PR A (item 6, F-106) — the image quality choice. */
+  readonly quality: string;
+  readonly qualityHint: string;
+  readonly qualityLow: string;
+  readonly qualityMedium: string;
+  readonly qualityHigh: string;
   readonly generate: string;
   readonly generating: string;
   readonly cost: string;
@@ -70,6 +76,10 @@ export interface CreativeStudioLabels {
 }
 
 /** The customer-safe codes the API can return, mapped to something readable. */
+/** PR A (item 6, F-106) — the provider's image quality values, in the order shown. */
+const IMAGE_QUALITIES = ['low', 'medium', 'high'] as const;
+type ImageQualityChoice = (typeof IMAGE_QUALITIES)[number];
+
 const FAILURE_KEYS: Readonly<Record<string, keyof CreativeStudioLabels>> = {
   INSUFFICIENT_CREDITS: 'insufficientCredits',
   QUOTA_EXCEEDED: 'insufficientCredits',
@@ -98,6 +108,11 @@ export function CreativeStudioView({
 
   const [brief, setBrief] = useState('');
   const [formatKey, setFormatKey] = useState(formats[0]?.key ?? 'square');
+  /*
+   * PR A (item 6, F-106) — THE QUALITY, MEDIUM UNLESS THE READER CHOOSES. Sent
+   * with the quote and the generation, so the price shown is the quality's.
+   */
+  const [quality, setQuality] = useState<ImageQualityChoice>('medium');
   const [busy, setBusy] = useState(false);
   /*
    * A SYNCHRONOUS GUARD, BECAUSE `busy` IS NOT ONE.
@@ -156,9 +171,9 @@ export function CreativeStudioView({
    * a button whose price they have not seen.
    */
   const refreshQuote = useCallback(
-    async (key: string) => {
+    async (key: string, chosenQuality: ImageQualityChoice = 'medium') => {
       try {
-        const payload = await post('quote', { formatKey: key });
+        const payload = await post('quote', { formatKey: key, quality: chosenQuality });
         setEstimate(typeof payload['estimateMilli'] === 'string' ? payload['estimateMilli'] : null);
       } catch {
         // A quote that cannot be fetched is not an error worth interrupting for;
@@ -196,7 +211,7 @@ export function CreativeStudioView({
       setBusy(true);
       setFailure(null);
 
-      const signature = `${targetFormatKey}::${brief.trim()}`;
+      const signature = `${targetFormatKey}::${quality}::${brief.trim()}`;
       if (attempt.current?.signature !== signature) {
         attempt.current = { signature, key: crypto.randomUUID() };
       }
@@ -206,6 +221,7 @@ export function CreativeStudioView({
           brandId,
           brief: brief.trim(),
           formatKey: targetFormatKey,
+          quality,
           // ONE KEY PER ATTEMPT — see `attempt` above for why it is held in a
           // ref rather than minted here (AC-28.6).
           idempotencyKey,
@@ -324,7 +340,7 @@ export function CreativeStudioView({
                   data-value={format.key}
                   onClick={() => {
                     setFormatKey(format.key);
-                    void refreshQuote(format.key);
+                    void refreshQuote(format.key, quality);
                   }}
                 >
                   {format.label}
@@ -334,6 +350,49 @@ export function CreativeStudioView({
           </div>
           <span id={`${fieldId}-format-hint`} className="bs-sr-only">
             {labels.formatHint}
+          </span>
+
+          {/*
+            PR A (item 6, F-106) — THE QUALITY. The same segmented control as the
+            format above (`bsp-seg`), so no new visual language; the price on
+            the button follows the choice.
+          */}
+          <div className="bsp-gen-row">
+            <span className="bsp-lbl" id={`${fieldId}-quality`}>
+              {labels.quality}
+            </span>
+            <div
+              className="bsp-seg bsp-gen-formats"
+              role="group"
+              aria-labelledby={`${fieldId}-quality`}
+              aria-describedby={`${fieldId}-quality-hint`}
+              data-testid="creative-quality"
+              data-value={quality}
+            >
+              <SegmentPill selector='[aria-pressed="true"]' />
+              {IMAGE_QUALITIES.map((choice) => (
+                <button
+                  key={choice}
+                  type="button"
+                  className="bsp-seg-item"
+                  aria-pressed={choice === quality}
+                  data-value={choice}
+                  onClick={() => {
+                    setQuality(choice);
+                    void refreshQuote(formatKey, choice);
+                  }}
+                >
+                  {choice === 'low'
+                    ? labels.qualityLow
+                    : choice === 'medium'
+                      ? labels.qualityMedium
+                      : labels.qualityHigh}
+                </button>
+              ))}
+            </div>
+          </div>
+          <span id={`${fieldId}-quality-hint`} className="bs-sr-only">
+            {labels.qualityHint}
           </span>
 
           {/*
@@ -480,7 +539,7 @@ export function CreativeStudioView({
                         onClick={() => {
                           // THE TARGET IS PASSED, NOT SET-THEN-READ (see `generate`).
                           setFormatKey(format.key);
-                          void refreshQuote(format.key);
+                          void refreshQuote(format.key, quality);
                           void generate(format.key);
                         }}
                         data-testid={`creative-adapt-${format.key}`}

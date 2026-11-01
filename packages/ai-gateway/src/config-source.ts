@@ -71,6 +71,8 @@ export class ConfigurationAiSource implements AiConfigurationSource {
         inputCostPerUnitMicroMinor: model.inputCostPerUnitMicroMinor,
         outputCostPerUnitMicroMinor: model.outputCostPerUnitMicroMinor,
         imageCostPerImageMicroMinor: model.imageCostPerImageMicroMinor,
+        // PR A (item 6) — which sizes this image model accepts.
+        imageSizing: model.imageSizing,
       })),
       // Only models whose rates an operator has actually entered get a cost
       // basis. The rest have none, and `providerCostMicroMinor` refuses them
@@ -123,6 +125,7 @@ export class ConfigurationAiSource implements AiConfigurationSource {
         baseMilliCredits: cost.baseMilliCredits,
         perUnitMilliCredits: cost.perUnitMilliCredits,
         unit: cost.unit,
+        imageQuality: cost.imageQuality,
       })),
       budgets: { defaults: budgets.defaults, perPlan: budgets.perPlan },
       // D-573 — the platform-wide provider-cost ceiling and the owner's
