@@ -401,6 +401,22 @@ cost and warns when a change would drive margin below a configured floor.
 
 All four phases are idempotent on `AIRequest.idempotencyKey` and `CreditTransaction.idempotencyKey`.
 
+**How "output validated" is enforced (PR A, check-up 2026-10-28 H-3, M-12, L-13).** A caller passes its
+parser and validator to the gateway as `accept(output)`. It runs after the provider answered and BEFORE
+the settle; a refusal (`OutputRejectedError`, or any throw) is recorded as `OUTPUT_INVALID` and the
+reservation is released. A provider that stops at its length limit or answers with nothing is
+`OUTPUT_TRUNCATED` (also released). Both are non-deterministic, so the same idempotency key runs again.
+The settle is outside the provider attempt: if its bookkeeping fails after the wallet was charged, the
+request stays RUNNING and the stuck-request sweep records it as the SUCCEEDED, charged request it was,
+never as a failure with nothing charged. A failed request records the provider's error code and a short,
+redacted, prompt-free reason (`providerErrorCode`, `failureReason`) for the Control Center request detail
+and the log; no customer API returns them.
+
+**No provider call holds a tenant transaction (H-4).** Every AI service runs as read → call → write: its
+`…With(run, input)` entry receives a runner that opens a SHORT `withWorkspace` per step, so the provider is
+called with no tenant transaction open. One interim exception remains: a confirmed Copilot plan's
+"draft a post" step (F-112).
+
 ### 7.4 The three guarantees
 
 1. **No charge for failure.** Any terminal non-success status releases the reservation completely. Provider

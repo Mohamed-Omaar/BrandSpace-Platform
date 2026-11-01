@@ -195,7 +195,8 @@ describe('Creative — the facts in an image prompt are fenced', () => {
           return { status: 'FAILED', output: null, failureMessage: 'stop here' };
         },
       } as never,
-      uploads: {} as never,
+      // PR A (H-3): the studio checks storage headroom before the provider call.
+      uploads: { assertStorageHeadroom: async () => undefined } as never,
     });
     await service
       .generate({

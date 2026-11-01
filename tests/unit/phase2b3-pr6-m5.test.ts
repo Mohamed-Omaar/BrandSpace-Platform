@@ -111,6 +111,8 @@ describe('M5 — order and schema', () => {
       '20261027100000_ai_platform_spend_ceiling',
       // D-574: the KEK re-wrap may replace a version's wrapped data key.
       '20261028090000_secret_version_kek_rewrap',
+      // PR A: the AI output failure classes and the operator's failure detail.
+      '20261101090000_ai_output_failure_classes',
     ]);
   });
 

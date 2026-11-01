@@ -27,8 +27,11 @@ const code = sql
   .join('\n');
 
 describe('D-574 · the secret_version trigger migration', () => {
-  it('is the last migration in the manifest', () => {
-    expect(EXPECTED_MIGRATIONS.at(-1)).toBe(NAME);
+  it('is followed only by the PR A AI output failure classes', () => {
+    expect(EXPECTED_MIGRATIONS.slice(EXPECTED_MIGRATIONS.indexOf(NAME))).toEqual([
+      NAME,
+      '20261101090000_ai_output_failure_classes',
+    ]);
   });
 
   it('replaces the function only: no trigger, table or grant is touched', () => {
