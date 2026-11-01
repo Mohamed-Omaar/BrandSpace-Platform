@@ -123,11 +123,7 @@ jobs:
   isolation:
     name: Tenant isolation and RLS (real PostgreSQL)
     runs-on: ubuntu-latest
-    # 40, not 20 (check-up 2026-10-28, M-16): the suite measured 21.1 min
-    # (235 files, 3,340 tests) on a runner-class machine, so a 20-minute limit
-    # cancelled the required check before it finished. Raise it again on
-    # measurement, as the E2E job's limit has been.
-    timeout-minutes: 40
+    timeout-minutes: 20
 
     services:
       postgres:
