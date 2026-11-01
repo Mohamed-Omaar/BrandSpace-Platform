@@ -197,8 +197,8 @@ describe('the audit trail records what happened, never the credential', () => {
             period: 'total',
           }),
         }).start({
-          // TIKTOK: its mock offers ONE target, so the callback connects in one
-          // step. This case is about what a credential row contains, not about
+          // TIKTOK: its mock offers ONE target, which the starter confirms
+          // (M-2). This case is about what a credential row contains, not about
           // the selection step (D-142), which has its own suite.
           provider: 'TIKTOK',
           brandId: fixtures.a.brandId,
@@ -209,8 +209,8 @@ describe('the audit trail records what happened, never the credential', () => {
 
     const completed = await withWorkspace(
       fixtures.a.workspaceId,
-      async (db) =>
-        new SocialOAuthService({
+      async (db) => {
+        const oauth = new SocialOAuthService({
           db,
           workspaceId: fixtures.a.workspaceId,
           policy,
@@ -229,17 +229,26 @@ describe('the audit trail records what happened, never the credential', () => {
             featureKey: QUOTA_FEATURES.socialAccounts,
             period: 'total',
           }),
-        }).complete({
+        });
+        const paused = await oauth.complete({
           state: state.state,
           code: `code-${randomUUID()}`,
           redirectUri: REDIRECT,
-        }),
+        });
+        if (paused.targets.length !== 1) {
+          throw new Error(`expected a single-target grant, got ${paused.targets.length}`);
+        }
+        // M-2: every grant pauses; the starter confirms the lone target, as the dashboard does.
+        const connection = await oauth.chooseTarget({
+          selectionToken: paused.selectionToken,
+          externalAccountId: paused.targets[0]!.externalAccountId,
+          actor: { userId: fixtures.a.userId, brandScope: [] },
+        });
+        return { connection };
+      },
       { prisma: app },
     );
 
-    if (completed.outcome !== 'connected') {
-      throw new Error(`expected a single-target grant, got ${completed.outcome}`);
-    }
     const credential = await withWorkspace(
       fixtures.a.workspaceId,
       async (db) =>

@@ -67,7 +67,7 @@ const en: Record<LegalDocumentKey, LegalDocument> = {
           {
             list: [
               'Brandspace is in a closed beta. You use it on a free trial. No payment is taken and no payment details are asked for.',
-              'The trial lasts the number of days shown when you sign up. While payments are not available, nothing is locked when the trial ends. We will tell you before that changes.',
+              'The trial lasts the number of days shown when you sign up. When it ends, your workspace becomes read-only: you can still view and export everything, but you cannot create new posts, publish or use AI. Nothing is deleted. We can extend a trial on request.',
               'Some features are not active in the beta: the AI features (writing, image generation, the Copilot and explanations) and connecting social media accounts, scheduling and publishing. Where a feature is not available, the product says so.',
               'The service is provided “as is” and “as available”, without any promise that it will be uninterrupted, free of errors or fit for a particular purpose. Features may change, pause or be removed during the beta.',
               'We announce changes to these terms by email or in the product before they take effect. If you keep using Brandspace after a change takes effect, the new terms apply.',
@@ -250,7 +250,7 @@ const en: Record<LegalDocumentKey, LegalDocument> = {
           {
             list: [
               'Account and workspace data: while the account or workspace exists.',
-              'A deleted workspace: removed after a grace period (currently 30 days), during which its owner can cancel the deletion.',
+              `A deleted workspace: closed after a grace period (currently 30 days), during which its owner can cancel. Its data is not erased automatically yet; to have it permanently erased, contact ${PRIVACY}.`,
               'Deleted files: removed from storage after currently 30 days.',
               'Uploads that were never finished: removed after currently 24 hours.',
               'Brand Brain chat and Copilot conversations: currently 90 days (these features are not active in the beta).',
@@ -334,7 +334,7 @@ const en: Record<LegalDocumentKey, LegalDocument> = {
           {
             list: [
               'The workspace is scheduled for deletion. During the grace period (currently 30 days) the owner can cancel.',
-              'After that, the workspace and everything in it is deleted: brands, Brand Brain, media, posts, the calendar, campaigns, notes, and every member’s access to it. Its files are removed from storage.',
+              `After that, your workspace is closed: nobody can open it, and every member loses access. Its data is not erased automatically yet. To have its data permanently erased, contact ${PRIVACY}.`,
             ],
           },
         ],
@@ -405,7 +405,7 @@ const ar: Record<LegalDocumentKey, LegalDocument> = {
           {
             list: [
               'Brandspace في فترة تجريبية مغلقة، وتستخدمه ضمن تجربة مجانية. لا يُحصَّل أي مبلغ ولا تُطلب أي بيانات دفع.',
-              'تستمر التجربة عدد الأيام الظاهر عند التسجيل. وما دام الدفع غير متاح، لا يُقفل شيء عند انتهاء التجربة، وسنُعلمك قبل أي تغيير في ذلك.',
+              'تستمر التجربة عدد الأيام الظاهر عند التسجيل. وعند انتهائها تصبح مساحة العمل للعرض فقط: يمكنك عرض كل شيء وتصديره، لكن لا يمكنك إنشاء منشورات جديدة أو النشر أو استخدام الذكاء الاصطناعي. لا يُحذف أي شيء، ويمكننا تمديد التجربة عند الطلب.',
               'بعض الميزات غير مفعّلة في الفترة التجريبية: ميزات الذكاء الاصطناعي (الكتابة وإنشاء الصور والمساعد والشرح)، وربط حسابات التواصل الاجتماعي والجدولة والنشر. وحيث تكون الميزة غير متاحة يذكر المنتج ذلك.',
               'تُقدَّم الخدمة «كما هي» و«حسب توفّرها»، دون أي تعهّد بأن تعمل دون انقطاع أو أخطاء أو أن تناسب غرضًا معيّنًا. وقد تتغيّر الميزات أو تتوقف أو تُزال خلال الفترة التجريبية.',
               'نُعلن أي تغيير في هذه الشروط بالبريد الإلكتروني أو داخل المنتج قبل سريانه. وإذا واصلت استخدام Brandspace بعد سريان التغيير، تسري الشروط الجديدة.',
@@ -587,7 +587,7 @@ const ar: Record<LegalDocumentKey, LegalDocument> = {
           {
             list: [
               'بيانات الحساب ومساحة العمل: ما دام الحساب أو مساحة العمل قائمًا.',
-              'مساحة العمل المحذوفة: تُزال بعد مهلة (حاليًا 30 يومًا) يستطيع مالكها خلالها إلغاء الحذف.',
+              `مساحة العمل المحذوفة: تُغلق بعد مهلة (حاليًا 30 يومًا) يستطيع مالكها خلالها الإلغاء. ولا تُمحى بياناتها تلقائيًا بعد؛ لمحوها نهائيًا تواصل معنا على ${PRIVACY}.`,
               'الملفات المحذوفة: تُزال من التخزين بعد 30 يومًا حاليًا.',
               'عمليات الرفع التي لم تكتمل: تُزال بعد 24 ساعة حاليًا.',
               'محادثات عقل العلامة والمساعد: 90 يومًا حاليًا (هاتان الميزتان غير مفعّلتين في الفترة التجريبية).',
@@ -671,7 +671,7 @@ const ar: Record<LegalDocumentKey, LegalDocument> = {
           {
             list: [
               'تُجدول مساحة العمل للحذف، ويستطيع المالك الإلغاء خلال المهلة (حاليًا 30 يومًا).',
-              'بعد ذلك تُحذف مساحة العمل وكل ما فيها: العلامات التجارية وعقل العلامة والوسائط والمنشورات والتقويم والحملات والملاحظات، ويزول وصول كل الأعضاء إليها. وتُزال ملفاتها من التخزين.',
+              `بعد ذلك تُغلق مساحة العمل: لا يستطيع أحد فتحها، ويزول وصول كل الأعضاء إليها. ولا تُمحى بياناتها تلقائيًا بعد. لمحو بياناتها نهائيًا، تواصل معنا على ${PRIVACY}.`,
             ],
           },
         ],

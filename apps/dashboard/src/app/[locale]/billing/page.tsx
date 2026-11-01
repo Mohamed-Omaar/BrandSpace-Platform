@@ -26,6 +26,7 @@ import { brandContextFor } from '../../../server/brand-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { SettingsFrame } from '../../../components/settings-frame';
 import { MoreDisclosure } from '../../../components/more-disclosure';
+import { trialHasEndedFor } from '@brandspace/entitlements';
 import { CustomerBanner, CustomerEmpty, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   BuyPackButton,
@@ -345,6 +346,16 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
             ownerName={await workspaceOwnerName(workspace.workspaceId)}
           />
         )}
+        {/* D-584: what the end of the free trial means, before and after it. */}
+        {subscription && trialHasEndedFor(subscription, today) ? (
+          <CustomerBanner tone="warning">
+            <span data-testid="trial-ended-banner">{t('billing.trialEnded')}</span>
+          </CustomerBanner>
+        ) : subscription?.status === 'TRIALING' ? (
+          <CustomerBanner tone="info">
+            <span data-testid="trial-rule-banner">{t('billing.trialEndRule')}</span>
+          </CustomerBanner>
+        ) : null}
         {/* The three states dunning can put a workspace in, each said plainly and
           each stating what is NOT happening: nothing is being deleted. */}
         {payments && subscription?.status === 'SUSPENDED' ? (

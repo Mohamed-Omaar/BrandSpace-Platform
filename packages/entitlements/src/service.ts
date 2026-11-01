@@ -499,6 +499,77 @@ export class EntitlementService {
   }
 
   /**
+   * EXTEND A FREE TRIAL (D-584). The platform owner's way back for a workspace
+   * whose trial ended — or is about to — without a plan being chosen.
+   *
+   * Only a workspace that HAS trialed: a TRIALING subscription, or an EXPIRED
+   * one (an unconverted trial). The new end is `days` after the later of now
+   * and the current end, so extending a live trial adds to it and extending an
+   * ended one starts from today. The subscription goes back to TRIALING with
+   * the period ending at the new trial end, which is what makes the workspace
+   * writable again (`trialHasEnded`). No credits are granted: a trial grants
+   * its allowance once (D-09). Audited in the same transaction.
+   */
+  async extendTrial(
+    actor: EntitlementActor,
+    workspaceId: string,
+    days: number,
+    reason: string,
+  ): Promise<{ readonly trialEndsAt: Date }> {
+    await this.#authorize(actor, 'entitlements.extend_trial', PLAN_ASSIGN_PERMISSION);
+    if (!Number.isInteger(days) || days < 1 || days > 365) {
+      throw new AppError(
+        'VALIDATION_FAILED',
+        'Extend a trial by a whole number of days, 1 to 365.',
+      );
+    }
+    if (!reason.trim()) throw new AppError('VALIDATION_FAILED', 'A reason is required.');
+    const now = this.#clock.now();
+
+    return this.#prisma.$transaction(async (tx) => {
+      const existing = await tx.workspaceSubscription.findUnique({ where: { workspaceId } });
+      const trialed =
+        existing !== null &&
+        existing.trialStartedAt !== null &&
+        (existing.status === 'TRIALING' || existing.status === 'EXPIRED');
+      if (!trialed) {
+        throw new AppError(
+          'CONFLICT',
+          'Only a workspace on, or just past, its free trial can be extended.',
+        );
+      }
+      const from =
+        existing.trialEndsAt && existing.trialEndsAt.getTime() > now.getTime()
+          ? existing.trialEndsAt
+          : now;
+      const trialEndsAt = new Date(from.getTime() + days * 86_400_000);
+      await tx.workspaceSubscription.update({
+        where: { workspaceId },
+        data: { status: 'TRIALING', trialEndsAt, currentPeriodEnd: trialEndsAt },
+      });
+      await tx.auditEvent.create({
+        data: {
+          workspaceId,
+          actorType: 'PLATFORM_USER',
+          actorId: actor.platformUserId,
+          action: 'platform.trial.extended',
+          resourceType: 'workspace',
+          resourceId: workspaceId,
+          severity: 'NOTICE',
+          outcome: 'SUCCESS',
+          reason,
+          before: {
+            status: existing.status,
+            trialEndsAt: existing.trialEndsAt?.toISOString() ?? null,
+          },
+          after: { status: 'TRIALING', trialEndsAt: trialEndsAt.toISOString(), days },
+        },
+      });
+      return { trialEndsAt };
+    });
+  }
+
+  /**
    * Assign or change a workspace plan.
    *
    * The plan key must exist in the active `plans` configuration: assigning a

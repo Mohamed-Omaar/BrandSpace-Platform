@@ -131,6 +131,7 @@ const SUCCESS_TEXT: Record<string, (locale: string, params: URLSearchParams) => 
   OVERRIDE_SET: (locale) => (locale === 'ar' ? 'تم حفظ الاستثناء' : 'Override saved'),
   OVERRIDE_REVOKED: (locale) => (locale === 'ar' ? 'تم إلغاء الاستثناء' : 'Override revoked'),
   CREDITS_ADJUSTED: (locale) => (locale === 'ar' ? 'تم تعديل الرصيد' : 'Credits adjusted'),
+  TRIAL_EXTENDED: (locale) => (locale === 'ar' ? 'تم تمديد الفترة التجريبية' : 'Trial extended'),
   INVITATION_SENT: (locale) => (locale === 'ar' ? 'تم إرسال الدعوة' : 'Invitation sent'),
   INVITATION_REVOKED: (locale) => (locale === 'ar' ? 'تم إلغاء الدعوة' : 'Invitation revoked'),
   SUPPORT_STARTED: (locale) => (locale === 'ar' ? 'بدأت جلسة الدعم' : 'Support session started'),

@@ -16,6 +16,7 @@ import {
   systemClock,
   type Clock,
 } from '@brandspace/shared';
+import { trialHasEnded } from '@brandspace/entitlements';
 import type {
   AdapterCredentials,
   PublishMedia,
@@ -445,6 +446,15 @@ export class PublishPipelineService {
     });
 
     if (slot.status !== 'SCHEDULED') return empty('slot_not_scheduled');
+    /*
+     * D-584: NOTHING IS PUBLISHED ONCE THE FREE TRIAL HAS ENDED. The slot is
+     * left SCHEDULED, not failed, so a plan chosen or a trial the owner
+     * extends lets it go out; past its lateness window it is handled exactly
+     * as any other late post.
+     */
+    if (await trialHasEnded(this.#db, this.#workspaceId, this.#clock.now())) {
+      return empty('trial_ended');
+    }
 
     const item = await this.#db.contentItem.findFirst({
       where: { id: slot.contentItemId, workspaceId: this.#workspaceId },

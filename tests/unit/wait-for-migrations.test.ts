@@ -78,4 +78,21 @@ describe('wait-for-migrations', () => {
     expect(timeoutSecondsFrom('abc')).toBe(1_800);
     expect(timeoutSecondsFrom('1.5')).toBe(1_800);
   });
+
+  it('stops at once on a FAILED migration instead of waiting out the timeout (L-24)', async () => {
+    const c = clock();
+    const lines: string[] = [];
+    const ready = await waitForMigrations({
+      read: async () => ({ ...schemaReadinessFrom(['a'], ['a', 'b']), failed: ['b'] }),
+      timeoutMs: 1_800_000,
+      intervalMs: 5_000,
+      ...c,
+      log: (line) => lines.push(line),
+    });
+    expect(ready).toBe(false);
+    expect(c.now()).toBe(0);
+    expect(lines).toEqual([
+      'wait-for-migrations: migration failed: b; fix it and run `prisma migrate resolve` before redeploying',
+    ]);
+  });
 });

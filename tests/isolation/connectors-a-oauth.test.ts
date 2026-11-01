@@ -236,11 +236,20 @@ describe('W11 — the starter must still be allowed when the platform calls back
 describe('W10 — the granting user is kept only as a keyed, versioned hash', () => {
   it('a connection stores v<version>: + HMAC-SHA256 of the platform user id, never the id', async () => {
     const state = await start('TIKTOK');
-    const result = await service(
+    const paused = await service(
       (oauth) => oauth.complete({ state, code: 'w10-direct', redirectUri: REDIRECT }),
       hasher,
     );
-    if (result.outcome !== 'connected') throw new Error('expected one target');
+    if (paused.targets.length !== 1) throw new Error('expected one target');
+    // M-2: every grant pauses; the starter confirms the lone target, as the dashboard does.
+    const connection = await service((oauth) =>
+      oauth.chooseTarget({
+        selectionToken: paused.selectionToken,
+        externalAccountId: paused.targets[0]!.externalAccountId,
+        actor: { userId: fixtures.a.userId, brandScope: [] },
+      }),
+    );
+    const result = { connection };
 
     const stored = result.connection.providerSubjectHash;
     expect(stored).toMatch(/^v3:[0-9a-f]{64}$/);
@@ -300,11 +309,19 @@ describe('W10 — the granting user is kept only as a keyed, versioned hash', ()
 
   it('with no key configured, nothing is stored — and the connection is still made', async () => {
     const state = await start('TIKTOK');
-    const result = await service((oauth) =>
+    const paused = await service((oauth) =>
       oauth.complete({ state, code: 'w10-no-key', redirectUri: REDIRECT }),
     );
-    if (result.outcome !== 'connected') throw new Error('expected one target');
-    expect(result.connection.providerSubjectHash).toBeNull();
+    if (paused.targets.length !== 1) throw new Error('expected one target');
+    // M-2: every grant pauses; the starter confirms the lone target, as the dashboard does.
+    const connection = await service((oauth) =>
+      oauth.chooseTarget({
+        selectionToken: paused.selectionToken,
+        externalAccountId: paused.targets[0]!.externalAccountId,
+        actor: { userId: fixtures.a.userId, brandScope: [] },
+      }),
+    );
+    expect(connection.providerSubjectHash).toBeNull();
   });
 
   it('a rotated key keeps the old rows findable: each version yields its own prefix', () => {

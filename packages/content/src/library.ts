@@ -18,6 +18,7 @@ import {
   transitionNotAllowed,
   unsupportedPlatform,
 } from './errors';
+import { assertWorkspaceMayCreate } from '@brandspace/entitlements';
 import { normaliseHashtags } from './hashtags';
 import { ContentApprovalService } from './approvals';
 import { SLOT_BUSY_JOB_STATUSES } from './calendar';
@@ -530,6 +531,8 @@ export class ContentLibraryService {
      * its own row without a second read — and the loser re-reads by the unique
      * key, which is the only handle it has.
      */
+    // D-584: once the free trial has ended nothing new is made.
+    await assertWorkspaceMayCreate(this.db, this.workspaceId, systemClock.now());
     const candidateId = randomUUID();
     const created = await this.db.contentItem.createMany({
       data: [
