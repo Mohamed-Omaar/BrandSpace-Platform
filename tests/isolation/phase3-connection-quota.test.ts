@@ -143,8 +143,16 @@ async function completeFlow(state: string): Promise<string> {
   const result = await oauthIn((service) =>
     service.complete({ state, code: `code-${randomUUID()}`, redirectUri: REDIRECT }),
   );
-  if (result.outcome !== 'connected') throw new Error(`unexpected outcome ${result.outcome}`);
-  return result.connection.id;
+  if (result.targets.length !== 1) throw new Error(`unexpected targets ${result.targets.length}`);
+  // M-2: every grant pauses; the starter confirms the lone target, as the dashboard does.
+  const connection = await oauthIn((service) =>
+    service.chooseTarget({
+      selectionToken: result.selectionToken,
+      externalAccountId: result.targets[0]!.externalAccountId,
+      actor: { userId: fixtures.a.userId, brandScope: [] },
+    }),
+  );
+  return connection.id;
 }
 
 /**
