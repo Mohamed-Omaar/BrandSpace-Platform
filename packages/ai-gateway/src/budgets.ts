@@ -62,8 +62,14 @@ export class BudgetExceededError extends AppError {
   readonly limit: number | null;
   readonly observed: number;
 
-  constructor(breach: BudgetBreach, message: string, limit: number | null, observed: number) {
-    super(breach === 'concurrency' ? 'RATE_LIMITED' : 'QUOTA_EXCEEDED', message);
+  constructor(
+    breach: BudgetBreach,
+    message: string,
+    limit: number | null,
+    observed: number,
+    details: Record<string, string | number | boolean> = {},
+  ) {
+    super(breach === 'concurrency' ? 'RATE_LIMITED' : 'QUOTA_EXCEEDED', message, details);
     this.name = 'BudgetExceededError';
     this.breach = breach;
     this.limit = limit;
@@ -143,14 +149,39 @@ export function assessBudget(
 }
 
 /** Turn a refused decision into the error the caller sees. */
-export function budgetRefusal(decision: BudgetDecision): BudgetExceededError {
+export function budgetRefusal(
+  decision: BudgetDecision,
+  now: Date = new Date(),
+): BudgetExceededError {
   /* c8 ignore next -- callers only reach here for a refusal. */
   const breach = decision.breached ?? 'credits_per_day';
   const message =
     breach === 'concurrency'
       ? 'This workspace already has as many AI requests running as its plan allows. Try again shortly.'
       : 'This workspace has reached its AI budget for this period.';
-  return new BudgetExceededError(breach, message, decision.limit, decision.observed);
+  /*
+   * PR A2 — A BUDGET IS NOT THE WALLET. The refusal used to reach the customer
+   * as QUOTA_EXCEEDED with nothing else, and the screens read that as "not
+   * enough credits" while the wallet held hundreds. It now says WHICH limit and
+   * WHEN it resets: the budget windows are UTC days and months (`#budgetUsage`).
+   */
+  const details =
+    breach === 'credits_per_day'
+      ? {
+          reason: 'AI_DAILY_LIMIT',
+          resetsAt: new Date(
+            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+          ).toISOString(),
+        }
+      : breach === 'credits_per_month'
+        ? {
+            reason: 'AI_MONTHLY_LIMIT',
+            resetsAt: new Date(
+              Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+            ).toISOString(),
+          }
+        : {};
+  return new BudgetExceededError(breach, message, decision.limit, decision.observed, details);
 }
 
 /**

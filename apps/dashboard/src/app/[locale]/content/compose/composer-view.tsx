@@ -1,5 +1,6 @@
 'use client';
 
+import { aiLimitMessage, type ApiErrorBody } from '../../../../components/ai-limit';
 import Link from 'next/link';
 import type { UploadRules } from '../../../../components/upload-rules';
 import type { AutosaveResult, ProposeTimeResult, ShapeResult } from '../actions';
@@ -764,8 +765,14 @@ export function ComposerView({
         const code = (payload as { error?: { code?: string } } | null)?.error?.code ?? 'INTERNAL';
         // A CODE from a closed set chooses the words. No server text, no
         // provider name and no stack ever reaches this screen (AC-11.6).
+        // PR A2: a daily/monthly AI budget is named, with its reset time.
         const key = FAILURE_KEYS[code] ?? 'content.error.generic';
-        setFailure(t[key] ?? t['content.error.generic'] ?? '');
+        setFailure(
+          aiLimitMessage(payload as ApiErrorBody, t, locale) ??
+            t[key] ??
+            t['content.error.generic'] ??
+            '',
+        );
         return null;
       }
       return payload;

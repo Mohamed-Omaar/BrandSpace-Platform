@@ -2197,6 +2197,8 @@ export const messages = {
     'content.type.THREAD': 'سلسلة',
     'content.error.generic': 'تعذّر إتمام الطلب. حاول مرة أخرى.',
     'content.error.quota': 'لا يوجد رصيد كافٍ من أرصدة الذكاء الاصطناعي.',
+    'ai.limit.daily': 'وصلت إلى حد الذكاء الاصطناعي لهذا اليوم. يُعاد ضبطه عند {time}.',
+    'ai.limit.monthly': 'وصلت إلى حد الذكاء الاصطناعي لهذا الشهر. يُعاد ضبطه في {time}.',
     // D-573 — the platform AI ceiling, in the owner's words.
     'ai.paused': 'الذكاء الاصطناعي متوقف مؤقتًا. حاول مرة أخرى لاحقًا.',
     'content.error.invalid': 'راجع ما أدخلته ثم حاول مرة أخرى.',
@@ -6530,6 +6532,8 @@ export const messages = {
     'content.type.THREAD': 'Thread',
     'content.error.generic': 'That could not be completed. Please try again.',
     'content.error.quota': 'Not enough AI credits.',
+    'ai.limit.daily': "Today's AI limit is reached. It resets at {time}.",
+    'ai.limit.monthly': "This month's AI limit is reached. It resets on {time}.",
     // D-573 — the platform AI ceiling, in the owner's words.
     'ai.paused': 'AI is paused right now. Please try again later.',
     'content.error.invalid': 'Check what you entered and try again.',

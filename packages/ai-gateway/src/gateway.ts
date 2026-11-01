@@ -13,7 +13,7 @@ import type {
   ImageQuality,
   UsageUnits,
 } from './adapter';
-import { DEFAULT_IMAGE_SIZING, resolveImageSize } from './image-sizing';
+import { DEFAULT_IMAGE_SIZING, parseImageSize, resolveImageSize } from './image-sizing';
 import {
   assessBudget,
   assessPlatformBudget,
@@ -357,7 +357,11 @@ export class AiGateway {
       const basis = config.costBases.find((b) => b.modelKey === candidate);
       if (!basis) return true;
       return withinRequestCostCap(
-        providerCostMicroMinor(worstCase, basis),
+        providerCostMicroMinor(
+          worstCase,
+          basis,
+          imageCostInput(request.input, route, config, candidate),
+        ),
         route.maxCostPerRequestMinor,
       );
     });
@@ -409,7 +413,7 @@ export class AiGateway {
       await this.#budgetUsage(request.workspaceId),
       reservationEstimate,
     );
-    if (!decision.allowed) throw budgetRefusal(decision);
+    if (!decision.allowed) throw budgetRefusal(decision, this.#clock.now());
 
     /*
      * D-573 — THE PROVIDER-COST ESTIMATE, for the platform ceiling. Like the
@@ -419,7 +423,13 @@ export class AiGateway {
      */
     const providerCostEstimate = chain.reduce((highest, candidate) => {
       const basis = config.costBases.find((b) => b.modelKey === candidate);
-      const estimate = basis ? providerCostMicroMinor(worstCase, basis) : 0n;
+      const estimate = basis
+        ? providerCostMicroMinor(
+            worstCase,
+            basis,
+            imageCostInput(request.input, route, config, candidate),
+          )
+        : 0n;
       return estimate > highest ? estimate : highest;
     }, 0n);
 
@@ -943,7 +953,13 @@ export class AiGateway {
           }
 
           const basis = config.costBases.find((b) => b.modelKey === modelKey);
-          const cost = basis ? providerCostMicroMinor(usage, basis) : 0n;
+          const cost = basis
+            ? providerCostMicroMinor(
+                usage,
+                basis,
+                imageCostInput(request.input, route, config, modelKey),
+              )
+            : 0n;
           /*
            * D-573 — NEVER MORE THAN WAS RESERVED, which is the price quoted.
            *
@@ -1800,6 +1816,22 @@ interface SettleArgs {
   readonly latencyMs: number;
   readonly attempted: readonly string[];
   readonly retries: number;
+}
+
+/** PR A2 (F-115) — the quality and the pixels an image's provider cost scales by. */
+function imageCostInput(
+  input: AiInput,
+  route: ResolvedRoute,
+  config: AiConfiguration,
+  modelKey: string,
+): { quality: ImageQuality; pixels: number } | undefined {
+  if (input.kind !== 'image') return undefined;
+  const model = config.models.find((candidate) => candidate.key === modelKey);
+  const sent = parseImageSize(
+    resolveImageSize(input.size, model?.imageSizing ?? DEFAULT_IMAGE_SIZING),
+  );
+  if (!sent) return undefined;
+  return { quality: imageQualityOf(input, route) ?? 'medium', pixels: sent.width * sent.height };
 }
 
 /** PR A (item 6) — the quality an image request is priced and sent at. */

@@ -37,7 +37,16 @@ export interface ModelCostBasis {
   readonly outputCostPerUnitMicroMinor: number | null;
   readonly costUnit: AiBillingUnit;
   readonly costCurrency: string;
+  /** PR A2 (F-115) — per-quality cost of one 1024×1024 image; null when not entered. */
+  readonly imageCostByQualityMicroMinor?: {
+    readonly low: number;
+    readonly medium: number;
+    readonly high: number;
+  } | null;
 }
+
+/** The provider's reference image size for a per-image price: 1024×1024. */
+const REFERENCE_IMAGE_PIXELS = 1024n * 1024n;
 
 /** What BrandSpace charges for one task on one model, from `ai.credit-rules`. */
 export interface CreditRule {
@@ -102,7 +111,24 @@ function divideRoundingUp(numerator: bigint, denominator: bigint): bigint {
  * Rounds UP. Under-recording our own cost inflates reported margin, which is
  * the direction that hides a loss-making model.
  */
-export function providerCostMicroMinor(usage: UsageUnits, basis: ModelCostBasis): bigint {
+export function providerCostMicroMinor(
+  usage: UsageUnits,
+  basis: ModelCostBasis,
+  image?: { readonly quality: 'low' | 'medium' | 'high'; readonly pixels: number },
+): bigint {
+  /*
+   * PR A2 (F-115) — AN IMAGE COSTS WHAT ITS QUALITY AND SIZE COST. With a
+   * per-quality rate entered, the cost is that rate × images × (pixels sent ÷
+   * 1024²), rounded up: a 1152×2048 high image costs 2.25 high squares; a low
+   * square costs one low square. Without it, the single per-unit rate below.
+   */
+  if (image && basis.imageCostByQualityMicroMinor && (usage.imageCount ?? 0) > 0) {
+    const rate = BigInt(basis.imageCostByQualityMicroMinor[image.quality]);
+    return divideRoundingUp(
+      rate * BigInt(usage.imageCount ?? 0) * BigInt(image.pixels),
+      REFERENCE_IMAGE_PIXELS,
+    );
+  }
   if (basis.inputCostPerUnitMicroMinor === null || basis.outputCostPerUnitMicroMinor === null) {
     throw new PricingError(
       'no_cost_basis',

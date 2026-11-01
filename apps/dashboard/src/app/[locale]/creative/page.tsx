@@ -150,6 +150,8 @@ export default async function CreativeStudioPage({
     qualityLow: t('creative.qualityLow'),
     qualityMedium: t('creative.qualityMedium'),
     qualityHigh: t('creative.qualityHigh'),
+    aiLimitDaily: t('ai.limit.daily'),
+    aiLimitMonthly: t('ai.limit.monthly'),
     generate: t('creative.generate'),
     generating: t('creative.generating'),
     cost: t('creative.cost'),
