@@ -73,6 +73,27 @@ export async function withWorkspace<T>(
  * This runs on the TENANT pool. It grants no cross-tenant access: the tenant
  * role is not named by any platform policy, so there is nothing to escalate to.
  */
+/**
+ * PR A (check-up H-4) — SHORT TENANT TRANSACTIONS ON DEMAND.
+ *
+ * An AI provider call can take far longer than a tenant transaction's 15 s
+ * timeout, and holding a pooled connection idle for it is waste even when it
+ * does not. A service that calls the gateway is handed a runner instead of one
+ * long-lived transaction: it reads what it needs in one short transaction,
+ * calls the provider with NO transaction open, and writes the result in a
+ * second. Each call is its own `withWorkspace`, so RLS context is set exactly
+ * as it always is.
+ */
+export type TenantRunner = <T>(fn: (db: TenantScopedClient) => Promise<T>) => Promise<T>;
+
+export function tenantRunner(
+  workspaceId: string,
+  options: WithWorkspaceOptions = {},
+): TenantRunner {
+  assertValidWorkspaceId(workspaceId);
+  return (fn) => withWorkspace(workspaceId, fn, options);
+}
+
 export async function withoutTenantContext<T>(
   fn: (db: TenantScopedClient) => Promise<T>,
   options: WithWorkspaceOptions = {},

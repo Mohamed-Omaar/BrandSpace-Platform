@@ -244,6 +244,10 @@ enum AiFailureClass {
   TIMEOUT
   NETWORK_ERROR
   UNKNOWN
+  /// PR A — the provider answered, the caller refused the output (H-3).
+  OUTPUT_INVALID
+  /// PR A — length stop or empty answer (M-12).
+  OUTPUT_TRUNCATED
 }
 
 enum EmailMessageStatus {
@@ -1580,6 +1584,12 @@ model AiRequest {
   failureClass   AiFailureClass?
   /// Safe to show a customer. Never a raw provider error or a credential.
   failureMessage String?
+  /// PR A — the provider's own error code, for the operator. Never in a
+  /// customer response. CHECK: `^[A-Za-z0-9_.:-]{1,64}$`, failures only.
+  providerErrorCode String?
+  /// PR A — a short reason (≤ 200 chars), redacted and free of prompt text,
+  /// for the operator. Never in a customer response. Failures only.
+  failureReason     String?
 
   /// Audit-safe metadata. NEVER raw customer content.
   inputSummary Json?

@@ -9,6 +9,7 @@ export {
   AI_FAILURE_CLASSES,
   AI_NOT_AVAILABLE_MESSAGE,
   AiProviderError,
+  OutputRejectedError,
   customerMessageFor,
   gatewayError,
   isFallbackEligible,
@@ -110,7 +111,12 @@ export {
 } from './pricing';
 export type { AiBillingUnit, CreditRule, MarginAssessment, ModelCostBasis } from './pricing';
 
-export { measurePlatformSpend, purgeExpiredOutputs } from './gateway';
+export {
+  measurePlatformSpend,
+  operatorFailureDetail,
+  operatorFailureReason,
+  purgeExpiredOutputs,
+} from './gateway';
 export { AiGateway } from './gateway';
 export type {
   AiConfiguration,
