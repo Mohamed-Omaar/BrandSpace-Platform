@@ -275,6 +275,37 @@ export async function adjustCreditsAction(formData: FormData): Promise<void> {
   redirect(destination);
 }
 
+/**
+ * D-584 — EXTEND A FREE TRIAL. The way back for a workspace whose trial ended
+ * (read-only) or is about to. Same permission as assigning a plan; the service
+ * checks it, the MFA and the input, and audits the change.
+ */
+export async function extendTrialAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const workspaceId = String(formData.get('workspaceId') ?? '');
+  let destination: string;
+
+  try {
+    const actor = await requirePlatformActor('platform.plan.assign');
+    const service = await getPlanAssignmentService();
+    await withSpan('workspace.extend_trial', {}, async () =>
+      service.extendTrial(
+        serviceActor(actor),
+        workspaceId,
+        Number(formData.get('days') ?? 0),
+        String(formData.get('reason') ?? ''),
+      ),
+    );
+    destination = detailUrl(locale, workspaceId, { ok: 'TRIAL_EXTENDED' });
+  } catch (error: unknown) {
+    destination = failure((p) => detailUrl(locale, workspaceId, p), error, {
+      action: 'extend_trial',
+    });
+  }
+  revalidatePath(`/${locale}/console/workspaces/${workspaceId}`);
+  redirect(destination);
+}
+
 export async function inviteMemberAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'ar');
   const workspaceId = String(formData.get('workspaceId') ?? '');

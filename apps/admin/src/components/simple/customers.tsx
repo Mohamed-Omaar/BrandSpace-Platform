@@ -40,6 +40,7 @@ import {
   changeStatusAction,
 } from '../../app/[locale]/console/workspaces/actions';
 import { AdvancedLink } from '../mode-switch';
+import { ExtendTrialCard } from './extend-trial-card';
 import {
   ActionLink,
   ActionOutcome,
@@ -515,6 +516,12 @@ export async function SimpleCustomerDetail({
   const mayChangeStatus =
     may('platform.workspace.suspend') &&
     ['TRIALING', 'ACTIVE', 'PAST_DUE', 'SUSPENDED'].includes(workspace.status);
+  // D-584: a trial that is running, or has ended without a plan, can be extended.
+  const mayExtendTrial =
+    may('platform.plan.assign') &&
+    subscription !== null &&
+    subscription.trialStartedAt !== null &&
+    (subscription.status === 'TRIALING' || subscription.status === 'EXPIRED');
   const anyAction = may('platform.plan.assign') || may('platform.credit.adjust') || mayChangeStatus;
 
   return (
@@ -530,7 +537,7 @@ export async function SimpleCustomerDetail({
         error={error}
         reference={ref}
         okText={(code) =>
-          ['STATUS_CHANGED', 'PLAN_ASSIGNED', 'CREDITS_ADJUSTED'].includes(code)
+          ['STATUS_CHANGED', 'PLAN_ASSIGNED', 'CREDITS_ADJUSTED', 'TRIAL_EXTENDED'].includes(code)
             ? copy(`cd.ok.${code}` as SimpleKey)
             : null
         }
@@ -797,6 +804,7 @@ export async function SimpleCustomerDetail({
                 </form>
               </Card>
             ) : null}
+            {mayExtendTrial ? <ExtendTrialCard locale={locale} workspaceId={workspaceId} /> : null}
             {may('platform.credit.adjust') ? (
               <Card
                 title={copy('cd.adjustCredits')}

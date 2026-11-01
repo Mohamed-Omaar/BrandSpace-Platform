@@ -229,7 +229,7 @@ export const messages = {
     'ws.switchBusiness': 'تبديل النشاط التجاري',
     'deletion.title': 'مساحة العمل بانتظار الحذف',
     'deletion.body':
-      'ستُحذف مساحة العمل «{workspace}» في {date}. لا يمكن العمل فيها حتى ذلك الحين.',
+      'تُغلق مساحة العمل «{workspace}» في {date}. لا يمكن العمل فيها حتى ذلك الحين. ولمحو بياناتها نهائيًا، تواصل معنا على privacy@brandspace.cc.',
     'deletion.cancel': 'إلغاء الحذف',
     'deletion.requestedBy': 'طلب {name} الحذف في {date}.',
     'deletion.requestedOn': 'طُلب الحذف في {date}.',
@@ -327,7 +327,7 @@ export const messages = {
     'overview.workspaceStatus.SUSPENDED': 'موقوفة',
     'overview.workspaceStatus.CANCELLED': 'ملغاة',
     'overview.workspaceStatus.ARCHIVED': 'مؤرشفة',
-    'overview.workspaceStatus.DELETED': 'محذوفة',
+    'overview.workspaceStatus.DELETED': 'مغلقة',
     'overview.field.signedInAs': 'مسجّل الدخول باسم',
     'overview.field.workspace': 'النشاط التجاري',
     'overview.field.role': 'الدور',
@@ -727,10 +727,10 @@ export const messages = {
     'data.workspaceExport.body': 'لا يتوفر تصدير واحد لكل بيانات نشاطك التجاري كإجراء ذاتي.',
     'data.workspaceDeletion.title': 'حذف مساحة العمل',
     'data.workspaceDeletion.body':
-      'المالك وحده يطلب الحذف. تبقى مساحة العمل {days} يومًا بانتظار الحذف ويمكن إلغاء الطلب خلالها، ثم تُحذف.',
+      'المالك وحده يطلب الحذف. تبقى مساحة العمل {days} يومًا بانتظار الحذف ويمكن إلغاء الطلب خلالها. وبعد ذلك تُغلق مساحة العمل. ولمحو بياناتها نهائيًا، تواصل معنا على privacy@brandspace.cc.',
     'data.workspaceDeletion.start': 'حذف مساحة العمل…',
     'data.workspaceDeletion.warning':
-      'بعد التأكيد يُغلق العمل في مساحة العمل على كل الأعضاء، ولا يُنشر شيء ولا تُصرف أي أرصدة. بعد {days} يومًا تُحذف ما لم يُلغِ المالك الطلب.',
+      'بعد التأكيد يُغلق العمل في مساحة العمل على كل الأعضاء، ولا يُنشر شيء ولا تُصرف أي أرصدة. وبعد {days} يومًا، ما لم يُلغِ المالك الطلب، تُغلق مساحة العمل. ولمحو بياناتها نهائيًا، تواصل معنا على privacy@brandspace.cc.',
     'data.workspaceDeletion.confirmName': 'اكتب اسم مساحة العمل للتأكيد: {name}',
     'data.workspaceDeletion.password': 'كلمة مرورك',
     'data.workspaceDeletion.confirm': 'اطلب حذف مساحة العمل',
@@ -2697,7 +2697,7 @@ export const messages = {
     'activity.action.workspace.deletion_blocked': 'أُوقف حذف مساحة العمل لأن الباقة ما زالت تتجدد',
     'activity.action.notification.preferences.updated': 'تم تغيير تفضيلات الإشعارات',
     'activity.action.workspace.deletion_cancelled': 'أُلغي حذف مساحة العمل',
-    'activity.action.workspace.deleted': 'حُذفت مساحة العمل',
+    'activity.action.workspace.deleted': 'أُغلقت مساحة العمل',
     'activity.action.workspace.settings.updated': 'تغيّرت إعدادات النشاط التجاري',
     'activity.action.workspace.ai_content_retention.updated':
       'تغيّر الاحتفاظ بمحتوى الذكاء الاصطناعي',
@@ -3700,6 +3700,10 @@ export const messages = {
     'billing.renews': 'يتجدّد في',
     'billing.ended': 'انتهت في',
     'billing.trialEnds': 'تنتهي الفترة التجريبية في',
+    'billing.trialEndRule':
+      'عند انتهاء الفترة التجريبية المجانية تصبح مساحة العمل للعرض فقط: يمكنك عرض كل شيء وتصديره، لكن لا يمكنك إنشاء منشورات جديدة أو النشر أو استخدام الذكاء الاصطناعي. لا يُحذف أي شيء. اختر خطة، أو اطلب منّا تمديد الفترة التجريبية.',
+    'billing.trialEnded':
+      'انتهت الفترة التجريبية المجانية. مساحة العمل الآن للعرض فقط: يمكنك عرض كل شيء وتصديره، لكن لا يمكنك إنشاء منشورات جديدة أو النشر أو استخدام الذكاء الاصطناعي. لا يُحذف أي شيء. اختر خطة، أو اطلب منّا تمديد الفترة التجريبية.',
     'billing.noSubscription': 'لا يوجد اشتراك بعد',
     'billing.noSubscriptionBody':
       'اختر خطة للبدء. لن يُخصم منك شيء قبل أن تؤكّد الدفع على صفحة مزوّد الدفع.',
@@ -4104,7 +4108,7 @@ export const messages = {
     'createWorkspace.back': 'العودة إلى مساحة عملك',
     'createWorkspace.creating': 'جارٍ الإنشاء…',
     'createWorkspace.trialNotice':
-      'تبدأ فترة تجريبية مدتها {days} يومًا مع {credits} رصيدًا، بدون بطاقة. عند انتهائها يتوقّف الوصول إلى المزايا المدفوعة ولا يُحذف أي شيء.',
+      'تبدأ فترة تجريبية مدتها {days} يومًا مع {credits} رصيدًا، بدون بطاقة. عند انتهائها تصبح مساحة العمل للعرض فقط: يمكنك عرض كل شيء وتصديره، لكن لا يمكنك إنشاء منشورات جديدة أو النشر أو استخدام الذكاء الاصطناعي. لا يُحذف أي شيء.',
     'createWorkspace.failed': 'تعذّر إنشاء الحساب. حاول مرة أخرى.',
     'createWorkspace.invalid': 'راجع البيانات المطلوبة وحاول مجددًا.',
     'createWorkspace.invalidFields': 'راجع الحقول التالية: {fields}.',
@@ -4499,7 +4503,7 @@ export const messages = {
     'ws.switchBusiness': 'Switch business',
     'deletion.title': 'This workspace is pending deletion',
     'deletion.body':
-      'The workspace “{workspace}” will be deleted on {date}. Nobody can work in it until then.',
+      'The workspace “{workspace}” closes on {date}. Nobody can work in it until then. To have its data permanently erased, contact privacy@brandspace.cc.',
     'deletion.cancel': 'Cancel deletion',
     'deletion.requestedBy': '{name} asked for the deletion on {date}.',
     'deletion.requestedOn': 'The deletion was requested on {date}.',
@@ -4601,7 +4605,7 @@ export const messages = {
     'overview.workspaceStatus.SUSPENDED': 'Suspended',
     'overview.workspaceStatus.CANCELLED': 'Cancelled',
     'overview.workspaceStatus.ARCHIVED': 'Archived',
-    'overview.workspaceStatus.DELETED': 'Deleted',
+    'overview.workspaceStatus.DELETED': 'Closed',
     'overview.field.signedInAs': 'Signed in as',
     'overview.field.workspace': 'Business',
     'overview.field.role': 'Role',
@@ -5014,10 +5018,10 @@ export const messages = {
       'A single export of all your business data is not available as a self-serve action.',
     'data.workspaceDeletion.title': 'Delete the workspace',
     'data.workspaceDeletion.body':
-      'Only the owner can ask for this. The workspace then waits {days} days, pending deletion, and the request can be cancelled until then.',
+      'Only the owner can ask for this. The workspace then waits {days} days, pending deletion, and the request can be cancelled until then. After that: Your workspace is closed. To have its data permanently erased, contact privacy@brandspace.cc.',
     'data.workspaceDeletion.start': 'Delete the workspace…',
     'data.workspaceDeletion.warning':
-      'Once confirmed, nobody can work in this workspace, nothing is published and no credits are spent. After {days} days it is deleted unless an owner cancels.',
+      'Once confirmed, nobody can work in this workspace, nothing is published and no credits are spent. After {days} days, unless an owner cancels: Your workspace is closed. To have its data permanently erased, contact privacy@brandspace.cc.',
     'data.workspaceDeletion.confirmName': 'Type the workspace name to confirm: {name}',
     'data.workspaceDeletion.password': 'Your password',
     'data.workspaceDeletion.confirm': 'Ask to delete the workspace',
@@ -7039,7 +7043,7 @@ export const messages = {
       'Deletion of the workspace was stopped because its plan still renews',
     'activity.action.notification.preferences.updated': 'Notification preferences were changed',
     'activity.action.workspace.deletion_cancelled': 'Deletion of the workspace was cancelled',
-    'activity.action.workspace.deleted': 'The workspace was deleted',
+    'activity.action.workspace.deleted': 'The workspace was closed',
     'activity.action.workspace.settings.updated': 'Business settings were changed',
     'activity.action.workspace.ai_content_retention.updated': 'AI content retention was changed',
     'activity.action.workspace.member.role_changed': 'A member’s role was changed',
@@ -8091,6 +8095,10 @@ export const messages = {
     'billing.renews': 'Renews on',
     'billing.ended': 'Ended on',
     'billing.trialEnds': 'Trial ends on',
+    'billing.trialEndRule':
+      'When your free trial ends, your workspace becomes read-only: you can view and export everything, but you cannot create new posts, publish or use AI. Nothing is deleted. Choose a plan, or ask us to extend your trial.',
+    'billing.trialEnded':
+      'Your free trial has ended. Your workspace is read-only: you can view and export everything, but you cannot create new posts, publish or use AI. Nothing is deleted. Choose a plan, or ask us to extend your trial.',
     'billing.noSubscription': 'No subscription yet',
     'billing.noSubscriptionBody':
       'Choose a plan to begin. Nothing is charged until you confirm payment on the provider’s own page.',
@@ -8508,7 +8516,7 @@ export const messages = {
     'createWorkspace.back': 'Back to your workspace',
     'createWorkspace.creating': 'Creating…',
     'createWorkspace.trialNotice':
-      'You start a {days}-day trial with {credits} credits and no card. When it ends, access to paid features stops and nothing is deleted.',
+      'You start a {days}-day trial with {credits} credits and no card. When it ends, your workspace becomes read-only: you can view and export everything, but you cannot create new posts, publish or use AI. Nothing is deleted.',
     'createWorkspace.failed': 'Your business account could not be created. Please try again.',
     'createWorkspace.invalid': 'Check the required details and try again.',
     'createWorkspace.invalidFields': 'Check these fields: {fields}.',

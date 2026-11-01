@@ -224,7 +224,7 @@ step) puts the original look back at once, discarding any unfinished theme draft
 | `automations`                                                          | Automation limits and execution.                                               | —             | risky                    |
 | `templates`                                                            | Notification templates.                                                        | —             | risky                    |
 | `website`                                                              | Public site name, locale, announcement, pages.                                 | —             | safe (not yet in Simple) |
-| `operations`                                                           | Maintenance mode, support-mode time limit, currencies, trial default.          | —             | risky                    |
+| `operations`                                                           | Maintenance mode (**not active yet**, D-586), support-mode time limit, currencies, trial default. | —             | risky                    |
 | `commerce`                                                             | Payments, currencies, markets, tax, credit packs, checkout, dunning, invoices. | —             | risky                    |
 | `ai.credit-rules`, `ai.budgets`                                        | Credit costs and AI budgets, including the platform ceiling (D-573).           | —             | risky                    |
 

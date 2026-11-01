@@ -541,6 +541,11 @@ const en = {
   'cd.ok.STATUS_CHANGED': 'Status changed.',
   'cd.ok.PLAN_ASSIGNED': 'Plan changed.',
   'cd.ok.CREDITS_ADJUSTED': 'AI credits adjusted.',
+  'cd.ok.TRIAL_EXTENDED': 'Free trial extended.',
+  'cd.extendTrial': 'Extend the free trial',
+  'cd.extendTrialHint':
+    'When a trial ends the workspace becomes read-only. Extending it lets the customer create, publish and use AI again. No credits are added.',
+  'cd.extendTrialDays': 'Days to add',
   // Plans & Pricing.
   'plans.intro':
     'What customers can buy. Changes are saved as a draft, checked, and only reach customers when you activate them. Existing subscribers keep the price they signed up at.',
@@ -1216,6 +1221,11 @@ const ar: Copy = {
   'cd.ok.STATUS_CHANGED': 'تغيّرت الحالة.',
   'cd.ok.PLAN_ASSIGNED': 'تغيّرت الخطة.',
   'cd.ok.CREDITS_ADJUSTED': 'عُدّل رصيد الذكاء الاصطناعي.',
+  'cd.ok.TRIAL_EXTENDED': 'مُدّدت الفترة التجريبية المجانية.',
+  'cd.extendTrial': 'تمديد الفترة التجريبية المجانية',
+  'cd.extendTrialHint':
+    'عند انتهاء الفترة التجريبية تصبح مساحة العمل للعرض فقط. يتيح التمديد للعميل الإنشاء والنشر واستخدام الذكاء الاصطناعي من جديد. لا يُضاف أي رصيد.',
+  'cd.extendTrialDays': 'عدد الأيام المضافة',
   'plans.intro':
     'ما يمكن للعملاء شراؤه. تُحفظ التغييرات كمسودة، ثم تُفحص، ولا تصل إلى العملاء إلا عند تفعيلها. يحتفظ المشتركون الحاليون بالسعر الذي اشتركوا به.',
   'plans.add': 'إضافة خطة',

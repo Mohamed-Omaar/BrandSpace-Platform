@@ -34,6 +34,7 @@ import {
   contentNotEditable,
   unsupportedPlatform,
 } from './errors';
+import { assertWorkspaceMayCreate } from '@brandspace/entitlements';
 import { ContentLibraryService, type ContentLibraryOptions } from './library';
 import { preferenceInstructions, TONE_KEYS } from './suggestions';
 import { findPlatform, type ContentDialect } from './policy';
@@ -854,6 +855,9 @@ export class ContentStudioService extends ContentLibraryService {
     citations: readonly Citation[];
     insufficient: boolean;
   }): Promise<ContentItem> {
+    // D-584: once the free trial has ended nothing new is made — the one
+    // insert every new post goes through, whatever surface asked for it.
+    await assertWorkspaceMayCreate(this.db, this.workspaceId, this.#clock.now());
     return this.db.contentItem.create({
       data: {
         workspaceId: this.workspaceId,

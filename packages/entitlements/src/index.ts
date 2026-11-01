@@ -23,4 +23,5 @@ export * from './service';
 export * from './subscription';
 export * from './storage-recompute';
 export * from './usage';
+export * from './workspace-access';
 export * from './workspace-allowance';

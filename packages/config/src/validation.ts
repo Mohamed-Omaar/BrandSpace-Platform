@@ -940,6 +940,25 @@ function semantic(
     }
   }
 
+  /*
+   * M-9 (D-586): MAINTENANCE MODE IS NOT ACTIVE YET. Nothing in the product
+   * reads `operations.maintenanceMode`, so turning it on changes nothing for
+   * customers. Said here, as a warning on the field, so an operator in an
+   * incident is not misled; it is labelled the same way in
+   * docs/CONTROL-CENTER-SETTINGS.md and the Simple mode never offers it.
+   */
+  if (domain === 'operations') {
+    const maintenance = doc['maintenanceMode'] as Record<string, unknown> | undefined;
+    if (maintenance?.['enabled'] === true) {
+      issues.push({
+        severity: 'warning',
+        path: 'maintenanceMode.enabled',
+        message:
+          'Not active yet: maintenance mode does nothing for customers in this release. Do not rely on it in an incident.',
+      });
+    }
+  }
+
   if (domain === 'ai.credit-rules') {
     for (const [i, cost] of ((doc['costs'] ?? []) as Record<string, unknown>[]).entries()) {
       if (Number(cost['baseMilliCredits']) === 0 && Number(cost['perUnitMilliCredits']) === 0) {
