@@ -278,6 +278,44 @@ const aiModelsSchema = z.object({
          * invented here (CLAUDE.md §2.2).
          */
         imageCostPerImageMicroMinor: z.number().int().nonnegative().nullable().default(null),
+
+        /*
+         * PR A (item 6, KNOWN bug "image.generate INVALID_REQUEST on every Studio
+         * size") — WHICH SIZES THIS IMAGE MODEL ACCEPTS. The Studio asks for
+         * its format (1080×1350, 1080×1920 …); the gateway sends the nearest
+         * size the model accepts with the SAME aspect ratio, never the Studio's
+         * own pixels unless the model accepts them, and nothing is cropped.
+         *
+         *   - `fixed`: an explicit list (the GPT image models' standard
+         *     1024×1024, 1536×1024 and 1024×1536 are the default). The size with
+         *     the same orientation is chosen.
+         *   - `custom`: any WIDTH×HEIGHT within the provider's published rules
+         *     (gpt-image-2: edges multiples of 16, at most 3,840 px, aspect at
+         *     most 3:1, 655,360 to 8,294,400 pixels). The smallest exact-aspect
+         *     size at least as large as the Studio's is chosen.
+         *
+         * The numbers are the provider's, entered by the operator; none is
+         * assumed in code (CLAUDE.md §2.2).
+         */
+        imageSizing: z
+          .discriminatedUnion('mode', [
+            z.object({
+              mode: z.literal('fixed'),
+              sizes: z
+                .array(z.string().regex(/^\d{2,5}x\d{2,5}$/))
+                .min(1)
+                .max(20),
+            }),
+            z.object({
+              mode: z.literal('custom'),
+              multipleOf: z.number().int().min(1).max(256),
+              minPixels: z.number().int().positive(),
+              maxPixels: z.number().int().positive(),
+              maxEdge: z.number().int().positive(),
+              maxAspectRatio: z.number().positive().max(100),
+            }),
+          ])
+          .default({ mode: 'fixed', sizes: ['1024x1024', '1536x1024', '1024x1536'] }),
         audioCostPerSecondMicroMinor: z.number().int().nonnegative().nullable().default(null),
         audioCostPerCharacterMicroMinor: z.number().int().nonnegative().nullable().default(null),
 
@@ -332,6 +370,12 @@ const aiRoutingParametersSchema = z.object({
    * audit — which the policy requires be retained.
    */
   outputRetentionDays: z.number().int().positive().max(3650).nullable().default(null),
+  /*
+   * PR A (item 6, F-106) — the image quality asked for when the caller names
+   * none. MEDIUM by default (owner, 2026-11-01): an unset quality used to be
+   * the provider's own default, whose price can be the highest one's.
+   */
+  imageQuality: z.enum(['low', 'medium', 'high']).default('medium'),
 });
 
 /**
@@ -484,6 +528,12 @@ const aiCreditRulesSchema = z.object({
         baseMilliCredits: z.number().int().nonnegative(),
         perUnitMilliCredits: z.number().int().nonnegative().default(0),
         unit: aiBillingUnit,
+        /*
+         * PR A (item 6, F-106) — an image price PER QUALITY. A rule naming a
+         * quality prices only that quality; a rule with none prices any
+         * quality its task and model have no specific rule for.
+         */
+        imageQuality: z.enum(['low', 'medium', 'high']).nullable().default(null),
       }),
     )
     .default([]),

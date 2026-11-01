@@ -18,7 +18,14 @@ export {
 export type { AiFailureClass } from './errors';
 
 export { AI_MODALITIES } from './adapter';
+export {
+  DEFAULT_IMAGE_SIZING,
+  parseImageSize,
+  resolveImageSize,
+  type ImageSizing,
+} from './image-sizing';
 export type {
+  ImageQuality,
   AdapterContext,
   AdapterRegistry,
   AiModality,

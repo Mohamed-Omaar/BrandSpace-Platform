@@ -58,14 +58,19 @@ import {
 const READ_PERMISSION = 'assets.read';
 const CREATE_PERMISSION = 'assets.upload';
 
+/** PR A (item 6, F-106) — the image quality the customer chose; absent is the route's default. */
+const qualitySchema = z.enum(['low', 'medium', 'high']).optional();
+
 const quoteSchema = z.object({
   formatKey: z.string().min(1).max(40),
+  quality: qualitySchema,
 });
 
 const generateSchema = z.object({
   brandId: z.string().uuid(),
   brief: z.string().min(1).max(1_000),
   formatKey: z.string().min(1).max(40),
+  quality: qualitySchema,
   /** A generation spends credits, so a retry must never bill twice. */
   idempotencyKey: z.string().min(8).max(200),
 });
@@ -222,7 +227,11 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
                 usage: new UsageService({ prisma: scopedFor(db) }),
                 storageLimitGb: null,
               }),
-            }).quote({ formatKey: parsed.data.formatKey, planKey: facts.planKey }),
+            }).quote({
+              formatKey: parsed.data.formatKey,
+              planKey: facts.planKey,
+              ...(parsed.data.quality ? { quality: parsed.data.quality } : {}),
+            }),
           { prisma: getPrisma() },
         );
         // THE ESTIMATE AND NOTHING ELSE. No provider, no model, no prompt.
@@ -333,6 +342,7 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
           brandId: prepared.brandId,
           brief: parsed.data.brief,
           formatKey: parsed.data.formatKey,
+          ...(parsed.data.quality ? { quality: parsed.data.quality } : {}),
           identity: prepared.identity,
           idempotencyKey: parsed.data.idempotencyKey,
           actorUserId: caller.userId,

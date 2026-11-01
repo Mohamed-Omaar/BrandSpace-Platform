@@ -272,6 +272,9 @@ export class OpenAiAdapter implements AiProviderAdapter {
       prompt: request.prompt,
       n: request.count,
       size: request.size,
+      // PR A (item 6, F-106): low | medium | high — the GPT image models'
+      // quality values. Never left to the provider's default.
+      ...(request.quality ? { quality: request.quality } : {}),
     });
     if (response.status !== 200) throw errorFrom(response);
     const parsed = parseJson(response.body) as {
