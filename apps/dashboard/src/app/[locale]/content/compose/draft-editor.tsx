@@ -264,7 +264,7 @@ const headlineKey = (headlines: Readonly<Record<string, string>>, assetIds: read
     .join('|');
 
 const hashtagTextOf = (variant: ComposerVariant) =>
-  variant.hashtags.map((tag) => `#${tag}`).join(' ');
+  variant.hashtags.map((tag) => `#${tag.replace(/^#+/, '')}`).join(' ');
 
 /** What is on screen for a variant: the local edit of THIS version, or the row. */
 function liveOf(
@@ -292,7 +292,7 @@ function withCarry(base: LiveVariant, carry: StudioCarry): LiveVariant {
   const hashtagText =
     carry.tags.length > 0
       ? [...new Set([...parseHashtags(base.hashtagText), ...carry.tags])]
-          .map((tag) => `#${tag}`)
+          .map((tag) => `#${tag.replace(/^#+/, '')}`)
           .join(' ')
       : base.hashtagText;
   // Only words that are there: an empty carry never clears a template's.
@@ -516,7 +516,7 @@ export function DraftEditor({
       [variant.id]: {
         ...live(variant),
         hashtagText: parseHashtags(tagTextOf(variant))
-          .map((tag) => `#${tag}`)
+          .map((tag) => `#${tag.replace(/^#+/, '')}`)
           .join(' '),
       },
     }));
@@ -2433,13 +2433,13 @@ export function DraftEditor({
                                 type="button"
                                 className="bsp-st-tag-x"
                                 aria-label={fill(t['studio.tagRemove'] ?? '{tag}', {
-                                  tag: `#${tag}`,
+                                  tag: `#${tag.replace(/^#+/, '')}`,
                                 })}
                                 onClick={() =>
                                   change(variant, {
                                     hashtagText: hashtags
                                       .filter((other) => other !== tag)
-                                      .map((other) => `#${other}`)
+                                      .map((other) => `#${other.replace(/^#+/, '')}`)
                                       .join(' '),
                                   })
                                 }

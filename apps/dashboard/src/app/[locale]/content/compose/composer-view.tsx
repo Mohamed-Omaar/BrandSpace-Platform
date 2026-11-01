@@ -2027,7 +2027,9 @@ export function ComposerView({
                           <button
                             type="button"
                             className="bsp-st-tag-x"
-                            aria-label={fill(t['studio.tagRemove'] ?? '{tag}', { tag: `#${tag}` })}
+                            aria-label={fill(t['studio.tagRemove'] ?? '{tag}', {
+                              tag: `#${tag.replace(/^#+/, '')}`,
+                            })}
                             onClick={() =>
                               setTags((current) => current.filter((other) => other !== tag))
                             }
@@ -2132,7 +2134,7 @@ export function ComposerView({
                   <input
                     type="hidden"
                     name="hashtags"
-                    value={tags.map((tag) => `#${tag}`).join(' ')}
+                    value={tags.map((tag) => `#${tag.replace(/^#+/, '')}`).join(' ')}
                   />
                 ) : null}
                 <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
