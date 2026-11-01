@@ -222,6 +222,7 @@ export type {
 
 export { purgeExpiredChatContent } from './chat';
 export { BrandBrainChatService } from './chat';
+export type { ChatRun, ChatSendInput } from './chat';
 export { askAnswerSchema, parseAskAnswer } from './chat';
 export type { AskKind, ChatPolicy, ChatServiceOptions, ChatTurn, MissingKnowledge } from './chat';
 

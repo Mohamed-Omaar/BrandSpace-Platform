@@ -64,7 +64,14 @@ export class ProviderHttpError extends Error {
   readonly status: number;
   readonly type: string | null;
   readonly code: string | null;
-  constructor(status: number, type: string | null, code: string | null) {
+  /**
+   * PR A (item 6) — what the gateway records for the operator: the provider's
+   * code (or type) and its own short message. The gateway redacts the reason
+   * and drops it if it quotes the request; neither reaches a customer.
+   */
+  readonly providerCode: string | undefined;
+  readonly providerReason: string | undefined;
+  constructor(status: number, type: string | null, code: string | null, reason?: string) {
     super(
       String(
         redact(
@@ -75,6 +82,8 @@ export class ProviderHttpError extends Error {
     this.name = 'ProviderHttpError';
     this.status = status;
     this.type = type;
+    this.providerCode = code ?? type ?? `http_${status}`;
+    this.providerReason = reason;
     this.code = code;
   }
 }
@@ -84,6 +93,24 @@ export class ProviderShapeError extends Error {
   constructor(what: string) {
     super(`The provider's answer had no ${what}.`);
     this.name = 'ProviderShapeError';
+  }
+}
+
+/**
+ * PR A (M-12) — the provider stopped at its length limit (`finish_reason:
+ * "length"`) or answered with no content. A cut-off answer is not a result:
+ * truncated JSON would fail to parse after the customer paid for it.
+ */
+export class ProviderTruncatedError extends Error {
+  readonly providerCode: string;
+  constructor(code: 'length' | 'empty') {
+    super(
+      code === 'length'
+        ? 'The provider stopped at its output-length limit.'
+        : 'The provider answered with no content.',
+    );
+    this.name = 'ProviderTruncatedError';
+    this.providerCode = code === 'length' ? 'finish_length' : 'empty_content';
   }
 }
 
@@ -109,11 +136,15 @@ function parseJson(body: string): unknown {
 }
 
 function errorFrom(response: EgressResponse): ProviderHttpError {
-  const parsed = parseJson(response.body) as { error?: { type?: unknown; code?: unknown } } | null;
+  const parsed = parseJson(response.body) as {
+    error?: { type?: unknown; code?: unknown; message?: unknown };
+  } | null;
+  const message = parsed?.error?.message;
   return new ProviderHttpError(
     response.status,
     token(parsed?.error?.type),
     token(parsed?.error?.code),
+    typeof message === 'string' ? message.slice(0, 400) : undefined,
   );
 }
 
@@ -221,8 +252,10 @@ export class OpenAiAdapter implements AiProviderAdapter {
     ) {
       throw new ProviderContentFilteredError();
     }
+    if (choice?.finish_reason === 'length') throw new ProviderTruncatedError('length');
     const text = choice?.message?.content;
     if (typeof text !== 'string') throw new ProviderShapeError('text');
+    if (text.trim() === '') throw new ProviderTruncatedError('empty');
     return {
       text,
       usage: {
@@ -274,6 +307,7 @@ export class OpenAiAdapter implements AiProviderAdapter {
       return 'MODEL_UNAVAILABLE';
     }
     if (error instanceof ProviderContentFilteredError) return 'CONTENT_FILTERED';
+    if (error instanceof ProviderTruncatedError) return 'OUTPUT_TRUNCATED';
     if (error instanceof ProviderShapeError) return 'PROVIDER_UNAVAILABLE';
     if (error instanceof ProviderHttpError) {
       const marker = `${error.type ?? ''} ${error.code ?? ''}`.toLowerCase();

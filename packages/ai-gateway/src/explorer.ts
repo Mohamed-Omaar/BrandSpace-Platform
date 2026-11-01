@@ -65,6 +65,13 @@ export interface AiRequestDetail extends AiRequestListItem {
   readonly userId: string | null;
   readonly idempotencyKey: string;
   readonly failureMessage: string | null;
+  /**
+   * PR A (item 6) — the provider's own error code and short reason, redacted
+   * and free of prompt text. For the operator: this detail is behind
+   * `platform.ai.usage.read` and no customer API returns it.
+   */
+  readonly providerErrorCode: string | null;
+  readonly failureReason: string | null;
   readonly creditsReservedMilli: bigint;
   readonly promptTokens: number | null;
   readonly completionTokens: number | null;
@@ -223,6 +230,8 @@ export class AiUsageExplorer {
       attemptedModelKeys: row.attemptedModelKeys,
       failureClass: row.failureClass as AiFailureClass | null,
       failureMessage: row.failureMessage,
+      providerErrorCode: row.providerErrorCode,
+      failureReason: row.failureReason,
       creditsChargedMilli: row.creditsChargedMilli,
       creditsReservedMilli: row.creditsReservedMilli,
       providerCostMicroMinor: row.providerCostMicroMinor,

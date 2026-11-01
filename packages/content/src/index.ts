@@ -6,8 +6,21 @@
  * through `@brandspace/ai-gateway`, which is the only package permitted to know
  * a provider exists.
  */
-export { ContentStudioService, CONTENT_TOOLS, carouselOutlineInstruction } from './studio';
-export type { ContentTool, GenerateInput, GenerationResult, StudioOptions } from './studio';
+export {
+  ContentStudioService,
+  CONTENT_TOOLS,
+  carouselOutlineInstruction,
+  rejectUnusable,
+} from './studio';
+export type {
+  ApplyToolInput,
+  ApplyToolResult,
+  ContentTool,
+  GenerateInput,
+  GenerationResult,
+  StudioOptions,
+  StudioRun,
+} from './studio';
 
 export {
   contentGenerateRequestSchema,

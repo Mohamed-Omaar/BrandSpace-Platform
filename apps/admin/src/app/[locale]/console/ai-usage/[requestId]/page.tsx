@@ -173,6 +173,15 @@ export default async function AiRequestPage({
               label={isArabic ? 'الرسالة المعروضة للعميل' : 'Message shown to the customer'}
               value={detail.failureMessage ?? '—'}
             />
+            {/* PR A (item 6) — the provider's code and short reason, redacted. */}
+            <Row
+              label={isArabic ? 'رمز خطأ المزوّد' : 'Provider error code'}
+              value={detail.providerErrorCode ?? '—'}
+            />
+            <Row
+              label={isArabic ? 'سبب العطل' : 'Failure reason'}
+              value={detail.failureReason ?? '—'}
+            />
           </Card>
         )}
 

@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 
 import { Prisma, type PrismaClient } from '@brandspace/database';
 import type { CreditLedgerService } from '@brandspace/entitlements';
-import { AppError, type Clock, systemClock } from '@brandspace/shared';
+import { AppError, type Clock, createLogger, redact, systemClock } from '@brandspace/shared';
+
+const log = createLogger({ context: { component: 'ai.gateway' } });
 
 import type { AdapterContext, AdapterRegistry, GeneratedImage, UsageUnits } from './adapter';
 import {
@@ -23,6 +25,7 @@ import {
 } from './budgets';
 import {
   AiProviderError,
+  OutputRejectedError,
   AI_NOT_AVAILABLE_MESSAGE,
   customerMessageFor,
   isFallbackEligible,
@@ -169,6 +172,21 @@ export interface AiGatewayRequest {
   readonly input: AiInput;
   /** Basis points; 10,000 is ×1. Configuration decides it, not this module. */
   readonly creditMultiplierBasisPoints?: number;
+  /**
+   * PR A (check-up H-3) — THE CALLER'S VERDICT ON THE OUTPUT, BEFORE ANY CHARGE.
+   *
+   * Called with the provider's output after it answered and BEFORE the
+   * reservation is settled. Parse and validate here — the JSON shape, the
+   * schema, the "did the edit change anything" rule — and throw
+   * `OutputRejectedError` to refuse it. A refused output is released, never
+   * charged, and recorded as `OUTPUT_INVALID`, which is re-runnable under the
+   * same idempotency key. Any other throw is treated the same way.
+   *
+   * It must only VALIDATE: no database write, no side effect. The caller
+   * persists after `execute` returns SUCCEEDED, in its own short transaction
+   * (H-4), so a provider call never holds a tenant transaction open.
+   */
+  readonly accept?: (output: AiOutput) => void | Promise<void>;
 }
 
 /**
@@ -791,6 +809,7 @@ export class AiGateway {
 
     const attempted: string[] = [];
     let retries = 0;
+    let success: SettleArgs | null = null;
     let lastError: unknown = new AiProviderError(
       'UNKNOWN',
       customerMessageFor('UNKNOWN'),
@@ -890,6 +909,20 @@ export class AiGateway {
             ctx,
           );
 
+          /*
+           * H-3 — VALIDATE, THEN SETTLE. The caller parses and checks the
+           * output here; a refusal becomes OUTPUT_INVALID, which is neither
+           * retried on this model nor sent down the chain, so the request
+           * fails, the reservation is RELEASED and nothing is charged.
+           */
+          if (request.accept) {
+            try {
+              await request.accept(output);
+            } catch (rejection) {
+              throw rejectionToProviderError(rejection);
+            }
+          }
+
           const basis = config.costBases.find((b) => b.modelKey === modelKey);
           const cost = basis ? providerCostMicroMinor(usage, basis) : 0n;
           /*
@@ -907,7 +940,15 @@ export class AiGateway {
           const metered = creditsChargedMilli(usage, creditRule, multiplier);
           const charged = metered > args.reservationEstimate ? args.reservationEstimate : metered;
 
-          await this.#settle({
+          /*
+           * L-13 — THE SETTLE IS NOT A PROVIDER ATTEMPT. It used to run here,
+           * inside the provider `try`, so a bookkeeping failure after the
+           * wallet had already been charged was handled as a provider failure:
+           * the release was a no-op on a settled reservation and the request
+           * was recorded FAILED with nothing charged. It now runs after this
+           * block, with its own retry and repair path.
+           */
+          success = {
             requestId,
             reservationId,
             request,
@@ -918,10 +959,9 @@ export class AiGateway {
             cost,
             charged,
             latencyMs: this.#clock.now().getTime() - startedAt.getTime(),
-            attempted,
+            attempted: [...attempted],
             retries,
-          });
-          return this.#recordedResult(requestId, output);
+          };
         } catch (error) {
           lastError = error;
           const failureClass = failureClassOf(error);
@@ -939,6 +979,10 @@ export class AiGateway {
           // Always. A leaked timer keeps the process alive and would abort a
           // controller belonging to a request that already finished.
           clearTimeout(timer);
+        }
+        if (success) {
+          await this.#settleAndRecord(success);
+          return this.#recordedResult(requestId, success.output);
         }
       }
 
@@ -1014,6 +1058,7 @@ export class AiGateway {
           }
         : undefined,
       context.retries,
+      context.request.input,
     );
   }
 
@@ -1077,10 +1122,19 @@ export class AiGateway {
       // Downstream code decides from the CLASS and never from a provider string.
       if (error instanceof AiProviderError) throw error;
       const failureClass = adapter.classifyError(error);
+      // PR A (item 6): the provider's own code and reason travel with the
+      // classified error, for the operator's request detail only.
+      const carrier = error as { providerCode?: unknown; providerReason?: unknown } | null;
       throw new AiProviderError(
         failureClass,
         customerMessageFor(failureClass),
         error instanceof Error ? error.message : String(error),
+        {
+          ...(typeof carrier?.providerCode === 'string' ? { code: carrier.providerCode } : {}),
+          ...(typeof carrier?.providerReason === 'string'
+            ? { reason: carrier.providerReason }
+            : {}),
+        },
       );
     }
   }
@@ -1094,22 +1148,31 @@ export class AiGateway {
    * and the immutable ledger row commit together afterwards, so a crash between
    * them cannot leave a SUCCEEDED request with no ledger entry.
    */
-  async #settle(args: {
-    requestId: string;
-    reservationId: string;
-    request: AiGatewayRequest;
-    route: ResolvedRoute;
-    model: RegisteredModel;
-    usage: UsageUnits;
-    output: AiOutput;
-    cost: bigint;
-    charged: bigint;
-    latencyMs: number;
-    attempted: readonly string[];
-    retries: number;
-  }): Promise<void> {
+  /**
+   * L-13 — SETTLE, THEN RECORD, AND NEVER LET THE SECOND UNDO THE FIRST.
+   *
+   * The wallet settle is idempotent on the reservation. The bookkeeping (the
+   * request row and its usage-ledger row) is retried a few times; if it still
+   * fails, the error propagates and the request stays RUNNING, where the
+   * stuck-request sweep finds it — and `#releaseAndRecord` now sees the
+   * reservation already SETTLED and records the success it was, with the
+   * amount actually charged, instead of a FAILED request with nothing charged.
+   */
+  async #settleAndRecord(args: SettleArgs): Promise<void> {
     await this.#ledger.settle(args.reservationId, args.charged, `ai:${args.request.taskKey}`);
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= SETTLE_BOOKKEEPING_ATTEMPTS; attempt += 1) {
+      try {
+        await this.#settle(args);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
 
+  async #settle(args: SettleArgs): Promise<void> {
     await this.#prisma.$transaction(async (tx) => {
       await tx.aiRequest.update({
         where: { id: args.requestId },
@@ -1174,8 +1237,28 @@ export class AiGateway {
       providerKey: string;
     },
     retries = 0,
+    input?: AiInput,
   ): Promise<void> {
     if (reservationId) {
+      /*
+       * L-13 — A RESERVATION THAT WAS ALREADY SETTLED IS A SUCCESS WHOSE
+       * BOOKKEEPING DID NOT COMMIT, not a failure. Recording it FAILED with
+       * nothing charged would contradict the wallet; record what happened.
+       */
+      const settled = await this.#ledger.reservation(reservationId).catch(() => null);
+      if (settled?.status === 'SETTLED') {
+        await this.#prisma.aiRequest.update({
+          where: { id: requestId },
+          data: {
+            status: 'SUCCEEDED',
+            completedAt: this.#clock.now(),
+            creditsChargedMilli: settled.settledMilliCredits ?? 0n,
+            attemptedModelKeys: [...attempted],
+            resolvedModelKey: modelKey || null,
+          },
+        });
+        return;
+      }
       try {
         await this.#ledger.release(reservationId, 'ai:request-failed');
       } catch (releaseError) {
@@ -1199,6 +1282,7 @@ export class AiGateway {
     await this.#recordFailure(requestId, modelKey, attempted, failureClassOf(error), error, {
       ...(ledgerContext ? { ledgerContext } : {}),
       retries,
+      ...(input ? { input } : {}),
     });
   }
 
@@ -1217,10 +1301,20 @@ export class AiGateway {
         providerKey: string;
       };
       retries?: number;
+      input?: AiInput;
     },
   ): Promise<void> {
     const status = failureClass === 'TIMEOUT' ? 'TIMEOUT' : 'FAILED';
     const context = extra?.ledgerContext;
+    const detail = operatorFailureDetail(error, extra?.input);
+    // PR A (item 6) — the same operator detail in the log: ids, the class, the
+    // provider's code and the redacted reason. Never the prompt or the output.
+    log.warn('ai request failed', {
+      requestId,
+      failureClass,
+      providerErrorCode: detail.code,
+      failureReason: detail.reason,
+    });
 
     await this.#prisma.$transaction(async (tx) => {
       await tx.aiRequest.update({
@@ -1230,7 +1324,15 @@ export class AiGateway {
           failureClass,
           // The CUSTOMER's message. A raw provider error can carry an endpoint,
           // an account id, or an echo of the prompt.
-          failureMessage: customerMessageFor(failureClass),
+          failureMessage:
+            error instanceof AiProviderError && failureClass === 'OUTPUT_INVALID'
+              ? error.message
+              : customerMessageFor(failureClass),
+          // PR A (item 6) — for the OPERATOR only: the provider's code and a
+          // short reason, redacted and free of prompt text. Never returned by
+          // `toResult`, so never in a customer response.
+          providerErrorCode: detail.code,
+          failureReason: detail.reason,
           completedAt: this.#clock.now(),
           resolvedModelKey: modelKey,
           attemptedModelKeys: [...attempted],
@@ -1579,6 +1681,94 @@ function summariseInput(input: AiInput): Prisma.InputJsonValue {
     promptChars: input.prompt.length,
     contextParts: (input.untrustedContext ?? []).length,
   };
+}
+
+/** H-3 — a caller's refusal, as the classified error the chain already handles. */
+function rejectionToProviderError(rejection: unknown): AiProviderError {
+  if (rejection instanceof OutputRejectedError) {
+    return new AiProviderError(
+      'OUTPUT_INVALID',
+      rejection.customerMessage ?? customerMessageFor('OUTPUT_INVALID'),
+      rejection.reason,
+      { code: 'output_rejected', reason: rejection.reason },
+    );
+  }
+  const name = rejection instanceof Error ? rejection.name : 'unknown';
+  return new AiProviderError(
+    'OUTPUT_INVALID',
+    customerMessageFor('OUTPUT_INVALID'),
+    `The caller's validation threw ${name}.`,
+    { code: 'output_rejected', reason: `The caller's validation threw ${name}.` },
+  );
+}
+
+const PROVIDER_CODE_SHAPE = /^[A-Za-z0-9_.:-]{1,64}$/;
+const FAILURE_REASON_MAX = 200;
+/** A run of this many characters shared with the prompt counts as quoting it. */
+const PROMPT_QUOTE_WINDOW = 16;
+
+/**
+ * PR A (item 6) — THE OPERATOR'S DETAIL FOR A FAILED REQUEST: the provider's
+ * error code and a short reason.
+ *
+ * The code must match the column's CHECK or it is dropped. The reason is
+ * passed through the shared redaction (keys, tokens, credentialed URLs), its
+ * whitespace collapsed and its length capped; and if it repeats any run of
+ * the request's prompt or context — a provider error that echoes the input —
+ * it is withheld entirely, because "no prompt text" is not a promise that
+ * survives partial trimming.
+ */
+export function operatorFailureDetail(
+  error: unknown,
+  input?: AiInput,
+): { code: string | null; reason: string | null } {
+  const carrier = error as { providerCode?: unknown; providerReason?: unknown } | null;
+  const rawCode = typeof carrier?.providerCode === 'string' ? carrier.providerCode : null;
+  const code = rawCode && PROVIDER_CODE_SHAPE.test(rawCode) ? rawCode : null;
+  const rawReason = typeof carrier?.providerReason === 'string' ? carrier.providerReason : null;
+  return { code, reason: rawReason === null ? null : operatorFailureReason(rawReason, input) };
+}
+
+export function operatorFailureReason(reason: string, input?: AiInput): string | null {
+  const cleaned = String(redact(reason)).replace(/\s+/g, ' ').trim();
+  if (cleaned === '') return null;
+  const capped =
+    cleaned.length > FAILURE_REASON_MAX ? `${cleaned.slice(0, FAILURE_REASON_MAX - 1)}…` : cleaned;
+  if (input && quotesInput(capped, input))
+    return 'The provider’s message quoted the request; withheld.';
+  return capped;
+}
+
+function quotesInput(reason: string, input: AiInput): boolean {
+  const sources = [
+    input.prompt,
+    ...(input.kind === 'text' ? (input.untrustedContext ?? []) : []),
+  ].map((text) => text.replace(/\s+/g, ' '));
+  if (reason.length < PROMPT_QUOTE_WINDOW)
+    return sources.some((text) => text.includes(reason) && reason.length > 8);
+  for (let start = 0; start + PROMPT_QUOTE_WINDOW <= reason.length; start += 1) {
+    const window = reason.slice(start, start + PROMPT_QUOTE_WINDOW);
+    if (sources.some((text) => text.includes(window))) return true;
+  }
+  return false;
+}
+
+/** L-13 — how many times the success bookkeeping is tried before the sweep takes over. */
+const SETTLE_BOOKKEEPING_ATTEMPTS = 3;
+
+interface SettleArgs {
+  readonly requestId: string;
+  readonly reservationId: string;
+  readonly request: AiGatewayRequest;
+  readonly route: ResolvedRoute;
+  readonly model: RegisteredModel;
+  readonly usage: UsageUnits;
+  readonly output: AiOutput;
+  readonly cost: bigint;
+  readonly charged: bigint;
+  readonly latencyMs: number;
+  readonly attempted: readonly string[];
+  readonly retries: number;
 }
 
 function failureClassOf(error: unknown): AiFailureClass {

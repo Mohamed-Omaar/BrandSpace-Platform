@@ -7,7 +7,9 @@ import {
 } from '@brandspace/database';
 import {
   FORMAL_ARABIC_INSTRUCTION,
+  OutputRejectedError,
   type AiGateway,
+  type AiGatewayRequest,
   type AiGatewayResult,
   type AiQuote,
 } from '@brandspace/ai-gateway';
@@ -152,6 +154,22 @@ export interface StrategyResult {
   readonly replayed: boolean;
 }
 
+/** PR A (H-4) — run `fn` against a strategy service bound to a SHORT tenant transaction. */
+export type StrategyRun = <T>(fn: (service: StrategyService) => Promise<T>) => Promise<T>;
+
+type StrategyGrounding = Grounding;
+
+type PreparedStrategy =
+  | { readonly kind: 'done'; readonly result: StrategyResult }
+  | {
+      readonly kind: 'ready';
+      readonly grounding: StrategyGrounding;
+      readonly sourceInsight: SourceInsight | undefined;
+      readonly service: StrategyService;
+      readonly gateway: AiGateway;
+      readonly request: AiGatewayRequest;
+    };
+
 export class StrategyService {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
@@ -232,7 +250,18 @@ export class StrategyService {
    * its own call.
    */
   async generate(input: StrategyInput): Promise<StrategyResult> {
-    return this.#generate(input, 'STRATEGY', strategySchema, 'strategy.generate');
+    return StrategyService.generateWith((fn) => fn(this), input);
+  }
+
+  /** PR A (H-4) — `generate` with short tenant transactions around the provider call. */
+  static generateWith(run: StrategyRun, input: StrategyInput): Promise<StrategyResult> {
+    return StrategyService.#generateWith(
+      run,
+      input,
+      'STRATEGY',
+      strategySchema,
+      'strategy.generate',
+    );
   }
 
   /**
@@ -245,6 +274,27 @@ export class StrategyService {
   async planMonthly(
     input: StrategyInput & { readonly strategyInsightId: string },
   ): Promise<StrategyResult> {
+    return StrategyService.planMonthlyWith((fn) => fn(this), input);
+  }
+
+  /** PR A (H-4) — `planMonthly` with short tenant transactions around the provider call. */
+  static planMonthlyWith(
+    run: StrategyRun,
+    input: StrategyInput & { readonly strategyInsightId: string },
+  ): Promise<StrategyResult> {
+    return StrategyService.#generateWith(
+      run,
+      input,
+      'MONTHLY_PLAN',
+      strategySchema,
+      'plan.monthly',
+      (service) => service.#acceptedStrategy(input),
+    );
+  }
+
+  async #acceptedStrategy(
+    input: StrategyInput & { readonly strategyInsightId: string },
+  ): Promise<SourceInsight> {
     // SCOPE FIRST, so the lookup below cannot be the thing that reveals the
     // brand. The same F-74 ordering `#generate` uses.
     assertBrandInScope(input.actorBrandScope, input.brandId);
@@ -283,8 +333,7 @@ export class StrategyService {
      * brand is not yours" (404), which is the inference §2.1 closes.
      */
     if (!strategy) throw strategyNotFound();
-
-    return this.#generate(input, 'MONTHLY_PLAN', strategySchema, 'plan.monthly', strategy);
+    return strategy;
   }
 
   /**
@@ -303,17 +352,125 @@ export class StrategyService {
    * `BRAND_CONTEXT` or `CONTENT_HISTORY`.
    */
   async analyseContentGaps(input: StrategyInput): Promise<StrategyResult> {
-    return this.#generate(input, 'CONTENT_GAP', contentGapSchema, 'strategy.generate');
+    return StrategyService.analyseContentGapsWith((fn) => fn(this), input);
   }
 
-  async #generate<S extends typeof strategySchema | typeof contentGapSchema>(
+  /** PR A (H-4) — `analyseContentGaps` with short tenant transactions around the provider call. */
+  static analyseContentGapsWith(run: StrategyRun, input: StrategyInput): Promise<StrategyResult> {
+    return StrategyService.#generateWith(
+      run,
+      input,
+      'CONTENT_GAP',
+      contentGapSchema,
+      'strategy.generate',
+    );
+  }
+
+  /**
+   * PR A (check-up H-3, H-4) — ONE GENERATION, IN THREE STEPS. Grounding is read
+   * in one short tenant transaction, the provider is called with NO transaction
+   * open, and the insight is written in a second. THE GROUNDING GATE RUNS IN THE
+   * GATEWAY'S `accept`, before the charge: an unparseable or ungrounded strategy
+   * is released, never charged, and its rejection still goes to the audit sink.
+   */
+  static async #generateWith<S extends typeof strategySchema | typeof contentGapSchema>(
+    run: StrategyRun,
     input: StrategyInput,
     type: InsightType,
     schema: S,
     taskKey: 'strategy.generate' | 'plan.monthly',
-    /** The ACCEPTED strategy this generation is grounded in, when there is one. */
-    sourceInsight?: SourceInsight | undefined,
+    source?: (service: StrategyService) => Promise<SourceInsight>,
   ): Promise<StrategyResult> {
+    const prepared = await run(async (service) =>
+      service.#prepareGenerate(input, type, taskKey, source ? await source(service) : undefined),
+    );
+    if (prepared.kind === 'done') return prepared.result;
+    const ref = { ungrounded: false };
+    let parsed: ReturnType<S['parse']> | null = null;
+    const result: AiGatewayResult = await prepared.gateway.execute({
+      ...prepared.request,
+      accept: async (output) => {
+        let candidate: ReturnType<S['parse']>;
+        try {
+          if (output.kind !== 'text') throw new Error('not text');
+          candidate = parseJsonResponse(schema, output.text) as ReturnType<S['parse']>;
+        } catch {
+          throw new OutputRejectedError('The strategy was not the agreed JSON shape.');
+        }
+        await prepared.service.#gate(input, type, prepared.grounding, candidate, ref);
+        parsed = candidate;
+      },
+    });
+    if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
+      if (ref.ungrounded) throw ungroundedExplanation();
+      throw generationFailed(result.failureMessage);
+    }
+    let accepted: ReturnType<S['parse']>;
+    if (parsed) {
+      accepted = parsed;
+    } else {
+      // A result the gateway did not pass through `accept` (a recorded one): the
+      // same grounding gate, after the fact.
+      accepted = parseJsonResponse(schema, result.output.text) as ReturnType<S['parse']>;
+      try {
+        await prepared.service.#gate(input, type, prepared.grounding, accepted, ref);
+      } catch (error) {
+        if (error instanceof OutputRejectedError) throw ungroundedExplanation();
+        throw error;
+      }
+    }
+    return run((service) =>
+      service.#finishGenerate(
+        input,
+        type,
+        prepared.grounding,
+        accepted,
+        result,
+        prepared.sourceInsight,
+      ),
+    );
+  }
+
+  async #gate(
+    input: StrategyInput,
+    type: InsightType,
+    grounding: StrategyGrounding,
+    parsed: Parameters<typeof collectClaims>[0],
+    ref: { ungrounded: boolean },
+  ): Promise<void> {
+    const claims = collectClaims(parsed);
+    const violations = validateGroundedDocument({
+      // CLAIM BY CLAIM (P7-R8), each against only the evidence IT cited.
+      claims,
+      // The summary cites nothing, so it may carry no measured figure.
+      uncited: [summaryOf(parsed)],
+      evidence: grounding.evidence,
+      extraAllowedNumbers: declaredNumbers(parsed),
+    });
+    if (violations.length > 0) {
+      // THROUGH THE SINK, so the record outlives the throw on the next line.
+      await this.#auditRejection({
+        brandId: input.brandId,
+        userId: input.actorUserId,
+        reason: 'ungrounded_output',
+        detail: {
+          violationCount: violations.length,
+          kinds: [...new Set(violations.map((v) => v.kind))].join(','),
+          stage: 'before_settle',
+          type,
+        },
+      });
+      ref.ungrounded = true;
+      throw new OutputRejectedError('The strategy was not grounded in the evidence.');
+    }
+  }
+
+  async #prepareGenerate(
+    input: StrategyInput,
+    type: InsightType,
+    taskKey: 'strategy.generate' | 'plan.monthly',
+    sourceInsight?: SourceInsight | undefined,
+  ): Promise<PreparedStrategy> {
     // SCOPE FIRST, BEFORE THE REPLAY CHECK — the F-74 ordering.
     assertBrandInScope(input.actorBrandScope, input.brandId);
 
@@ -345,12 +502,15 @@ export class StrategyService {
     });
     if (replay) {
       return {
-        insight: replay,
-        evidence: replay.evidence.map(toItem),
-        insufficientGrounding: false,
-        aiRequestId: replay.aiRequestId,
-        creditsChargedMilli: 0n,
-        replayed: true,
+        kind: 'done',
+        result: {
+          insight: replay,
+          evidence: replay.evidence.map(toItem),
+          insufficientGrounding: false,
+          aiRequestId: replay.aiRequestId,
+          creditsChargedMilli: 0n,
+          replayed: true,
+        },
       };
     }
 
@@ -400,87 +560,65 @@ export class StrategyService {
         });
       }
       return {
-        insight: null,
-        evidence: grounding.evidence.items,
-        insufficientGrounding: true,
-        aiRequestId: null,
-        creditsChargedMilli: 0n,
-        replayed: false,
+        kind: 'done',
+        result: {
+          insight: null,
+          evidence: grounding.evidence.items,
+          insufficientGrounding: true,
+          aiRequestId: null,
+          creditsChargedMilli: 0n,
+          replayed: false,
+        },
       };
     }
 
-    const result: AiGatewayResult = await this.#gateway.execute({
-      workspaceId: this.#workspaceId,
-      userId: input.actorUserId,
-      taskKey,
-      planKey: input.planKey,
-      idempotencyKey: `${taskKey}:${input.idempotencyKey}`,
-      input: {
-        kind: 'text',
-        prompt: this.#prompt(input.objective, input.period, type),
-        untrustedContext: [
-          grounding.brandContext,
-          grounding.evidence.contextText,
-          /*
-           * THE ACCEPTED STRATEGY ITSELF (P7-R9), when there is one.
-           *
-           * "Grounded in the accepted strategy" used to mean that `planMonthly`
-           * checked one existed and then called the ordinary generator, which
-           * was handed brand knowledge and metrics and NOTHING FROM THE
-           * STRATEGY. The model was asked to plan a month against pillars it had
-           * never been shown. The approved body, its version and the evidence it
-           * was accepted on now go into the context explicitly.
-           *
-           * FENCED, like every other retrieved block: the body is model-written
-           * text a customer accepted, which makes it trustworthy as a decision
-           * and still untrusted as an instruction.
-           */
-          ...(sourceInsight ? [renderAcceptedStrategy(sourceInsight)] : []),
-        ],
-      },
-    });
-
-    if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
-      throw generationFailed(result.failureMessage);
-    }
-
-    const parsed = parseJsonResponse(schema, result.output.text);
-    const claims = collectClaims(parsed);
-
-    /*
-     * THE SAME GROUNDING GATE THE EXPLANATION USES, and for the same reason: a
-     * strategy that cites evidence it was never given is a strategy a customer
-     * will act on believing it was checked.
-     *
-     * `extraAllowedNumbers` carries the SHARE PERCENTAGES the schema itself
-     * constrains — a channel mix is allowed to say 40% without that number
-     * appearing in the evidence, because the number IS the recommendation rather
-     * than a claim about measured performance.
-     */
-    const violations = validateGroundedDocument({
-      // CLAIM BY CLAIM (P7-R8), each against only the evidence IT cited.
-      claims,
-      // The summary cites nothing, so it may carry no measured figure.
-      uncited: [summaryOf(parsed)],
-      evidence: grounding.evidence,
-      extraAllowedNumbers: declaredNumbers(parsed),
-    });
-    if (violations.length > 0) {
-      // THROUGH THE SINK, so the record outlives the throw on the next line.
-      await this.#auditRejection({
-        brandId: input.brandId,
+    return {
+      kind: 'ready',
+      grounding,
+      sourceInsight,
+      service: this,
+      gateway: this.#gateway,
+      request: {
+        workspaceId: this.#workspaceId,
         userId: input.actorUserId,
-        reason: 'ungrounded_output',
-        detail: {
-          violationCount: violations.length,
-          kinds: [...new Set(violations.map((v) => v.kind))].join(','),
-          aiRequestId: result.requestId,
-          type,
+        taskKey,
+        planKey: input.planKey,
+        idempotencyKey: `${taskKey}:${input.idempotencyKey}`,
+        input: {
+          kind: 'text',
+          prompt: this.#prompt(input.objective, input.period, type),
+          untrustedContext: [
+            grounding.brandContext,
+            grounding.evidence.contextText,
+            /*
+             * THE ACCEPTED STRATEGY ITSELF (P7-R9), when there is one.
+             *
+             * "Grounded in the accepted strategy" used to mean that `planMonthly`
+             * checked one existed and then called the ordinary generator, which
+             * was handed brand knowledge and metrics and NOTHING FROM THE
+             * STRATEGY. The model was asked to plan a month against pillars it had
+             * never been shown. The approved body, its version and the evidence it
+             * was accepted on now go into the context explicitly.
+             *
+             * FENCED, like every other retrieved block: the body is model-written
+             * text a customer accepted, which makes it trustworthy as a decision
+             * and still untrusted as an instruction.
+             */
+            ...(sourceInsight ? [renderAcceptedStrategy(sourceInsight)] : []),
+          ],
         },
-      });
-      throw ungroundedExplanation();
-    }
+      },
+    };
+  }
 
+  async #finishGenerate(
+    input: StrategyInput,
+    type: InsightType,
+    grounding: StrategyGrounding,
+    parsed: Parameters<typeof collectClaims>[0],
+    result: AiGatewayResult,
+    sourceInsight: SourceInsight | undefined,
+  ): Promise<StrategyResult> {
     const insight = await this.#persist({
       type,
       input,

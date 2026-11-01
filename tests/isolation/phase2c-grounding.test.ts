@@ -133,7 +133,13 @@ const PLAN = (brandQuestion: boolean) => (echo: string) =>
     steps: [
       {
         toolKey: 'content.draft',
-        arguments: { brandId: fixtures.a.brandId, brief: `Posts about ${echo}` },
+        // PR A (KNOWN bug "Copilot ZodError"): a step must fit its tool's
+        // schema, so the fixture names the channels `content.draft` requires.
+        arguments: {
+          brandId: fixtures.a.brandId,
+          brief: `Posts about ${echo}`,
+          platformKeys: ['instagram'],
+        },
       },
       { toolKey: 'brand.context', arguments: { brandId: fixtures.a.brandId, question: echo } },
     ],

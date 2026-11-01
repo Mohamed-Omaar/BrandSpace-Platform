@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AppError } from '@brandspace/shared';
+import { normaliseHashtags } from './hashtags';
 
 /**
  * AC-11.9 — "Output is validated against a schema; a malformed provider
@@ -95,7 +96,8 @@ export function parseGeneratedContent(text: string, options: ParseOptions): Gene
     variants: variants.map((v) => ({
       platformKey: v.platformKey,
       body: v.body,
-      hashtags: v.hashtags.slice(0, 50),
+      // Item 7 — stored without the mark, once (`hashtags.ts`).
+      hashtags: normaliseHashtags(v.hashtags).slice(0, 50),
     })),
   };
 }

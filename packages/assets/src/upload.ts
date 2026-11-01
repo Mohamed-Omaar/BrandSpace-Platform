@@ -479,6 +479,20 @@ export class AssetUploadService {
     if (folder.brandId !== null && folder.brandId !== brandId) throw folderNotFound();
   }
 
+  /**
+   * PR A (H-3) — refuse BEFORE paid work that will be stored here (an AI
+   * image) when the library cannot take `bytes` more. A read only.
+   */
+  async assertStorageHeadroom(bytes: number): Promise<void> {
+    const fits = await this.#usage.hasByteHeadroom({
+      workspaceId: this.#workspaceId,
+      featureKey: QUOTA_FEATURES.storageGb,
+      limitGb: this.#storageLimitGb,
+      bytes,
+    });
+    if (!fits) throw storageQuotaReached();
+  }
+
   async #consumeStorage(bytes: number, idempotencyKey: string): Promise<void> {
     /*
      * THE QUOTA IS METERED IN BYTES and compared against the plan's GIGABYTES

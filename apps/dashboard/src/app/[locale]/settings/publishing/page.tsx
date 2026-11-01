@@ -577,7 +577,11 @@ export default async function PublishingDefaultsPage({
                           id={`template-hashtags-${brand.id}`}
                           name="hashtags"
                           dir="auto"
-                          defaultValue={editing?.hashtags.map((tag) => `#${tag}`).join(' ') ?? ''}
+                          defaultValue={
+                            editing?.hashtags
+                              .map((tag) => `#${tag.replace(/^#+/, '')}`)
+                              .join(' ') ?? ''
+                          }
                           data-testid={`template-hashtags-${brand.id}`}
                         />
                       </Field>

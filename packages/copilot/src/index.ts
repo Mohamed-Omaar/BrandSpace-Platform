@@ -73,6 +73,8 @@ export { CopilotUndoService } from './undo';
 export type { CompensationKind, UndoCollaborators, UndoOutcome, UndoServiceOptions } from './undo';
 
 export { CopilotOrchestrator, automationRuleCatalogueLines } from './orchestrator';
+export type { OrchestratorRun } from './orchestrator';
+export { describeArguments } from './tools';
 export type { OrchestratorOptions, TurnInput, TurnResult } from './orchestrator';
 
 export {

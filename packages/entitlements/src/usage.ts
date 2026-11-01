@@ -509,6 +509,35 @@ export class UsageService {
     };
   }
 
+  /**
+   * PR A (check-up H-3) — WOULD `bytes` MORE FIT UNDER A BYTE-METERED CEILING?
+   * A read, no reservation: used before work that is paid for and then stored
+   * (an AI image), so a full library refuses BEFORE the credit is spent rather
+   * than after. The store itself still consumes atomically and may still
+   * refuse a race; this only stops the predictable case.
+   */
+  async hasByteHeadroom(input: {
+    readonly workspaceId: string;
+    readonly featureKey: string;
+    readonly limitGb: number | null;
+    readonly bytes: number;
+  }): Promise<boolean> {
+    if (input.limitGb === null) return true;
+    const window = quotaWindow('total', this.#clock.now());
+    const row = await this.#prisma.usageCounter.findUnique({
+      where: {
+        workspaceId_featureKey_periodStart: {
+          workspaceId: input.workspaceId,
+          featureKey: input.featureKey,
+          periodStart: window.start,
+        },
+      },
+      select: { usedBytes: true },
+    });
+    const limitBytes = BigInt(Math.floor(Math.max(0, input.limitGb) * BYTES_PER_GB));
+    return BigInt(row?.usedBytes ?? 0n) + BigInt(Math.max(0, input.bytes)) <= limitBytes;
+  }
+
   /** Read a quota's consumption without changing it. */
   async consumption(input: {
     readonly workspaceId: string;

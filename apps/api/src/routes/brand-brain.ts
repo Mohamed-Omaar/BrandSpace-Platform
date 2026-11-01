@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   BrandBrainChatService,
+  type ChatRun,
   chatMessageSchema,
   resolveBrandBrainPolicy,
 } from '@brandspace/brand-brain';
@@ -226,30 +227,36 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
 
       try {
         const { gateway } = gatewayDeps();
-        const turn = await withWorkspace(
-          caller.workspaceId,
-          async (db) =>
-            new BrandBrainChatService({
-              db,
-              workspaceId: caller.workspaceId,
-              gateway,
-              policy: policy.chat,
-            }).send({
-              brandId: parsed.data.brandId,
-              conversationId: parsed.data.conversationId,
-              area: parsed.data.area as never,
-              message: parsed.data.message,
-              idempotencyKey: parsed.data.idempotencyKey,
-              actorUserId: caller.userId,
-              actorBrandScope: caller.brandScope,
-              planKey,
-              // D7 — so a question nothing answers names what is missing.
-              keyQuestions: policy.questions,
-              // D-573 — answered in the question's language, else the brand's.
-              fallbackLocale: brand.defaultLocale,
-            }),
-          { prisma: tenantPrisma },
-        );
+        // H-4: short tenant transactions around the provider call, never one
+        // that spans it (`BrandBrainChatService.sendWith`).
+        const run: ChatRun = (fn) =>
+          withWorkspace(
+            caller.workspaceId,
+            async (db) =>
+              fn(
+                new BrandBrainChatService({
+                  db,
+                  workspaceId: caller.workspaceId,
+                  gateway,
+                  policy: policy.chat,
+                }),
+              ),
+            { prisma: tenantPrisma },
+          );
+        const turn = await BrandBrainChatService.sendWith(run, {
+          brandId: parsed.data.brandId,
+          conversationId: parsed.data.conversationId,
+          area: parsed.data.area as never,
+          message: parsed.data.message,
+          idempotencyKey: parsed.data.idempotencyKey,
+          actorUserId: caller.userId,
+          actorBrandScope: caller.brandScope,
+          planKey,
+          // D7 — so a question nothing answers names what is missing.
+          keyQuestions: policy.questions,
+          // D-573 — answered in the question's language, else the brand's.
+          fallbackLocale: brand.defaultLocale,
+        });
 
         return reply.send({
           conversationId: turn.conversationId,

@@ -25,6 +25,20 @@ export const AI_FAILURE_CLASSES = [
   'TIMEOUT',
   'NETWORK_ERROR',
   'UNKNOWN',
+  /*
+   * PR A (check-up H-3, M-12). Two ways a provider can ANSWER and still not
+   * have produced anything usable. Both release the reservation; neither is
+   * deterministic, so the same idempotency key runs again rather than
+   * replaying a dead result.
+   *
+   *   OUTPUT_INVALID   — the caller parsed and validated the output and refused
+   *                      it (not JSON, the wrong shape, a refusal, an edit
+   *                      that changed nothing).
+   *   OUTPUT_TRUNCATED — the provider stopped at its length limit, or answered
+   *                      with nothing at all.
+   */
+  'OUTPUT_INVALID',
+  'OUTPUT_TRUNCATED',
 ] as const;
 
 export type AiFailureClass = (typeof AI_FAILURE_CLASSES)[number];
@@ -87,12 +101,48 @@ export class AiProviderError extends Error {
   readonly failureClass: AiFailureClass;
   /** Provider-side detail, for operators. Never returned to a customer. */
   readonly operatorDetail: string | undefined;
+  /**
+   * PR A (item 6) — the provider's own error code (`invalid_size`,
+   * `rate_limit_exceeded`, …) and its short reason, for the request detail an
+   * operator reads. The gateway stores the reason only after the shared
+   * redaction and with any prompt text removed (`operatorFailureReason`), and
+   * neither ever reaches a customer response.
+   */
+  readonly providerCode: string | undefined;
+  readonly providerReason: string | undefined;
 
-  constructor(failureClass: AiFailureClass, message: string, operatorDetail?: string) {
+  constructor(
+    failureClass: AiFailureClass,
+    message: string,
+    operatorDetail?: string,
+    provider: { readonly code?: string; readonly reason?: string } = {},
+  ) {
     super(message);
     this.name = 'AiProviderError';
     this.failureClass = failureClass;
     this.operatorDetail = operatorDetail;
+    this.providerCode = provider.code;
+    this.providerReason = provider.reason;
+  }
+}
+
+/**
+ * PR A (H-3) — what a caller's `accept` throws to refuse a provider's output.
+ *
+ * The reason is for the operator (it is redacted and stored as the request's
+ * `failureReason`); it must describe the SHAPE of the problem ("not JSON",
+ * "variant 2 has no body"), never quote the output or the prompt. The
+ * customer reads `customerMessage` when given, otherwise the class's message.
+ */
+export class OutputRejectedError extends Error {
+  readonly reason: string;
+  readonly customerMessage: string | undefined;
+
+  constructor(reason: string, customerMessage?: string) {
+    super(reason);
+    this.name = 'OutputRejectedError';
+    this.reason = reason;
+    this.customerMessage = customerMessage;
   }
 }
 
@@ -118,6 +168,11 @@ export function customerMessageFor(failureClass: AiFailureClass): string {
       return 'There is too much text for this task. Shorten it and try again.';
     case 'INVALID_REQUEST':
       return 'That request could not be processed as written.';
+    // Nothing was charged for either: say so, and that trying again is fine.
+    case 'OUTPUT_INVALID':
+      return 'The AI’s answer could not be used, so nothing was charged. Please try again.';
+    case 'OUTPUT_TRUNCATED':
+      return 'The AI’s answer was cut off, so nothing was charged. Please try again, or ask for something shorter.';
     // AUTH_ERROR and QUOTA_EXCEEDED are OUR configuration problems, not the
     // customer's. Saying "invalid API key" would be both confusing and a
     // disclosure; the operator sees the real class in the request record.

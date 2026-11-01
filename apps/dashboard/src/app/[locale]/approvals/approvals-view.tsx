@@ -520,7 +520,7 @@ export function ApprovalsView({
                         <p dir="auto">{variant.body}</p>
                         {variant.hashtags.length > 0 ? (
                           <span className="bsp-apr-meta">
-                            {variant.hashtags.map((h) => `#${h}`).join(' ')}
+                            {variant.hashtags.map((h) => `#${h.replace(/^#+/, '')}`).join(' ')}
                           </span>
                         ) : null}
                         {/*

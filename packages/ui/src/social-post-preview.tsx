@@ -443,7 +443,7 @@ function Caption({
             overflowWrap: 'anywhere',
           }}
         >
-          {content.hashtags.map((tag) => `#${tag}`).join(' ')}
+          {content.hashtags.map((tag) => `#${tag.replace(/^#+/, '')}`).join(' ')}
         </p>
       ) : null}
       {isLong ? (

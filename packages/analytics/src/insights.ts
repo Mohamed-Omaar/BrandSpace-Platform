@@ -7,7 +7,9 @@ import {
 } from '@brandspace/database';
 import {
   FORMAL_ARABIC_INSTRUCTION,
+  OutputRejectedError,
   type AiGateway,
+  type AiGatewayRequest,
   type AiGatewayResult,
   type AiQuote,
 } from '@brandspace/ai-gateway';
@@ -148,6 +150,29 @@ export interface ExplainResult {
   readonly replayed: boolean;
 }
 
+/** PR A (H-4) — run `fn` against an insight service bound to a SHORT tenant transaction. */
+export type InsightRun = <T>(fn: (insights: AnalyticsInsightService) => Promise<T>) => Promise<T>;
+
+type PreparedExplain =
+  | { readonly kind: 'done'; readonly result: ExplainResult }
+  | {
+      readonly kind: 'ready';
+      readonly built: BuiltEvidence;
+      readonly service: AnalyticsInsightService;
+      readonly gateway: AiGateway;
+      readonly request: AiGatewayRequest;
+      readonly requestRef: { ungrounded: boolean };
+    };
+
+/** PR A (H-3) — a parse failure, as the gateway's "do not charge". */
+function rejectUnparseable<T>(parse: () => T): T {
+  try {
+    return parse();
+  } catch {
+    throw new OutputRejectedError('The explanation was not the agreed JSON shape.');
+  }
+}
+
 export class AnalyticsInsightService {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
@@ -232,6 +257,97 @@ export class AnalyticsInsightService {
 
   /** One grounded explanation, end to end. */
   async explain(input: ExplainInput): Promise<ExplainResult> {
+    return AnalyticsInsightService.explainWith((fn) => fn(this), input);
+  }
+
+  /**
+   * PR A (check-up H-3, H-4) — ONE EXPLANATION, IN THREE STEPS. The evidence
+   * is read in one short tenant transaction, the provider is called with NO
+   * transaction open, and the insight is written in a second.
+   *
+   * THE GROUNDING GATE NOW RUNS BEFORE THE CHARGE. It used to run after the
+   * gateway had settled ("the credits are already settled — the model did the
+   * work"), so a customer paid for an explanation we refused to show. It is now
+   * the gateway's `accept`: an unparseable or ungrounded answer is released,
+   * never charged, and its rejection is still recorded through the audit sink.
+   */
+  static async explainWith(run: InsightRun, input: ExplainInput): Promise<ExplainResult> {
+    const prepared = await run((insights) => insights.#prepareExplain(input));
+    if (prepared.kind === 'done') return prepared.result;
+    const { built, service } = prepared;
+    let parsed: ParsedExplanation | null = null;
+    const result: AiGatewayResult = await prepared.gateway.execute({
+      ...prepared.request,
+      accept: async (output) => {
+        const candidate = rejectUnparseable(() => {
+          if (output.kind !== 'text') throw new Error('not text');
+          return parseJsonResponse(explanationSchema, output.text);
+        });
+        await service.#gate(input, built, candidate, prepared.requestRef);
+        parsed = candidate;
+      },
+    });
+    if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
+      // A refused or failed answer was released. Nothing to persist.
+      if (result.failureClass === 'OUTPUT_INVALID' && prepared.requestRef.ungrounded) {
+        throw ungroundedExplanation();
+      }
+      throw explanationFailed(result.failureMessage);
+    }
+    let accepted: ParsedExplanation;
+    if (parsed) {
+      accepted = parsed;
+    } else {
+      // A result the gateway did not pass through `accept` (a recorded one): the
+      // same gate, after the fact. It never becomes an insight unchecked.
+      accepted = parseJsonResponse(explanationSchema, result.output.text);
+      try {
+        await service.#gate(input, built, accepted, prepared.requestRef);
+      } catch (error) {
+        if (error instanceof OutputRejectedError) throw ungroundedExplanation();
+        throw error;
+      }
+    }
+    return run((insights) => insights.#finishExplain(input, built, accepted, result));
+  }
+
+  /** The grounding gate (P7-R8), as a refusal the gateway does not charge for. */
+  async #gate(
+    input: ExplainInput,
+    built: BuiltEvidence,
+    parsed: ParsedExplanation,
+    ref: { ungrounded: boolean },
+  ): Promise<void> {
+    const violations = validateGroundedDocument({
+      claims: [...parsed.claims, ...parsed.notableChanges, ...parsed.recommendations],
+      uncited: [parsed.summary],
+      evidence: built.evidence,
+    });
+    if (violations.length > 0) {
+      /*
+       * THROUGH THE SINK, so the record OUTLIVES the throw on the next line.
+       * Written on this service's own client it was rolled back with the
+       * refusing transaction, and an ungrounded model response — the one event
+       * this whole gate exists to catch — left no trace at all.
+       */
+      await this.#auditRejection({
+        brandId: input.brandId,
+        userId: input.actorUserId,
+        reason: 'ungrounded_output',
+        // KINDS AND COUNTS, never the model's text — which is the thing under
+        // suspicion and the last thing to copy into an audit table.
+        detail: {
+          violationCount: violations.length,
+          kinds: [...new Set(violations.map((v) => v.kind))].join(','),
+          stage: 'before_settle',
+        },
+      });
+      ref.ungrounded = true;
+      throw new OutputRejectedError('The explanation was not grounded in the evidence.');
+    }
+  }
+
+  async #prepareExplain(input: ExplainInput): Promise<PreparedExplain> {
     /*
      * SCOPE FIRST, BEFORE THE REPLAY CHECK — the F-74 ordering the Content Studio
      * adopted. A member who may not act on this brand must not learn whether an
@@ -277,13 +393,16 @@ export class AnalyticsInsightService {
     });
     if (replay) {
       return {
-        insight: replay,
-        evidence: replay.evidence.map(toEvidenceItem),
-        anomalies: [],
-        insufficientData: false,
-        aiRequestId: replay.aiRequestId,
-        creditsChargedMilli: 0n,
-        replayed: true,
+        kind: 'done',
+        result: {
+          insight: replay,
+          evidence: replay.evidence.map(toEvidenceItem),
+          anomalies: [],
+          insufficientData: false,
+          aiRequestId: replay.aiRequestId,
+          creditsChargedMilli: 0n,
+          replayed: true,
+        },
       };
     }
 
@@ -309,81 +428,46 @@ export class AnalyticsInsightService {
         },
       });
       return {
-        insight: null,
-        evidence: built.evidence.items,
-        anomalies: built.anomalies,
-        insufficientData: true,
-        aiRequestId: null,
-        creditsChargedMilli: 0n,
-        replayed: false,
+        kind: 'done',
+        result: {
+          insight: null,
+          evidence: built.evidence.items,
+          anomalies: built.anomalies,
+          insufficientData: true,
+          aiRequestId: null,
+          creditsChargedMilli: 0n,
+          replayed: false,
+        },
       };
     }
 
-    const result: AiGatewayResult = await this.#gateway.execute({
-      workspaceId: this.#workspaceId,
-      userId: input.actorUserId,
-      taskKey: 'analytics.explain',
-      planKey: input.planKey,
-      idempotencyKey: `analytics-explain:${input.idempotencyKey}`,
-      input: {
-        kind: 'text',
-        prompt: this.#prompt(input.period, input.comparison),
-        untrustedContext: [built.evidence.contextText],
-      },
-    });
-
-    if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
-      // The gateway has already settled or released. Nothing to persist, and a
-      // half-explanation would leave the customer to work out how to read it.
-      throw explanationFailed(result.failureMessage);
-    }
-
-    const parsed: ParsedExplanation = parseJsonResponse(explanationSchema, result.output.text);
-
-    /*
-     * THE GROUNDING GATE. A violation is a FAILED GENERATION, not something to
-     * trim and ship: a partially grounded explanation is the most dangerous shape
-     * this feature can take, because it reads exactly like a fully grounded one.
-     *
-     * The credits are already settled — the model did the work — and that is the
-     * honest accounting: we paid the provider, and we are refusing to show the
-     * customer something we cannot stand behind.
-     */
-    /*
-     * CLAIM BY CLAIM (P7-R8). This used to concatenate every sentence and union
-     * every ordinal into ONE call, which asked whether each number appeared
-     * somewhere in everything cited anywhere — a check that passes almost always
-     * and gets weaker as a customer accumulates data. Each claim is now measured
-     * against only the evidence it points at, and the summary — which cites
-     * nothing — may not carry a measured figure at all.
-     */
-    const violations = validateGroundedDocument({
-      claims: [...parsed.claims, ...parsed.notableChanges, ...parsed.recommendations],
-      uncited: [parsed.summary],
-      evidence: built.evidence,
-    });
-    if (violations.length > 0) {
-      /*
-       * THROUGH THE SINK, so the record OUTLIVES the throw on the next line.
-       * Written on this service's own client it was rolled back with the
-       * refusing transaction, and an ungrounded model response — the one event
-       * this whole gate exists to catch — left no trace at all.
-       */
-      await this.#auditRejection({
-        brandId: input.brandId,
+    return {
+      kind: 'ready',
+      built,
+      service: this,
+      gateway: this.#gateway,
+      requestRef: { ungrounded: false },
+      request: {
+        workspaceId: this.#workspaceId,
         userId: input.actorUserId,
-        reason: 'ungrounded_output',
-        // KINDS AND COUNTS, never the model's text — which is the thing under
-        // suspicion and the last thing to copy into an audit table.
-        detail: {
-          violationCount: violations.length,
-          kinds: [...new Set(violations.map((v) => v.kind))].join(','),
-          aiRequestId: result.requestId,
+        taskKey: 'analytics.explain',
+        planKey: input.planKey,
+        idempotencyKey: `analytics-explain:${input.idempotencyKey}`,
+        input: {
+          kind: 'text',
+          prompt: this.#prompt(input.period, input.comparison),
+          untrustedContext: [built.evidence.contextText],
         },
-      });
-      throw ungroundedExplanation();
-    }
+      },
+    };
+  }
 
+  async #finishExplain(
+    input: ExplainInput,
+    built: BuiltEvidence,
+    parsed: ParsedExplanation,
+    result: AiGatewayResult,
+  ): Promise<ExplainResult> {
     const insight = await this.#persist({
       type: 'ANALYTICS_EXPLANATION',
       input,

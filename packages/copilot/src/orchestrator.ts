@@ -9,8 +9,11 @@ import {
 } from '@brandspace/database';
 import {
   FORMAL_ARABIC_INSTRUCTION,
+  OutputRejectedError,
   type AiGateway,
+  type AiGatewayRequest,
   type AiGatewayResult,
+  type AiOutput,
   type AiQuote,
 } from '@brandspace/ai-gateway';
 import {
@@ -33,7 +36,7 @@ import {
 import { copilotGenerationFailed, copilotSessionNotFound, requestTooLong } from './errors';
 import type { LiveAuthorization } from './authorization';
 import type { CopilotPolicy } from './policy';
-import { availableTools, findTool } from './tools';
+import { availableTools, describeArguments, findTool } from './tools';
 import type { ProposedStep } from './plans';
 import type { AutomationRuleCheck } from './executors';
 import { COPILOT_SURFACES, copilotSurface, type CopilotSurface } from './surfaces';
@@ -125,7 +128,14 @@ const planResponseSchema = z.object({
    */
   saveFact: z
     .object({
-      area: z.enum(BRAND_KNOWLEDGE_AREAS as unknown as [string, ...string[]]).nullish(),
+      // KNOWN BUG (2026-10-28): the prompt describes `area` as string|null, and
+      // a model that named an area in its own words failed the WHOLE turn on a
+      // strict enum. An unknown area now falls back to null — the person picks
+      // the area in Brand Brain → Add anyway.
+      area: z
+        .enum(BRAND_KNOWLEDGE_AREAS as unknown as [string, ...string[]])
+        .nullish()
+        .catch(null),
       title: z.string().trim().max(120).nullish(),
       body: z.string().trim().max(2_000).nullish(),
     })
@@ -235,6 +245,100 @@ export interface TurnResult {
   readonly missing: MissingKnowledge | null;
   /** D8 — a save request, handed to Brand Brain → Add. Never saved here. */
   readonly saveFact: SaveFactHandoff | null;
+}
+
+/** PR A (H-4) — run `fn` against an orchestrator bound to a SHORT tenant transaction. */
+export type OrchestratorRun = <T>(fn: (copilot: CopilotOrchestrator) => Promise<T>) => Promise<T>;
+
+type AcceptedPlan = z.infer<typeof planResponseSchema> & {
+  /** Steps whose arguments did not fit their tool — only ever set when lenient. */
+  readonly invalidToolKeys?: readonly string[];
+};
+
+interface PreparedTurn {
+  readonly session: { readonly id: string; readonly brandId: string | null };
+  readonly brandId: string | null;
+  readonly correlationId: string;
+  readonly brandBrain: boolean;
+  readonly grounding: Grounding | null;
+  readonly gateway: AiGateway;
+  readonly request: AiGatewayRequest & { readonly input: { kind: 'text'; prompt: string } };
+}
+
+/** Notes for the operator AND the repair prompt: paths and tool keys only. */
+class PlanRejectedError extends OutputRejectedError {
+  constructor(readonly notes: readonly string[]) {
+    super(`The plan did not match the tool schemas: ${notes.join('; ')}`.slice(0, 190));
+  }
+}
+
+/**
+ * Parse the model's reply and check every step's arguments against its tool's
+ * schema. Throws `OutputRejectedError` (no charge) when anything does not fit.
+ * A brand tool's missing `brandId` is the SESSION's brand — the only brand this
+ * conversation may act on — never one the model chose.
+ */
+function acceptPlan(
+  output: AiOutput,
+  sessionBrandId: string | null,
+  mode: 'strict' | 'lenient' = 'strict',
+): AcceptedPlan {
+  if (output.kind !== 'text') throw new OutputRejectedError('The reply was not text.');
+  let plan: AcceptedPlan;
+  try {
+    const trimmed = output.text.trim();
+    const unfenced = trimmed.startsWith('```')
+      ? trimmed
+          .replace(/^```(?:json)?\s*/i, '')
+          .replace(/```$/, '')
+          .trim()
+      : trimmed;
+    plan = planResponseSchema.parse(JSON.parse(unfenced));
+  } catch {
+    throw new PlanRejectedError(['the reply was not the required JSON object']);
+  }
+  const notes: string[] = [];
+  const steps = plan.steps.map((step) => {
+    const tool = findTool(step.toolKey);
+    // An unknown or not-allowed tool is not a SHAPE problem: it is reported to
+    // the customer as a rejected step, exactly as before.
+    if (!tool) return step;
+    const args: Record<string, unknown> = { ...step.arguments };
+    if (tool.brandScope === 'required' && args['brandId'] === undefined && sessionBrandId) {
+      args['brandId'] = sessionBrandId;
+    }
+    const checked = tool.input.safeParse(args);
+    if (!checked.success) {
+      const paths = checked.error.issues
+        .map((issue) => issue.path.join('.') || '(arguments)')
+        .slice(0, 5)
+        .join(', ');
+      notes.push(`${tool.key}: ${paths}`);
+      return step;
+    }
+    return { toolKey: step.toolKey, arguments: checked.data as Record<string, unknown> };
+  });
+  if (notes.length > 0 && mode === 'strict') throw new PlanRejectedError(notes);
+  /*
+   * LENIENT ONLY AFTER THE FACT: a reply the gateway already accepted (or a
+   * recorded one) is never failed once it has been charged. A step that does not
+   * fit its tool is dropped and reported as rejected, never run.
+   */
+  const invalid = notes.map((note) => note.split(':')[0] ?? note);
+  return {
+    ...plan,
+    steps: steps.filter((step) => !invalid.includes(step.toolKey)),
+    invalidToolKeys: invalid,
+  };
+}
+
+/** The one extra line a repair attempt carries. Tool keys and field paths only. */
+function repairInstruction(notes: readonly string[]): string {
+  return [
+    'YOUR PREVIOUS REPLY COULD NOT BE USED. These tool arguments were missing or invalid:',
+    ...notes.map((note) => `- ${note}`),
+    'Reply again with the same JSON shape, giving every argument each tool lists.',
+  ].join('\n');
 }
 
 export class CopilotOrchestrator {
@@ -430,6 +534,71 @@ export class CopilotOrchestrator {
    * explanation.
    */
   async turn(input: TurnInput): Promise<TurnResult> {
+    return CopilotOrchestrator.turnWith((fn) => fn(this), input);
+  }
+
+  /**
+   * PR A (check-up H-3, H-4; KNOWN bug "Copilot ZodError, charged failed turn").
+   *
+   * ONE TURN, IN THREE STEPS: the session is admitted and the message recorded
+   * in one short tenant transaction, the provider is called with NO transaction
+   * open, and the answer is written in a second.
+   *
+   * THE REPLY IS VALIDATED BEFORE THE CHARGE, STEP BY STEP. Each proposed step's
+   * arguments are checked against its tool's own schema inside the gateway's
+   * `accept` (a brand tool's missing `brandId` is the session's brand, never a
+   * guess). A reply that fails is released, not charged, and REPAIRED ONCE: the
+   * model is asked again, told only which tool arguments did not match (paths,
+   * never its own text). A second failure refuses the turn with a plain
+   * message, also uncharged — never a raw ZodError and a 500.
+   */
+  static async turnWith(run: OrchestratorRun, input: TurnInput): Promise<TurnResult> {
+    const prepared = await run((copilot) => copilot.#prepareTurn(input));
+    const attempt = async (repairNotes: readonly string[]) => {
+      let accepted: AcceptedPlan | null = null;
+      let notes: readonly string[] | null = null;
+      const result: AiGatewayResult = await prepared.gateway.execute({
+        ...prepared.request,
+        ...(repairNotes.length > 0
+          ? {
+              idempotencyKey: `${prepared.request.idempotencyKey}:repair`,
+              input: {
+                ...prepared.request.input,
+                prompt: `${prepared.request.input.prompt}\n\n${repairInstruction(repairNotes)}`,
+              },
+            }
+          : {}),
+        accept: (output) => {
+          try {
+            accepted = acceptPlan(output, prepared.brandId);
+          } catch (error) {
+            if (error instanceof PlanRejectedError) notes = error.notes;
+            throw error;
+          }
+        },
+      });
+      return {
+        result,
+        accepted: accepted as AcceptedPlan | null,
+        notes: notes as readonly string[] | null,
+      };
+    };
+
+    const first = await attempt([]);
+    let { result, accepted } = first;
+    if (result.status !== 'SUCCEEDED' && result.failureClass === 'OUTPUT_INVALID') {
+      ({ result, accepted } = await attempt(
+        first.notes ?? ['the reply did not match the required JSON shape'],
+      ));
+    }
+    if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
+      throw copilotGenerationFailed(result.failureMessage);
+    }
+    const parsed = accepted ?? acceptPlan(result.output, prepared.brandId, 'lenient');
+    return run((copilot) => copilot.#finishTurn(input, prepared, result, parsed));
+  }
+
+  async #prepareTurn(input: TurnInput): Promise<PreparedTurn> {
     if (input.request.length > this.#policy.conversation.maxRequestChars) {
       throw requestTooLong(this.#policy.conversation.maxRequestChars);
     }
@@ -529,46 +698,43 @@ export class CopilotOrchestrator {
         : null;
     const subject = await this.#subjectContext(session, brandId);
 
-    const result: AiGatewayResult = await this.#gateway.execute({
-      workspaceId: this.#workspaceId,
-      userId: input.authorization.userId,
-      taskKey: 'copilot.chat',
-      planKey: input.planKey,
-      idempotencyKey: `copilot:${input.idempotencyKey}`,
-      input: {
-        kind: 'text',
-        prompt: this.#prompt(
-          input.request,
-          input.authorization,
-          history,
-          brandId !== null,
-          copilotSurface(session.surface),
-          subject?.kind ?? null,
-          brandBrain,
-        ),
-        untrustedContext: [...(subject ? [subject.fenced] : []), ...(context ? [context] : [])],
-      },
-    });
+    return {
+      session,
+      brandId,
+      correlationId,
+      brandBrain,
+      grounding,
+      gateway: this.#gateway,
+      request: {
+        workspaceId: this.#workspaceId,
+        userId: input.authorization.userId,
+        taskKey: 'copilot.chat',
+        planKey: input.planKey,
+        idempotencyKey: `copilot:${input.idempotencyKey}`,
+        input: {
+          kind: 'text',
+          prompt: this.#prompt(
+            input.request,
+            input.authorization,
+            history,
+            brandId !== null,
+            copilotSurface(session.surface),
+            subject?.kind ?? null,
+            brandBrain,
+          ),
+          untrustedContext: [...(subject ? [subject.fenced] : []), ...(context ? [context] : [])],
+        },
+      } as PreparedTurn['request'],
+    };
+  }
 
-    if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
-      throw copilotGenerationFailed(result.failureMessage);
-    }
-
-    let parsed;
-    try {
-      const trimmed = result.output.text.trim();
-      const unfenced = trimmed.startsWith('```')
-        ? trimmed
-            .replace(/^```(?:json)?\s*/i, '')
-            .replace(/```$/, '')
-            .trim()
-        : trimmed;
-      parsed = planResponseSchema.parse(JSON.parse(unfenced));
-    } catch {
-      // A malformed response never becomes a plan. The gateway has already
-      // settled or released; there is nothing half-done to persist.
-      throw copilotGenerationFailed(null);
-    }
+  async #finishTurn(
+    input: TurnInput,
+    prepared: PreparedTurn,
+    result: AiGatewayResult,
+    parsed: AcceptedPlan,
+  ): Promise<TurnResult> {
+    const { session, brandId, correlationId, brandBrain, grounding } = prepared;
 
     /*
      * THE FILTER, AND IT IS THE SECOND LINE RATHER THAN THE FIRST.
@@ -593,7 +759,7 @@ export class CopilotOrchestrator {
       }).map((t) => t.key),
     );
     const steps: ProposedStep[] = [];
-    const rejectedToolKeys: string[] = [];
+    const rejectedToolKeys: string[] = [...(parsed.invalidToolKeys ?? [])];
 
     /*
      * A BRAND QUESTION WHILE BRAND BRAIN IS OFF gets the notice, not an answer
@@ -825,9 +991,12 @@ export class CopilotOrchestrator {
         : '',
       '',
       'TOOLS YOU MAY USE (and no others):',
+      // KNOWN BUG (2026-10-28): the tools were listed with no argument shape,
+      // so the model guessed and a missing `brandId` / `question` failed the
+      // turn. Each tool now states its arguments, read from its own schema.
       ...tools.map(
         (tool) =>
-          `- ${tool.key} (${tool.actionClass}${tool.spendsCredits ? ', spends credits' : ''})`,
+          `- ${tool.key} (${tool.actionClass}${tool.spendsCredits ? ', spends credits' : ''}) arguments: ${describeArguments(tool.input)}`,
       ),
       ...(tools.some((tool) => tool.key === 'automation.create_rule')
         ? automationRuleCatalogueLines(this.#automationRules)

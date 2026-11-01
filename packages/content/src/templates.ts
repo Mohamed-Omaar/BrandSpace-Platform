@@ -11,6 +11,7 @@ import {
   systemClock,
   type Clock,
 } from '@brandspace/shared';
+import { normaliseHashtags } from './hashtags';
 import { unsupportedPlatform } from './errors';
 import { findPlatform, type ContentPolicy } from './policy';
 
@@ -86,20 +87,7 @@ function mayManage(actor: TemplateActor): void {
   }
 }
 
-/** `#launch`, `launch ` and `LAUNCH` are one tag, stored without the mark. */
-export function normaliseHashtags(tags: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of tags) {
-    const tag = raw.trim().replace(/^#+/, '').trim();
-    if (!tag || /\s/.test(tag)) continue;
-    const key = tag.toLocaleLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(tag);
-  }
-  return out;
-}
+export { normaliseHashtags } from './hashtags';
 
 export interface ContentTemplateServiceOptions {
   readonly db: TenantScopedClient;
@@ -511,7 +499,9 @@ export function hashtagsIntoFirstComment(
   if (!platform.allowsFirstComment || variant.hashtags.length === 0) {
     return { hashtags: [...variant.hashtags], firstComment: variant.firstComment };
   }
-  const line = variant.hashtags.map((tag) => `#${tag}`).join(' ');
+  const line = normaliseHashtags(variant.hashtags)
+    .map((tag) => `#${tag}`)
+    .join(' ');
   return {
     hashtags: [],
     firstComment: variant.firstComment ? `${variant.firstComment}\n\n${line}` : line,

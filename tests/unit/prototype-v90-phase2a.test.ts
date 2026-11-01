@@ -582,7 +582,8 @@ describe('F1 · every edit path, the campaign included, obeys the edit rules', (
     expect(edit).toContain('await this.assertEditable(variant.contentItemId);');
     expect(edit).toContain('await this.revokeApprovalOnEdit(');
     const studio = read('packages/content/src/studio.ts');
-    expect(method(studio, 'async applyTool(')).toContain('await this.revokeApprovalOnEdit(');
+    // PR A (H-4): the AI edit writes in its own short transaction, `#persistTool`.
+    expect(method(studio, 'async #persistTool(')).toContain('await this.revokeApprovalOnEdit(');
     expect(studio).toMatch(/async #toolRequest[\s\S]*?await this\.assertEditable\(/);
   });
 

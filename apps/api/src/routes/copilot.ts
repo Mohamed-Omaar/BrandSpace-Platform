@@ -351,6 +351,9 @@ export function externalActions(db: TenantScopedClient): ExternalActionPort {
   };
 }
 
+/** H-4 interim: above the AI route deadline, for a plan whose step generates. */
+const COPILOT_CONFIRM_TRANSACTION_MS = 90_000;
+
 export function registerCopilotRoutes(app: FastifyInstance): void {
   route(
     app,
@@ -456,7 +459,14 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
           .then((policy) => policy.questions)
           .catch(() => undefined);
 
-        const result = await withWorkspace(
+        /*
+         * PR A (check-up H-4) — THREE SHORT TRANSACTIONS, NONE SPANNING THE
+         * PROVIDER CALL: the live authorization is read; the turn runs through
+         * `CopilotOrchestrator.turnWith`, which opens its own around the model
+         * call; and the plan is created (and a read-only plan inspected) in a
+         * third, with the authorization read again so it is live there too.
+         */
+        const admitted = await withWorkspace(
           caller.workspaceId,
           async (db) => {
             /*
@@ -473,23 +483,50 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
             if (!authorization) throw new AppError('NOT_FOUND', 'Conversation not found.');
 
             const policy = await new TenantCopilotPolicySource(db, currentEnvironment()).load();
-            const automationRuleCheck = await automationRules(db, caller.workspaceId);
-            const orchestrator = new CopilotOrchestrator({
+            return { authorization, policy };
+          },
+          { prisma: getPrisma() },
+        );
+        const turn = await CopilotOrchestrator.turnWith(
+          (fn) =>
+            withWorkspace(
+              caller.workspaceId,
+              async (db) => {
+                const automationRuleCheck = await automationRules(db, caller.workspaceId);
+                return fn(
+                  new CopilotOrchestrator({
+                    db,
+                    workspaceId: caller.workspaceId,
+                    policy: admitted.policy,
+                    gateway: gateway(),
+                    automationRules: automationRuleCheck,
+                  }),
+                );
+              },
+              { prisma: getPrisma() },
+            ),
+          {
+            sessionId: body.sessionId,
+            request: body.request,
+            authorization: admitted.authorization,
+            planKey: facts.planKey,
+            idempotencyKey: body.idempotencyKey,
+            expiresAt,
+            ...(keyQuestions ? { keyQuestions } : {}),
+          },
+        );
+
+        const result = await withWorkspace(
+          caller.workspaceId,
+          async (db) => {
+            const authorization = await resolveLiveAuthorization(
               db,
-              workspaceId: caller.workspaceId,
-              policy,
-              gateway: gateway(),
-              automationRules: automationRuleCheck,
-            });
-            const turn = await orchestrator.turn({
-              sessionId: body.sessionId,
-              request: body.request,
-              authorization,
-              planKey: facts.planKey,
-              idempotencyKey: body.idempotencyKey,
-              expiresAt,
-              ...(keyQuestions ? { keyQuestions } : {}),
-            });
+              caller.workspaceId,
+              caller.userId,
+            );
+            if (!authorization) throw new AppError('NOT_FOUND', 'Conversation not found.');
+            const policy = admitted.policy;
+            const automationRuleCheck = await automationRules(db, caller.workspaceId);
 
             const plans = new CopilotPlanService({
               db,
@@ -679,7 +716,14 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
               }),
             });
           },
-          { prisma: getPrisma() },
+          /*
+           * PR A (check-up H-4) — INTERIM, AND SAID SO. A confirmed plan's
+           * "draft a post" step still calls the provider inside this
+           * transaction (the plan executes its steps atomically). Until PR B
+           * moves AI steps out of it, the transaction outlives the AI route
+           * deadline (30 s by default) instead of expiring under it at 15 s.
+           */
+          { prisma: getPrisma(), timeoutMs: COPILOT_CONFIRM_TRANSACTION_MS },
         );
 
         return reply.send({

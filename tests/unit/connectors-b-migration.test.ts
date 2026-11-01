@@ -149,7 +149,7 @@ describe('connectors B · B2 and B3 — one concurrent index each, nothing else'
 
 describe('connectors B · order', () => {
   it('the three come directly after connectors A, in order, and only the AI apps migrations and the D-573 ceiling follow', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-8)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-9)).toEqual([
       '20261021090000_connectors_a_handles_and_subjects',
       B1,
       B2,
@@ -162,6 +162,8 @@ describe('connectors B · order', () => {
       '20261027100000_ai_platform_spend_ceiling',
       // D-574: the KEK re-wrap may replace a version's wrapped data key.
       '20261028090000_secret_version_kek_rewrap',
+      // PR A: the AI output failure classes and the operator's failure detail.
+      '20261101090000_ai_output_failure_classes',
     ]);
   });
 });

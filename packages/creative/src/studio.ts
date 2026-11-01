@@ -10,7 +10,14 @@ import {
 } from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
 import { writeAuditEvent } from '@brandspace/database';
-import type { AiGateway, AiGatewayResult } from '@brandspace/ai-gateway';
+import {
+  OutputRejectedError,
+  type AiGateway,
+  type AiGatewayRequest,
+  type AiGatewayResult,
+  type AiOutput,
+  type GeneratedImage,
+} from '@brandspace/ai-gateway';
 import type { AssetActor, AssetUploadService } from '@brandspace/assets';
 import { CREATIVE_FORMATS, findCreativeFormat, type CreativeFormat } from './formats';
 
@@ -153,6 +160,51 @@ export function creativeReturnedNoBytes(): AppError {
   return new AppError('CONFLICT', 'The image could not be retrieved. Try again.');
 }
 
+/** PR A (H-4) — run `fn` against a studio bound to a SHORT tenant transaction. */
+export type CreativeRun = <T>(fn: (studio: CreativeStudioService) => Promise<T>) => Promise<T>;
+
+type PreparedCreative =
+  | { readonly kind: 'done'; readonly result: GeneratedCreative }
+  | {
+      readonly kind: 'ready';
+      readonly format: CreativeFormat;
+      readonly uploadKey: string;
+      readonly gateway: AiGateway;
+      readonly request: AiGatewayRequest;
+    };
+
+/** An upper bound on an encoded image of this format: its raw RGB size. */
+function uncompressedBytes(format: CreativeFormat): number {
+  const [width, height] = format.size.split('x').map(Number);
+  return (width ?? 0) * (height ?? 0) * 3;
+}
+
+/**
+ * H-3 — the provider's image, or the gateway's "do not charge". An answer with
+ * no inline bytes, or bytes that decode to nothing, is not an image.
+ */
+function decodedImage(output: AiOutput): {
+  readonly image: GeneratedImage & { readonly mimeType: string };
+  readonly bytes: Uint8Array;
+} {
+  if (output.kind !== 'image') throw new OutputRejectedError('The answer was not an image.');
+  const image = output.images?.[0];
+  if (!image?.base64 || !image.mimeType) {
+    throw new OutputRejectedError(
+      'The image arrived with no bytes.',
+      'The image could not be retrieved, so nothing was charged. Please try again.',
+    );
+  }
+  const bytes = new Uint8Array(Buffer.from(image.base64, 'base64'));
+  if (bytes.byteLength === 0) {
+    throw new OutputRejectedError(
+      'The image decoded to no bytes.',
+      'The image could not be retrieved, so nothing was charged. Please try again.',
+    );
+  }
+  return { image: { ...image, mimeType: image.mimeType }, bytes };
+}
+
 export class CreativeStudioService {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
@@ -185,6 +237,51 @@ export class CreativeStudioService {
   }
 
   async generate(input: GenerateCreativeInput): Promise<GeneratedCreative> {
+    return CreativeStudioService.generateWith((fn) => fn(this), input);
+  }
+
+  /**
+   * PR A (check-up H-3, H-4) — ONE IMAGE, IN THREE STEPS. `run` hands each step
+   * a studio bound to its own SHORT tenant transaction: the checks (scope,
+   * format, replay, storage headroom) in one; the provider call with NO
+   * transaction open; the store in a second. An image with no bytes is refused
+   * in the gateway's `accept`, before the charge, and a full library is refused
+   * before the provider is called at all.
+   */
+  static async generateWith(
+    run: CreativeRun,
+    input: GenerateCreativeInput,
+  ): Promise<GeneratedCreative> {
+    const prepared = await run((studio) => studio.#prepare(input));
+    if (prepared.kind === 'done') return prepared.result;
+    const { gateway, request, format, uploadKey } = prepared;
+
+    const result: AiGatewayResult = await gateway.execute({
+      ...request,
+      accept: (output) => {
+        decodedImage(output);
+      },
+    });
+
+    if (result.status !== 'SUCCEEDED' || result.output?.kind !== 'image') {
+      /*
+       * A RACE PAST THE REPLAY CHECK LANDS HERE, and it is not a failure: two
+       * requests with the same key, the first still in flight when the second
+       * arrived. The gateway replayed rather than charging twice, so the bytes
+       * are gone but the ASSET exists — look for it before reporting anything.
+       */
+      if (result.replayed) {
+        const raced = await run((studio) => studio.#existingAsset(uploadKey, format));
+        if (raced) return raced;
+      }
+      // Nothing is stored. The gateway has already released.
+      throw creativeGenerationFailed(result.failureMessage);
+    }
+    const image = decodedImage(result.output);
+    return run((studio) => studio.#store(input, format, uploadKey, result, image));
+  }
+
+  async #prepare(input: GenerateCreativeInput): Promise<PreparedCreative> {
     // BEFORE ANYTHING IS READ OR SPENT. A brand outside the member's scope must
     // be indistinguishable from one that does not exist.
     assertBrandInScope(input.actor.brandScope, input.brandId);
@@ -212,47 +309,44 @@ export class CreativeStudioService {
      */
     const uploadKey = `creative:${input.idempotencyKey}`;
     const replayed = await this.#existingAsset(uploadKey, format);
-    if (replayed) return replayed;
+    if (replayed) return { kind: 'done', result: replayed };
 
     /*
-     * THE GATEWAY OWNS THE MONEY. It reserves against the wallet, executes,
-     * and settles or releases — idempotently, on this key. A retry with the
-     * same key returns the first outcome rather than charging again (AC-28.6).
+     * H-3 — A FULL LIBRARY IS REFUSED BEFORE THE PROVIDER IS PAID. The bound is
+     * the format's uncompressed size, which no encoded image of it exceeds.
      */
-    const result: AiGatewayResult = await this.#gateway.execute({
-      workspaceId: this.#workspaceId,
-      userId: input.actorUserId,
-      taskKey: 'image.generate',
-      planKey: input.planKey,
-      idempotencyKey: `creative-studio:${input.idempotencyKey}`,
-      input: {
-        kind: 'image',
-        prompt: this.#prompt(brief.slice(0, BRIEF_MAX), format, input.identity),
-        count: 1,
-        size: format.size,
+    await this.#uploads.assertStorageHeadroom(uncompressedBytes(format));
+
+    return {
+      kind: 'ready',
+      format,
+      uploadKey,
+      gateway: this.#gateway,
+      request: {
+        workspaceId: this.#workspaceId,
+        userId: input.actorUserId,
+        taskKey: 'image.generate',
+        planKey: input.planKey,
+        idempotencyKey: `creative-studio:${input.idempotencyKey}`,
+        input: {
+          kind: 'image',
+          prompt: this.#prompt(brief.slice(0, BRIEF_MAX), format, input.identity),
+          count: 1,
+          size: format.size,
+        },
       },
-    });
+    };
+  }
 
-    if (result.status !== 'SUCCEEDED' || result.output?.kind !== 'image') {
-      /*
-       * A RACE PAST THE CHECK ABOVE LANDS HERE, and it is not a failure: two
-       * requests with the same key, the first still in flight when the second
-       * arrived. The gateway replayed rather than charging twice, so the bytes
-       * are gone but the ASSET exists — look for it before reporting anything.
-       */
-      if (result.replayed) {
-        const raced = await this.#existingAsset(uploadKey, format);
-        if (raced) return raced;
-      }
-      // Nothing is stored. The gateway has already settled or released.
-      throw creativeGenerationFailed(result.failureMessage);
-    }
-
-    const image = result.output.images?.[0];
-    if (!image?.base64 || !image.mimeType) throw creativeReturnedNoBytes();
-
-    const bytes = new Uint8Array(Buffer.from(image.base64, 'base64'));
-    if (bytes.byteLength === 0) throw creativeReturnedNoBytes();
+  async #store(
+    input: GenerateCreativeInput,
+    format: CreativeFormat,
+    uploadKey: string,
+    result: AiGatewayResult,
+    decoded: ReturnType<typeof decodedImage>,
+  ): Promise<GeneratedCreative> {
+    const brief = input.brief.trim();
+    const { image, bytes } = decoded;
 
     /*
      * THE SAME UPLOAD PATH A PERSON'S OWN FILE TAKES. Signature-checked,

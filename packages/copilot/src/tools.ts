@@ -444,3 +444,55 @@ export const COPILOT_ENTITLEMENT_KEYS: readonly string[] = [
     ),
   ),
 ];
+
+/**
+ * PR A (KNOWN bug "Copilot ZodError") — a tool's argument shape, in one line a
+ * model can follow, derived from the tool's own schema so the prompt and the
+ * validator cannot disagree. `?` marks an optional argument.
+ */
+export function describeArguments(schema: z.ZodTypeAny): string {
+  return describe(schema, 0);
+}
+
+function describe(schema: z.ZodTypeAny, depth: number): string {
+  const def = schema._def as { typeName?: string } & Record<string, unknown>;
+  switch (def.typeName) {
+    case 'ZodOptional':
+    case 'ZodNullable':
+    case 'ZodDefault':
+    case 'ZodCatch':
+    case 'ZodReadonly':
+      return describe((def['innerType'] as z.ZodTypeAny) ?? z.unknown(), depth);
+    case 'ZodEffects':
+      return describe(def['schema'] as z.ZodTypeAny, depth);
+    case 'ZodPipeline':
+      return describe(def['in'] as z.ZodTypeAny, depth);
+    case 'ZodString': {
+      const checks = (def['checks'] as { kind: string }[] | undefined) ?? [];
+      return checks.some((check) => check.kind === 'uuid') ? 'uuid' : 'string';
+    }
+    case 'ZodNumber':
+      return 'number';
+    case 'ZodBoolean':
+      return 'boolean';
+    case 'ZodDate':
+      return 'ISO date-time string';
+    case 'ZodLiteral':
+      return JSON.stringify(def['value']);
+    case 'ZodEnum':
+      return (def['values'] as string[]).map((value) => JSON.stringify(value)).join('|');
+    case 'ZodArray':
+      return `${describe(def['type'] as z.ZodTypeAny, depth)}[]`;
+    case 'ZodObject': {
+      if (depth > 2) return 'object';
+      const shape = (schema as z.ZodObject<z.ZodRawShape>).shape;
+      const fields = Object.entries(shape).map(([key, value]) => {
+        const optional = (value as z.ZodTypeAny).isOptional();
+        return `${key}${optional ? '?' : ''}: ${describe(value as z.ZodTypeAny, depth + 1)}`;
+      });
+      return `{${fields.join(', ')}}`;
+    }
+    default:
+      return 'value';
+  }
+}

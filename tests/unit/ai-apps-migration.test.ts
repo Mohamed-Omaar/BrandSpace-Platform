@@ -196,7 +196,7 @@ describe('D-566 · the AI apps migration', () => {
   });
 
   it('comes directly after connectors B; only its D-112 fix (D-568) and the D-573 ceiling follow', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-5)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-6)).toEqual([
       '20261022092000_publish_job_handle_lookup_index',
       NAME,
       '20261023091000_ai_app_token_replaced_scoped',
@@ -204,6 +204,8 @@ describe('D-566 · the AI apps migration', () => {
       '20261027100000_ai_platform_spend_ceiling',
       // D-574: the KEK re-wrap may replace a version's wrapped data key.
       '20261028090000_secret_version_kek_rewrap',
+      // PR A: the AI output failure classes and the operator's failure detail.
+      '20261101090000_ai_output_failure_classes',
     ]);
   });
 });

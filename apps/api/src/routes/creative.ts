@@ -10,6 +10,7 @@ import {
   CREATIVE_KNOWLEDGE_AREAS,
   CREATIVE_KNOWLEDGE_LINES,
   CreativeStudioService,
+  type CreativeRun,
   brandTypography,
   findCreativeFormat,
 } from '@brandspace/creative';
@@ -113,6 +114,56 @@ function actorOf(caller: Caller, permissionKeys: readonly string[]): AssetActor 
   };
 }
 
+/**
+ * PR A (H-4) — a creative studio, and the upload path it stores through, bound
+ * to ONE short tenant transaction.
+ */
+async function creativeStudioFor(
+  caller: Caller,
+  db: TenantScopedClient,
+): Promise<CreativeStudioService> {
+  const uploads = new AssetUploadService({
+    db,
+    workspaceId: caller.workspaceId,
+    store: objectStore(),
+    policy: await assetPolicyFor(db),
+    usage: new UsageService({ prisma: scopedFor(db) }),
+    /*
+     * THE STORAGE CEILING COMES FROM THE ENTITLEMENTS ENGINE (D-10),
+     * resolved through plan, override, flag and default — not from a
+     * number in this file. A generated image counts against the same
+     * quota a person's own upload does, because it is the same
+     * library.
+     *
+     * READ FROM THE TENANT-SIDE CATALOGUE PROJECTION, exactly as the
+     * dashboard and the Copilot's gate read it. This was built with
+     * the PLATFORM client and no catalogue source at all, which the
+     * service refuses outright — so every generation through this
+     * route answered 500 before it reached the gateway. The
+     * isolation suite could not see it: it constructs the service
+     * itself and supplies the ceiling directly, which is the right
+     * shape for a domain test and leaves the WIRING untested. The
+     * functional end-to-end flow is what found it.
+     *
+     * `entitlement_catalogue_snapshot` is the projection the
+     * Configuration Service writes on activation; two sources for one
+     * answer is how a limit comes out different on two surfaces.
+     */
+    storageLimitGb: await new EntitlementService({
+      prisma: scopedFor(db),
+      catalogueSource: new TenantCatalogueSource(scopedFor(db), currentEnvironment()),
+      environment: currentEnvironment(),
+    }).limit(caller.workspaceId, QUOTA_FEATURES.storageGb),
+  });
+
+  return new CreativeStudioService({
+    db,
+    workspaceId: caller.workspaceId,
+    gateway: gateway(),
+    uploads,
+  });
+}
+
 export function registerCreativeRoutes(app: FastifyInstance): void {
   /*
    * AC-28.5 — the price BEFORE it is spent.
@@ -214,7 +265,9 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
       const facts = await workspaceFacts(caller.workspaceId);
 
       try {
-        const result = await withWorkspace(
+        // H-4: read the identity in one short transaction, call the provider
+        // with none open, store in another (`CreativeStudioService.generateWith`).
+        const prepared = await withWorkspace(
           caller.workspaceId,
           async (db) => {
             /*
@@ -253,50 +306,8 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
               maxItems: CREATIVE_KNOWLEDGE_LINES,
             });
 
-            const permissionKeys = [CREATE_PERMISSION, READ_PERMISSION];
-            const uploads = new AssetUploadService({
-              db,
-              workspaceId: caller.workspaceId,
-              store: objectStore(),
-              policy: await assetPolicyFor(db),
-              usage: new UsageService({ prisma: scopedFor(db) }),
-              /*
-               * THE STORAGE CEILING COMES FROM THE ENTITLEMENTS ENGINE (D-10),
-               * resolved through plan, override, flag and default — not from a
-               * number in this file. A generated image counts against the same
-               * quota a person's own upload does, because it is the same
-               * library.
-               *
-               * READ FROM THE TENANT-SIDE CATALOGUE PROJECTION, exactly as the
-               * dashboard and the Copilot's gate read it. This was built with
-               * the PLATFORM client and no catalogue source at all, which the
-               * service refuses outright — so every generation through this
-               * route answered 500 before it reached the gateway. The
-               * isolation suite could not see it: it constructs the service
-               * itself and supplies the ceiling directly, which is the right
-               * shape for a domain test and leaves the WIRING untested. The
-               * functional end-to-end flow is what found it.
-               *
-               * `entitlement_catalogue_snapshot` is the projection the
-               * Configuration Service writes on activation; two sources for one
-               * answer is how a limit comes out different on two surfaces.
-               */
-              storageLimitGb: await new EntitlementService({
-                prisma: scopedFor(db),
-                catalogueSource: new TenantCatalogueSource(scopedFor(db), currentEnvironment()),
-                environment: currentEnvironment(),
-              }).limit(caller.workspaceId, QUOTA_FEATURES.storageGb),
-            });
-
-            return new CreativeStudioService({
-              db,
-              workspaceId: caller.workspaceId,
-              gateway: gateway(),
-              uploads,
-            }).generate({
+            return {
               brandId: brand.id,
-              brief: parsed.data.brief,
-              formatKey: parsed.data.formatKey,
               identity: {
                 name: brand.name,
                 industry: brand.industry,
@@ -307,14 +318,27 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
                   .map((item) => localizedLine(item.body))
                   .filter((line) => line !== ''),
               },
-              idempotencyKey: parsed.data.idempotencyKey,
-              actorUserId: caller.userId,
-              planKey: facts.planKey,
-              actor: actorOf(caller, permissionKeys),
-            });
+            };
           },
           { prisma: getPrisma() },
         );
+        if (!prepared) return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
+
+        const permissionKeys = [CREATE_PERMISSION, READ_PERMISSION];
+        const run: CreativeRun = (fn) =>
+          withWorkspace(caller.workspaceId, async (db) => fn(await creativeStudioFor(caller, db)), {
+            prisma: getPrisma(),
+          });
+        const result = await CreativeStudioService.generateWith(run, {
+          brandId: prepared.brandId,
+          brief: parsed.data.brief,
+          formatKey: parsed.data.formatKey,
+          identity: prepared.identity,
+          idempotencyKey: parsed.data.idempotencyKey,
+          actorUserId: caller.userId,
+          planKey: facts.planKey,
+          actor: actorOf(caller, permissionKeys),
+        });
 
         if (!result) return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
 
