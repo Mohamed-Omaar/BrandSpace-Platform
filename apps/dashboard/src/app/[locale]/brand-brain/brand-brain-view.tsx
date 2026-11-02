@@ -10,8 +10,12 @@ import { ReviewInbox, type ConfidentPreviewEntry } from './review-inbox';
 import { VoiceCard } from './voice-card';
 import { LookCard, type LookViewData } from './look-card';
 import { SourceRow, type SourceRowData } from './source-row';
-import { SegmentPill, prefersReducedMotion } from '@brandspace/ui';
-import { acceptConfidentCandidatesAction, uploadSourceAction as uploadFormAction } from './actions';
+import { ConfirmDialog, SegmentPill, prefersReducedMotion } from '@brandspace/ui';
+import {
+  acceptConfidentCandidatesAction,
+  mergeDuplicatesAction,
+  uploadSourceAction as uploadFormAction,
+} from './actions';
 import type { UploadRules } from '../../../components/upload-rules';
 import { RefreshWhile } from '../../../components/refresh-while';
 import {
@@ -245,6 +249,7 @@ export function BrandBrainView({
   sources,
   permissions,
   drawerStart = null,
+  duplicateCount = 0,
   initialFocus = null,
   initialArea = null,
   sourceRules = null,
@@ -298,6 +303,8 @@ export function BrandBrainView({
    * D7/D8/D9, PR B — the Copilot's "save this fact" hand-over and the Studio's
    * "Fix it" open the area: its add form prefilled, or that fact's edit box.
    */
+  /** PR B — today's duplicate facts, for the one-time clean-up card (review rights only). */
+  duplicateCount?: number;
   drawerStart?: {
     readonly area: string;
     readonly prefill: DrawerPrefill | null;
@@ -832,6 +839,10 @@ export function BrandBrainView({
               </section>
             ) : null}
 
+            {duplicateCount > 0 && permissions.review ? (
+              <DuplicatesCard locale={locale} brandId={brandId} count={duplicateCount} />
+            ) : null}
+
             {bulkOpen && permissions.review ? (
               <ConfidentCard
                 locale={locale}
@@ -1127,6 +1138,62 @@ function ConfidentCard({
           </button>
         </>
       )}
+    </section>
+  );
+}
+
+/**
+ * PR B (D-591) — THE ONE-TIME CLEAN-UP OF TODAY'S DUPLICATES: shown only while
+ * there are some, to a member who may approve facts, and merged only after the
+ * shared confirmation. An APPROVED DESIGN-SYSTEM EXTENSION (CLAUDE.md §4.2),
+ * composed of the bulk card's own classes and `ConfirmDialog`.
+ */
+function DuplicatesCard({
+  locale,
+  brandId,
+  count,
+}: {
+  locale: string;
+  brandId: string;
+  count: number;
+}) {
+  const t = translator(useMessageLocale(locale));
+  const [confirming, setConfirming] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  return (
+    <section className="bsp-card bsp-bb-bulk" data-testid="duplicates-card">
+      <form ref={formRef} action={mergeDuplicatesAction} className="bsp-bb-bulk-f">
+        <input type="hidden" name="locale" value={locale} />
+        <input type="hidden" name="brandId" value={brandId} />
+        <b data-testid="duplicates-count">
+          {t('bb.duplicatesFound').replace('{count}', String(count))}
+        </b>
+        <span className="bsp-bb-bulk-none">{t('bb.duplicatesBody')}</span>
+        <span className="bsp-bb-bulk-acts">
+          <button
+            type="button"
+            className="bsp-btn bsp-sm bsp-sec"
+            data-testid="duplicates-merge"
+            onClick={() => setConfirming(true)}
+          >
+            {t('bb.duplicatesMerge')}
+          </button>
+        </span>
+      </form>
+      <ConfirmDialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false);
+          formRef.current?.requestSubmit();
+        }}
+        title={t('bb.duplicatesConfirm').replace('{count}', String(count))}
+        description={t('bb.duplicatesBody')}
+        confirmLabel={t('bb.duplicatesMerge')}
+        cancelLabel={t('common.cancel')}
+        closeLabel={t('common.close')}
+        testId="duplicates-dialog"
+      />
     </section>
   );
 }

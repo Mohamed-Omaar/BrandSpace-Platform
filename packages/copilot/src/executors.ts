@@ -1,15 +1,20 @@
-import type { Prisma, TenantScopedClient } from '@brandspace/database';
+import type { BrandKnowledgeArea, Prisma, TenantScopedClient } from '@brandspace/database';
 import type { AnalyticsQueryService } from '@brandspace/analytics';
-import { groundingFor } from '@brandspace/brand-brain';
+import {
+  BrandKnowledgeService,
+  TenantBrandBrainPolicySource,
+  groundingFor,
+} from '@brandspace/brand-brain';
 import type {
   CampaignService,
   ContentCalendarService,
   ContentStudioService,
 } from '@brandspace/content';
 import { type RetentionInput } from '@brandspace/content';
-import { brandIdQueryFilter, type Clock } from '@brandspace/shared';
+import { brandIdQueryFilter, currentEnvironment, type Clock } from '@brandspace/shared';
+import { readPlanCatalogue } from '@brandspace/entitlements';
 import { copilotPlanNotFound, externalActionUnavailable } from './errors';
-import type { LiveAuthorization } from './authorization';
+import { holds, type LiveAuthorization } from './authorization';
 import type { ToolPreviewLine } from './tools';
 
 /**
@@ -641,7 +646,318 @@ const automationCreateRule: ToolExecutor = async (context, args) => {
   };
 };
 
+// ---------------------------------------------------------------------------
+// PR B (D-591) — the workspace reads. Every result says WHERE its numbers come
+// from (`source`, a stable code the dashboard words) and WHEN they cover
+// (`period`, or `asOf` for a count at this moment), so a figure the Copilot
+// shows is never the model's.
+// ---------------------------------------------------------------------------
+
+const TEAM_LIST_LIMIT = 50;
+const MILLI = 1000n;
+
+const teamList: ToolExecutor = async (context) => {
+  const rows = await context.db.membership.findMany({
+    where: { workspaceId: context.workspaceId, status: { in: ['ACTIVE', 'INVITED'] } },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    take: TEAM_LIST_LIMIT,
+    select: {
+      status: true,
+      user: { select: { name: true } },
+      role: { select: { key: true, nameEn: true, nameAr: true } },
+    },
+  });
+  return {
+    result: {
+      source: 'team',
+      asOf: context.clock.now().toISOString(),
+      activeCount: rows.filter((row) => row.status === 'ACTIVE').length,
+      invitedCount: rows.filter((row) => row.status === 'INVITED').length,
+      // Names and roles, as the Team screen shows them; never an email.
+      members: rows.map((row) => ({
+        name: row.user.name ?? null,
+        roleKey: row.role.key,
+        // The role's own name, as the Team screen shows it (a custom role's too).
+        role: { en: row.role.nameEn, ar: row.role.nameAr },
+        status: row.status,
+      })),
+    },
+  };
+};
+
+const creditsBalance: ToolExecutor = async (context) => {
+  const wallet = await context.db.creditWallet.findUnique({
+    where: { workspaceId: context.workspaceId },
+    select: {
+      balanceMilliCredits: true,
+      reservedMilliCredits: true,
+      lastResetAt: true,
+      nextResetAt: true,
+    },
+  });
+  if (!wallet) {
+    return { result: { source: 'credit_ledger', asOf: context.clock.now().toISOString() } };
+  }
+  const from = wallet.lastResetAt;
+  const charged = from
+    ? await context.db.creditTransaction.aggregate({
+        where: {
+          workspaceId: context.workspaceId,
+          type: 'USAGE_CHARGE',
+          occurredAt: { gte: from },
+        },
+        _sum: { amountMilliCredits: true },
+      })
+    : null;
+  const used = -(charged?._sum.amountMilliCredits ?? 0n);
+  return {
+    result: {
+      source: 'credit_ledger',
+      asOf: context.clock.now().toISOString(),
+      balanceCredits: Number(wallet.balanceMilliCredits / MILLI),
+      reservedCredits: Number(wallet.reservedMilliCredits / MILLI),
+      usedThisPeriodCredits: from ? Number(used / MILLI) : null,
+      period: from
+        ? { from: from.toISOString(), to: wallet.nextResetAt?.toISOString() ?? null }
+        : null,
+    },
+  };
+};
+
+const planSummary: ToolExecutor = async (context) => {
+  const subscription = await context.db.workspaceSubscription.findUnique({
+    where: { workspaceId: context.workspaceId },
+    select: {
+      planKey: true,
+      status: true,
+      billingInterval: true,
+      pinnedMonthlyCredits: true,
+      currentPeriodStart: true,
+      currentPeriodEnd: true,
+      trialEndsAt: true,
+      cancelAtPeriodEnd: true,
+      pendingPlanKey: true,
+    },
+  });
+  // The plan's name as Billing shows it: from the activated plan catalogue,
+  // never a name written here (CLAUDE.md §2.2).
+  const catalogue = subscription
+    ? await context.db.entitlementCatalogueSnapshot
+        .findUnique({
+          where: { domain_environment: { domain: 'plans', environment: currentEnvironment() } },
+          select: { payload: true },
+        })
+        .catch(() => null)
+    : null;
+  const named = catalogue?.payload
+    ? readPlanCatalogue(catalogue.payload as Record<string, unknown>).find(
+        (plan) => plan.key === subscription?.planKey,
+      )
+    : undefined;
+  return {
+    result: {
+      source: 'subscription',
+      asOf: context.clock.now().toISOString(),
+      ...(subscription
+        ? {
+            planKey: subscription.planKey,
+            planName: named ? { en: named.nameEn, ar: named.nameAr } : null,
+            status: subscription.status,
+            billingInterval: subscription.billingInterval,
+            monthlyCredits: subscription.pinnedMonthlyCredits,
+            trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
+            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+            pendingPlanKey: subscription.pendingPlanKey,
+            period: {
+              from: subscription.currentPeriodStart.toISOString(),
+              to: subscription.currentPeriodEnd.toISOString(),
+            },
+          }
+        : {}),
+    },
+  };
+};
+
+const channelsList: ToolExecutor = async (context) => {
+  const rows = await context.db.socialConnection.findMany({
+    where: {
+      workspaceId: context.workspaceId,
+      status: { in: ['ACTIVE', 'NEEDS_REAUTH', 'DISABLED'] },
+      ...(context.authorization.brandScope.length > 0
+        ? { brandId: { in: [...context.authorization.brandScope] } }
+        : {}),
+    },
+    orderBy: [{ provider: 'asc' }, { displayName: 'asc' }],
+    take: 50,
+    select: { provider: true, displayName: true, status: true, brandId: true },
+  });
+  return {
+    result: {
+      source: 'channels',
+      asOf: context.clock.now().toISOString(),
+      count: rows.length,
+      channels: rows.map((row) => ({
+        provider: row.provider,
+        name: row.displayName,
+        status: row.status,
+        brandId: row.brandId,
+      })),
+    },
+  };
+};
+
+const notificationsRecent: ToolExecutor = async (context, args) => {
+  const limit = Number(args['limit'] ?? 10);
+  // The caller's OWN inbox: a notification is one member's, never the team's.
+  const where = { workspaceId: context.workspaceId, userId: context.authorization.userId };
+  const [unreadCount, rows] = await Promise.all([
+    context.db.notification.count({ where: { ...where, readAt: null } }),
+    context.db.notification.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+      select: { templateKey: true, createdAt: true, readAt: true },
+    }),
+  ]);
+  return {
+    result: {
+      source: 'notifications',
+      asOf: context.clock.now().toISOString(),
+      unreadCount,
+      items: rows.map((row) => ({
+        templateKey: row.templateKey,
+        at: row.createdAt.toISOString(),
+        read: row.readAt !== null,
+      })),
+    },
+  };
+};
+
+// ---------------------------------------------------------------------------
+// PR B (D-591) — Brand Brain facts, from a confirmed card only.
+// ---------------------------------------------------------------------------
+
+const ARABIC = /[\u0600-\u06FF]/;
+
+/** The words in the box of their own language (the fact's locale). */
+function localizedFromText(text: string): { en?: string; ar?: string } {
+  return ARABIC.test(text) ? { ar: text } : { en: text };
+}
+
+/** A stable key for a fact the conversation added: its area and this step. */
+function conversationItemKey(area: string, idempotencyKey: string): string {
+  let hash = 0;
+  for (let index = 0; index < idempotencyKey.length; index += 1) {
+    hash = (hash * 31 + idempotencyKey.charCodeAt(index)) >>> 0;
+  }
+  return `${area.toLowerCase().replace(/_/g, '-')}.copilot-${hash.toString(16).padStart(8, '0')}`;
+}
+
+const knowledgeFor = (context: ExecutorContext) =>
+  new BrandKnowledgeService({ db: context.db, workspaceId: context.workspaceId });
+
+const stalenessFor = async (context: ExecutorContext) =>
+  (await new TenantBrandBrainPolicySource(context.db, currentEnvironment()).load()).staleness;
+
+const brandBrainAddFact: ToolExecutor = async (context, args) => {
+  const brandId = String(args['brandId']);
+  const area = String(args['area']) as BrandKnowledgeArea;
+  const itemKey = conversationItemKey(area, context.idempotencyKey);
+  const title = localizedFromText(String(args['title']));
+  const body = localizedFromText(String(args['body']));
+  const knowledge = knowledgeFor(context);
+  // D7 — with review rights the fact is approved now; with edit alone it is
+  // sent for review, exactly as the Brand Brain page's own Add does.
+  if (!holds(context.authorization, 'brand_brain.review')) {
+    const proposed = await knowledge.proposeFact({
+      brandId,
+      area,
+      itemKey,
+      title,
+      body,
+      actor: context.authorization,
+    });
+    return {
+      result: { outcome: 'sent_for_review', area, candidateId: proposed.candidateId },
+      resourceType: 'BrandKnowledgeCandidate',
+      resourceId: proposed.candidateId,
+    };
+  }
+  const item = await knowledge.createItem({
+    brandId,
+    area,
+    itemKey,
+    title,
+    body,
+    actor: context.authorization,
+    policy: await stalenessFor(context),
+  });
+  return {
+    result: { outcome: 'approved', area, itemId: item.id },
+    resourceType: 'BrandKnowledgeItem',
+    resourceId: item.id,
+    resourceVersionAfter: item.version,
+  };
+};
+
+/**
+ * The fact, inside this brand and the caller's scope — or the 404 shape. Read
+ * through the knowledge service's own management lookup (`factsById`), the
+ * one Brand Brain's page uses to pick a fact to change: never a prompt.
+ */
+async function requireFact(
+  context: ExecutorContext | PreviewContext,
+  args: Record<string, unknown>,
+) {
+  const [fact] = await new BrandKnowledgeService({
+    db: context.db,
+    workspaceId: context.workspaceId,
+  }).factsById({
+    itemIds: [String(args['factId'])],
+    brandScope: context.authorization.brandScope,
+  });
+  if (!fact || fact.brandId !== String(args['brandId'])) throw copilotPlanNotFound();
+  return fact;
+}
+
+const brandBrainEditFact: ToolExecutor = async (context, args) => {
+  const fact = await requireFact(context, args);
+  const item = await knowledgeFor(context).updateItem({
+    itemId: fact.id,
+    title: args['title'] ? localizedFromText(String(args['title'])) : fact.title,
+    body: localizedFromText(String(args['body'])),
+    actor: context.authorization,
+    policy: await stalenessFor(context),
+  });
+  return {
+    result: { outcome: 'edited', area: fact.area, itemId: item.id },
+    resourceType: 'BrandKnowledgeItem',
+    resourceId: item.id,
+    resourceVersionBefore: fact.version,
+    resourceVersionAfter: item.version,
+  };
+};
+
+const brandBrainRemoveFact: ToolExecutor = async (context, args) => {
+  const fact = await requireFact(context, args);
+  await knowledgeFor(context).archiveItem({ itemId: fact.id, actor: context.authorization });
+  return {
+    result: { outcome: 'removed', area: fact.area, itemId: fact.id },
+    resourceType: 'BrandKnowledgeItem',
+    resourceId: fact.id,
+    resourceVersionBefore: fact.version,
+  };
+};
+
 export const TOOL_EXECUTORS: Readonly<Record<string, ToolExecutor>> = {
+  'brand_brain.add_fact': brandBrainAddFact,
+  'brand_brain.edit_fact': brandBrainEditFact,
+  'brand_brain.remove_fact': brandBrainRemoveFact,
+  'team.list': teamList,
+  'credits.balance': creditsBalance,
+  'plan.summary': planSummary,
+  'channels.list': channelsList,
+  'notifications.recent': notificationsRecent,
   'analytics.summary': analyticsSummary,
   'brand.context': brandContext,
   'content.search': contentSearch,
@@ -677,6 +993,36 @@ export async function buildPreview(
   args: Record<string, unknown>,
 ): Promise<readonly ToolPreviewLine[]> {
   switch (toolKey) {
+    // PR B — the fact card: what will be added, and the before/after of an edit.
+    case 'brand_brain.add_fact':
+      return [
+        { labelKey: 'copilot.preview.area', after: String(args['area'] ?? '') },
+        { labelKey: 'copilot.preview.factTitle', after: String(args['title'] ?? '') },
+        { labelKey: 'copilot.preview.factBody', after: String(args['body'] ?? '') },
+      ];
+    case 'brand_brain.edit_fact': {
+      const fact = await requireFact(context, args);
+      const shown = (value: unknown) => {
+        const text = value as { en?: string; ar?: string } | null;
+        return text?.en ?? text?.ar ?? '';
+      };
+      return [
+        { labelKey: 'copilot.preview.area', after: fact.area },
+        {
+          labelKey: 'copilot.preview.factBody',
+          before: shown(fact.body),
+          after: String(args['body'] ?? ''),
+        },
+      ];
+    }
+    case 'brand_brain.remove_fact': {
+      const fact = await requireFact(context, args);
+      const text = fact.title as { en?: string; ar?: string } | null;
+      return [
+        { labelKey: 'copilot.preview.area', after: fact.area },
+        { labelKey: 'copilot.preview.factRemoved', after: text?.en ?? text?.ar ?? '' },
+      ];
+    }
     case 'campaign.create':
       return [
         { labelKey: 'copilot.preview.campaignName', after: String(args['name'] ?? '') },

@@ -14,6 +14,7 @@ import {
   type Clock,
 } from '@brandspace/shared';
 import { areaDefinition } from './areas';
+import { normalizedFact } from './extraction';
 import { mayOverwrite } from './precedence';
 import { isExpired } from './validity';
 import { indexVector, score, tokenize } from './retrieval';
@@ -447,6 +448,102 @@ export class BrandKnowledgeService {
     });
 
     return archived;
+  }
+
+  /**
+   * PR B (D-591) — THE ONE-TIME CLEAN-UP OF TODAY'S DUPLICATES: the brand's
+   * active facts that say the same thing (after normalising: no list marker,
+   * case, punctuation or extra space), and the waiting facts that repeat an
+   * active one. Read only; `mergeDuplicates` acts on what this returns.
+   */
+  async duplicateFacts(input: { brandId: string; brandScope: readonly string[] }): Promise<{
+    /** Each group's kept fact (the oldest) and the ones that repeat it. */
+    readonly groups: readonly { readonly keepId: string; readonly repeatIds: readonly string[] }[];
+    /** Waiting facts equal to an active one. */
+    readonly pendingIds: readonly string[];
+  }> {
+    assertBrandInScope(input.brandScope, input.brandId);
+    const items = await this.db.brandKnowledgeItem.findMany({
+      where: { brandId: input.brandId, status: { in: ['ACTIVE', 'STALE'] } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, body: true },
+    });
+    const keepByText = new Map<string, string>();
+    const groups = new Map<string, string[]>();
+    for (const item of items) {
+      const texts = textsOf(item.body).map(normalizedFact).filter(Boolean);
+      const keep = texts.map((text) => keepByText.get(text)).find(Boolean);
+      if (keep) {
+        groups.set(keep, [...(groups.get(keep) ?? []), item.id]);
+        continue;
+      }
+      for (const text of texts) keepByText.set(text, item.id);
+    }
+    const pending = await this.db.brandKnowledgeCandidate.findMany({
+      where: { brandId: input.brandId, status: 'PENDING' },
+      select: { id: true, extractedBody: true },
+    });
+    return {
+      groups: [...groups.entries()].map(([keepId, repeatIds]) => ({ keepId, repeatIds })),
+      pendingIds: pending
+        .filter((candidate) =>
+          textsOf(candidate.extractedBody).some((text) => keepByText.has(normalizedFact(text))),
+        )
+        .map((candidate) => candidate.id),
+    };
+  }
+
+  /**
+   * PR B — MERGE TODAY'S DUPLICATES, once the owner confirms the card. Each
+   * repeat is archived as superseded by the fact it repeats (its version
+   * history stays), and each waiting repeat is set aside as SUPERSEDED with
+   * the duplicate reason, so the review queue holds nothing the brand already
+   * knows. Audited once, with the counts.
+   */
+  async mergeDuplicates(input: {
+    brandId: string;
+    actor: KnowledgeActor;
+  }): Promise<{ readonly archived: number; readonly setAside: number }> {
+    const found = await this.duplicateFacts({
+      brandId: input.brandId,
+      brandScope: input.actor.brandScope,
+    });
+    let archived = 0;
+    for (const group of found.groups) {
+      for (const repeatId of group.repeatIds) {
+        await this.archiveItem({
+          itemId: repeatId,
+          reason: 'merged_duplicate',
+          actor: input.actor,
+          supersededByItemId: group.keepId,
+        });
+        archived += 1;
+      }
+    }
+    const setAside =
+      found.pendingIds.length > 0
+        ? (
+            await this.db.brandKnowledgeCandidate.updateMany({
+              where: { id: { in: [...found.pendingIds] }, status: 'PENDING' },
+              data: {
+                status: 'SUPERSEDED',
+                reviewReason: 'duplicate_of_existing',
+                reviewedByUserId: input.actor.userId,
+                reviewedAt: this.now(),
+              },
+            })
+          ).count
+        : 0;
+    await writeAuditEvent(this.db, this.workspaceId, {
+      action: 'brand_brain.duplicates_merged',
+      actorType: 'USER',
+      actorId: input.actor.userId,
+      resourceType: 'Brand',
+      resourceId: input.brandId,
+      brandId: input.brandId,
+      after: { archived, setAside },
+    });
+    return { archived, setAside };
   }
 
   /**
@@ -1324,4 +1421,11 @@ function addDays(from: Date, days: number): Date {
 
 function isoDay(value: Date): string {
   return value.toISOString().slice(0, 10);
+}
+
+/** Every non-empty string of a localized JSON value. */
+function textsOf(value: unknown): string[] {
+  return Object.values((value ?? {}) as Record<string, unknown>).filter(
+    (text): text is string => typeof text === 'string' && text.trim().length > 0,
+  );
 }

@@ -528,6 +528,33 @@ function approvalsStep(prompt: string, request: string): unknown[] {
   ];
 }
 
+/*
+ * PR B (D-591) — THE WORKSPACE READS, PROPOSED AS A MODEL WOULD. A question
+ * about credits, the team, the plan, the channels or the notifications is
+ * answered from the tool that reads it, never from the double's own words —
+ * and a tool the prompt names as one this person may not use is still
+ * proposed, so the platform's refusal is what the person reads.
+ */
+const WORKSPACE_READS: readonly { readonly key: string; readonly words: RegExp }[] = [
+  { key: 'credits.balance', words: /\bcredits?\b|رصيد/iu },
+  { key: 'team.list', words: /\bteam\b|who is on|الفريق|فريقي/iu },
+  {
+    key: 'plan.summary',
+    words: /\bbilling\b|\bplan\b|\btrial\b|\binvoices?\b|الفوترة|الخطة|الفاتورة/iu,
+  },
+  { key: 'channels.list', words: /\bchannels?\b|القنوات/iu },
+  { key: 'notifications.recent', words: /\bnotifications?\b|الإشعارات/iu },
+];
+
+function workspaceReadSteps(prompt: string, request: string): unknown[] {
+  return WORKSPACE_READS.filter(
+    (read) =>
+      read.words.test(request) &&
+      (new RegExp(`^- ${read.key.replace('.', '\\.')} `, 'm').test(prompt) ||
+        new RegExp(`MAY NOT USE[^\\n]*\\b${read.key.replace('.', '\\.')}\\b`).test(prompt)),
+  ).map((read) => ({ toolKey: read.key, arguments: {} }));
+}
+
 function copilotDocument(
   prompt: string,
   context: readonly string[],
@@ -542,14 +569,31 @@ function copilotDocument(
     .trim()
     .slice(0, 400);
   const save = SAVE_WORDS.test(request);
+  // PR B — with the add-fact card on offer, a save request is that card.
+  const card = save && /^- brand_brain\.add_fact /m.test(prompt);
   const text = material || 'Brand Brain has nothing on this yet.';
-  const steps = approvalsStep(prompt, request);
+  const reads = workspaceReadSteps(prompt, request);
+  const steps = card
+    ? [
+        {
+          toolKey: 'brand_brain.add_fact',
+          arguments: {
+            area: /\b(?:offer|price|menu|sell)/iu.test(request) ? 'OFFERS' : 'IDENTITY',
+            title: request.replace(SAVE_WORDS, '').trim().slice(0, 80) || request.slice(0, 80),
+            body: request.replace(SAVE_WORDS, '').trim().slice(0, 2_000) || request.slice(0, 2_000),
+          },
+        },
+      ]
+    : reads.length > 0
+      ? reads
+      : approvalsStep(prompt, request);
   return JSON.stringify({
     summary: { ar: text, en: text },
     steps,
     // A request a tool answers is not a question about the brand itself.
     brandBrainQuestion: !save && steps.length === 0 && !JOB_WORDS.test(request),
-    saveFact: save ? { title: request.slice(0, 120), body: request.slice(0, 2_000) } : null,
+    saveFact:
+      save && !card ? { title: request.slice(0, 120), body: request.slice(0, 2_000) } : null,
   });
 }
 

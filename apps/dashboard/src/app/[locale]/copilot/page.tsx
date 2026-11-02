@@ -8,6 +8,7 @@ import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { CopilotView } from './copilot-view';
+import { copilotDenials } from '../../../server/copilot-denials';
 import { copilotRetentionDays } from '../../../server/copilot-retention';
 
 import { EmptyAction } from '../../../components/empty-action';
@@ -132,6 +133,7 @@ export default async function CopilotPage({
             labels={copilotLabels(messageLocale, session.customer.name ?? session.customer.email)}
             rateMetricKeys={RATE_METRIC_KEYS}
             retentionDays={await copilotRetentionDays(workspace.workspaceId)}
+            denials={await copilotDenials(locale, session)}
           />
         )}
       </Stack>
