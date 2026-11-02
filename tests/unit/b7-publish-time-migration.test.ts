@@ -60,7 +60,7 @@ describe('B1.0 + Option B — when a post goes out', () => {
   });
 
   it('comes directly after PR 6, and directly before PR E (then connectors A and B, then the AI apps migrations)', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-12)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-13)).toEqual([
       '20261015092000_automation_run_execution_due_index',
       NAME,
       '20261020090000_group_b_fields',
@@ -79,6 +79,8 @@ describe('B1.0 + Option B — when a post goes out', () => {
       '20261028090000_secret_version_kek_rewrap',
       // PR A: the AI output failure classes and the operator's failure detail.
       '20261101090000_ai_output_failure_classes',
+      // P1: each person's light / dark / device choice (D-590).
+      '20261102090000_user_colour_scheme',
     ]);
   });
 });
