@@ -34,6 +34,8 @@ import { topbarModel, type TopbarCounts } from '../server/topbar';
 import { copilotSurfaceForPath } from '../server/copilot-surface';
 import { RATE_METRIC_KEYS, copilotLabels } from '../server/copilot-labels';
 import { copilotDrawerSubject } from '../server/copilot-context';
+import { copilotRetentionDays } from '../server/copilot-retention';
+import { shellSession } from '../server/topbar-counts';
 import { GlobalCopilot } from './global-copilot';
 import { NotificationsBell } from './notifications-bell';
 import { loadNotificationFeed } from '../app/[locale]/notifications/feed';
@@ -103,6 +105,12 @@ interface NavEntry {
  */
 const NAV: readonly NavEntry[] = [
   { href: '/overview', key: 'nav.overview', permission: null, glyph: 'home' },
+  /*
+   * PR B (owner decision, D-591) — "Copilot", right under Home: the one
+   * assistant's full page. The floating button on every other page opens the
+   * same conversation as a side panel.
+   */
+  { href: '/copilot', key: 'nav.copilot', permission: 'copilot.use', glyph: 'spark' },
   {
     href: '/brand-brain',
     key: 'nav.brandBrain',
@@ -202,7 +210,8 @@ function railPathFromRequest(requestPath: string | null): string | undefined {
 }
 
 const NAV_GROUPS: readonly { titleKey: MessageKey | null; hrefs: readonly string[] }[] = [
-  { titleKey: null, hrefs: ['/overview'] },
+  // PR B (D-591): Copilot, right under Home.
+  { titleKey: null, hrefs: ['/overview', '/copilot'] },
   { titleKey: 'nav.group.brand', hrefs: ['/brand-brain'] },
   { titleKey: 'nav.group.plan', hrefs: ['/strategy', '/campaigns'] },
   { titleKey: 'nav.group.create', hrefs: ['/content', '/assets'] },
@@ -916,6 +925,9 @@ export async function WorkspaceShell({
 
   /* The floating Copilot (`.fab`), for a member who may use it. */
   const copilot = topbar.links.find((link) => link.key === 'copilot');
+  // PR B — the conversation's retention, for the line under its composer.
+  const shell = !focus && copilot && copilotLink ? await shellSession() : null;
+  const copilotRetention = shell ? await copilotRetentionDays(shell.workspace.workspaceId) : null;
   const fab =
     focus || !copilot ? null : copilotLink ? (
       <GlobalCopilot
@@ -927,6 +939,7 @@ export async function WorkspaceShell({
         subject={drawerSubject}
         labels={copilotLabels(words, identity)}
         rateMetricKeys={RATE_METRIC_KEYS}
+        retentionDays={copilotRetention}
         strings={{
           chooseBrandTitle: t('brand.chooseTitle'),
           chooseBrandBody: t('copilot.noBrandBody'),

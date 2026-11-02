@@ -52,6 +52,13 @@ export interface CopilotMessage {
   readonly id: string;
   readonly author: 'user' | 'assistant';
   readonly text: string;
+  /**
+   * PR B (D-591) — the one continuous conversation also shows a day label
+   * ("Yesterday", "Today") above each day's first message, and a "New topic"
+   * divider where the person started one. Both are rows of the log, not
+   * bubbles; `text` is their translated label. Absent means a message.
+   */
+  readonly kind?: 'message' | 'day' | 'topic_break';
 }
 
 /** A suggested action chip. The id is stable; the label is a translated string. */
@@ -176,6 +183,22 @@ function MessageRow({
   readonly message: CopilotMessage;
   readonly labels: CopilotLabels;
 }) {
+  // PR B — a day label or a "New topic" divider: a row of the log, styled by
+  // class (packages/ui/src/prototype.css), never a bubble.
+  if (message.kind === 'day') {
+    return (
+      <div className="bs-cpb-day" data-testid="copilot-day">
+        {message.text}
+      </div>
+    );
+  }
+  if (message.kind === 'topic_break') {
+    return (
+      <div className="bs-cpb-topic" role="separator" data-testid="copilot-topic-break">
+        <span>{message.text}</span>
+      </div>
+    );
+  }
   const assistant = message.author === 'assistant';
   return (
     <div
