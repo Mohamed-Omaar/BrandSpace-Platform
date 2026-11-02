@@ -76,7 +76,13 @@ export function GlobalCopilot({
     readonly creditsLabel: string;
     readonly greeting: string;
     readonly placeholder: string;
-    readonly suggestions: readonly { readonly id: string; readonly label: string }[];
+    readonly suggestions: readonly {
+      readonly id: string;
+      readonly label: string;
+      readonly prompt?: string;
+    }[];
+    /** PR B — "Open in Copilot page": the same conversation, full screen. */
+    readonly openFull: string;
   };
 }) {
   const [open, setOpen] = useState(false);
@@ -239,6 +245,11 @@ export function GlobalCopilot({
             </button>
           </div>
           <div className="bsp-cp-body">
+            {brand ? (
+              <Link href={href} className="bsp-chip bsp-st-sm" data-testid="copilot-open-full">
+                {strings.openFull}
+              </Link>
+            ) : null}
             {brand ? (
               <CopilotView
                 key={conversation.key}

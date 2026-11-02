@@ -28,6 +28,13 @@ export interface QuestionFocus {
   readonly prompt: string;
 }
 
+/** PR B — the add form's starting words (see `prefill` below). */
+export interface DrawerPrefill {
+  readonly title: string | null;
+  readonly body: string | null;
+  readonly itemKey: string | null;
+}
+
 /**
  * ONE KNOWLEDGE AREA, IN PLACE OF THE GRID — the prototype's inline area view
  * (`Main.dc.html` lines 817–866, D-468). It was a drawer over the page; the
@@ -58,6 +65,8 @@ export function AreaDrawer({
   sourceRules = null,
   onClose,
   onAskAbout,
+  prefill = null,
+  startEditing = null,
   onReview,
 }: {
   /** Batch 7 (A3): what a source may be, from activated configuration. */
@@ -74,12 +83,22 @@ export function AreaDrawer({
   onAskAbout: (area: string) => void;
   /** D4 — open the one review card at this area's first candidate. */
   onReview: (area: string) => void;
+  /**
+   * PR B (D-591) — what the retired chat's Add and Edit modes received: the
+   * Copilot's "save this fact" hand-over fills the add form (nothing is saved
+   * until the person presses Add), and the Studio's "Fix it" opens that fact's
+   * edit box. A prefill is only a starting point.
+   */
+  prefill?: DrawerPrefill | null;
+  startEditing?: string | null;
 }) {
   const t = translator(useMessageLocale(locale));
   // The question being answered: from "What's missing", or chosen here.
   const [chosen, setChosen] = useState<QuestionFocus | null>(focus);
-  const [editing, setEditing] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(startEditing);
   useEffect(() => setChosen(focus), [focus, area.area]);
+  // The hand-over's words go in the box of their own language.
+  const prefillAr = /[\u0600-\u06FF]/.test(`${prefill?.title ?? ''}${prefill?.body ?? ''}`);
   const backRef = useRef<HTMLButtonElement | null>(null);
   const addRef = useRef<HTMLFormElement | null>(null);
 
@@ -397,6 +416,7 @@ export function AreaDrawer({
                 className="bs-control bsp-bb-in"
                 name="bodyEn"
                 rows={2}
+                defaultValue={prefillAr ? '' : (prefill?.body ?? '')}
                 // Q19 — the question itself is the placeholder (D3).
                 placeholder={chosen?.prompt ?? t('bb.newItem.bodyEn')}
                 aria-label={t('bb.newItem.bodyEn')}
@@ -406,6 +426,7 @@ export function AreaDrawer({
                 className="bs-control bsp-bb-in"
                 name="bodyAr"
                 rows={2}
+                defaultValue={prefillAr ? (prefill?.body ?? '') : ''}
                 // Final walk: the question once, on the first box; this one says what it is for.
                 placeholder={t('bb.newItem.bodyAr')}
                 aria-label={t('bb.newItem.bodyAr')}
@@ -431,7 +452,7 @@ export function AreaDrawer({
                     className="bs-control bsp-bb-in"
                     name="itemKey"
                     required
-                    defaultValue=""
+                    defaultValue={prefill?.itemKey ?? ''}
                     placeholder="identity.positioning"
                     aria-label={t('bb.newItem.key')}
                     data-testid="new-item-key"
@@ -441,6 +462,7 @@ export function AreaDrawer({
                 <input
                   className="bs-control bsp-bb-in"
                   name="titleEn"
+                  defaultValue={prefillAr ? '' : (prefill?.title ?? '')}
                   placeholder={t('bb.newItem.titleEn')}
                   aria-label={t('bb.newItem.titleEn')}
                   data-testid="new-item-title-en"
@@ -448,6 +470,7 @@ export function AreaDrawer({
                 <input
                   className="bs-control bsp-bb-in"
                   name="titleAr"
+                  defaultValue={prefillAr ? (prefill?.title ?? '') : ''}
                   placeholder={t('bb.newItem.titleAr')}
                   aria-label={t('bb.newItem.titleAr')}
                 />

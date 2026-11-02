@@ -456,7 +456,11 @@ export async function acceptConfidentCandidatesAction(formData: FormData): Promi
         return knowledge.reviewCandidates({
           brandId: parsed.brandId,
           candidateIds: parsed.candidateIds,
-          minimumConfidenceMilli: resolved.review.confidentAcceptMilli,
+          // PR B (D-591) — "Approve all" accepts the listed facts whatever
+          // their confidence; the server still skips any in conflict or not
+          // eligible, exactly as it does for the confident ones.
+          minimumConfidenceMilli:
+            formData.get('all') === '1' ? 0 : resolved.review.confidentAcceptMilli,
           actor: knowledgeActor(session),
           policy: resolved.staleness,
         });
