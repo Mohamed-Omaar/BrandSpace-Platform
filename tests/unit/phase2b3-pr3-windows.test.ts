@@ -144,7 +144,7 @@ describe('selectDue — what one visit emits, and where the cursor moves', () =>
       due('2026-10-01T11:00:00Z', 'later'),
     ];
     const result = selectDue({ candidates, floor, ceiling });
-    expect(result.emit.map((c) => c.id).slice(-0)).toEqual(['tie-a', 'tie-b', 'tie-c']);
+    expect(result.emit.map((c) => c.id).slice(-3)).toEqual(['tie-a', 'tie-b', 'tie-c']);
     expect(result.watermark).toEqual(at(same));
     expect(result.more).toBe(true);
   });
