@@ -34,6 +34,7 @@ import {
   previewFormatFor,
   variantIssues,
 } from '../../../../server/composer-editor';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 /** The prototype's four formats (`Main.dc.html` line 341); the rest sit under "⋯". */
 const MAIN_FORMATS: readonly string[] = ['POST', 'CAROUSEL', 'REEL', 'STORY'];
@@ -1771,9 +1772,9 @@ export function ComposerView({
                                 <input type="hidden" name="decision" value="dismiss" />
                                 <input type="hidden" name="forget" value="1" />
                                 <input type="hidden" name="returnTo" value="/content/compose" />
-                                <button type="submit" className="bsp-st-link">
+                                <SubmitButton className="bsp-st-link">
                                   {t['create.defaults.forget']}
-                                </button>
+                                </SubmitButton>
                               </form>
                             ) : null}
                           </li>

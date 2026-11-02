@@ -42,6 +42,7 @@ import { duplicateContentAction } from '../content/actions';
 import { EmptyAction } from '../../../components/empty-action';
 import { MoreDisclosure } from '../../../components/more-disclosure';
 import { whenLabel } from '../../../server/prototype-dates';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -318,14 +319,9 @@ export default async function PublishingPage({
         <input type="hidden" name="locale" value={locale} />
         <input type="hidden" name="provider" value={provider} />
         <input type="hidden" name="brandId" value={forBrand} />
-        <button
-          type="submit"
-
-          className={buttonClass('primary', 'sm')}
-          data-testid={testId}
-        >
+        <SubmitButton className={buttonClass('primary', 'sm')} data-testid={testId}>
           {t('publishingHub.reconnect').replace('{provider}', providerLabel(provider))}
-        </button>
+        </SubmitButton>
       </form>
     ) : null;
 
@@ -521,13 +517,12 @@ export default async function PublishingPage({
                   <form action={retryOnReconnectedAction}>
                     {back}
                     <input type="hidden" name="jobId" value={job.id} />
-                    <button
-                      type="submit"
+                    <SubmitButton
                       className="bsp-btn bsp-sm bsp-sec"
                       data-testid={`retry-reconnected-${job.id}`}
                     >
                       {t('publishing.retry')}
-                    </button>
+                    </SubmitButton>
                   </form>
                 ) : reconnectFirst ? (
                   reconnect(job.provider, job.brandId, `reconnect-${job.id}`)
@@ -535,13 +530,12 @@ export default async function PublishingPage({
                   <form action={retryPublishAction}>
                     {back}
                     <input type="hidden" name="jobId" value={job.id} />
-                    <button
-                      type="submit"
+                    <SubmitButton
                       className="bsp-btn bsp-sm bsp-sec"
                       data-testid={`retry-${job.id}`}
                     >
                       {t('publishing.retry')}
-                    </button>
+                    </SubmitButton>
                   </form>
                 ) : rescheduleOffered ? (
                   reschedule
@@ -663,13 +657,12 @@ export default async function PublishingPage({
                           <form action={retryPublishAction}>
                             {back}
                             <input type="hidden" name="jobId" value={job.id} />
-                            <button
-                              type="submit"
+                            <SubmitButton
                               className={buttonClass('neutral', 'sm')}
                               data-testid={`retry-${job.id}`}
                             >
                               {t('publishing.retry')}
-                            </button>
+                            </SubmitButton>
                           </form>
                         ) : null}
                         {reconnectFirst ? reschedule : null}
@@ -684,26 +677,24 @@ export default async function PublishingPage({
                               name="token"
                               value={`publishing:${job.id}:${randomUUID()}`}
                             />
-                            <button
-                              type="submit"
+                            <SubmitButton
                               className={buttonClass('neutral', 'sm')}
                               data-testid={`copy-${job.id}`}
                             >
                               {t('content.action.duplicate')}
-                            </button>
+                            </SubmitButton>
                           </form>
                         ) : null}
                         {job.canCancel && may('publishing.manage') ? (
                           <form action={cancelPublishAction}>
                             {back}
                             <input type="hidden" name="jobId" value={job.id} />
-                            <button
-                              type="submit"
+                            <SubmitButton
                               className={buttonClass('ghost', 'sm')}
                               data-testid={`cancel-${job.id}`}
                             >
                               {t('publishing.cancel')}
-                            </button>
+                            </SubmitButton>
                           </form>
                         ) : null}
                         {primaryIsOpen ? null : (
@@ -796,14 +787,12 @@ export default async function PublishingPage({
                     <form action={checkAccountAction}>
                       {back}
                       <input type="hidden" name="connectionId" value={connection.id} />
-                      <button
-                        type="submit"
-
+                      <SubmitButton
                         className={buttonClass('ghost', 'sm')}
                         data-testid={`check-${connection.id}`}
                       >
                         {t('integrations.check')}
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </li>

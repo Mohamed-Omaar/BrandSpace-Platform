@@ -12,28 +12,46 @@ import { themeLookSchema, type ThemeLook } from '@brandspace/shared/theme';
  */
 const log = createLogger({ context: { component: 'dashboard.theme' } });
 const TTL_MS = 30_000;
-let held: { look: ThemeLook; at: number } | null = null;
+/** After a failed read, how soon the API is asked again. */
+const RETRY_MS = 5_000;
+let held: { look: ThemeLook; at: number; ttl: number } | null = null;
 
+/*
+ * P1 — A FAILED READ KEEPS THE LAST GOOD LOOK. It used to hold the ORIGINAL
+ * look for the full 30 s, so one slow answer from a waking API (staging
+ * sleeps; the timeout is 1.5 s) switched every page to light for half a
+ * minute and then back: the dark mode that "changed by itself". Now a failure
+ * keeps whatever was last read and asks again after 5 s; the original look is
+ * used only when nothing has ever been read.
+ */
 export async function activeLook(): Promise<ThemeLook> {
-  if (held && Date.now() - held.at < TTL_MS) return held.look;
+  if (held && Date.now() - held.at < held.ttl) return held.look;
   const base = process.env['BRANDSPACE_API_URL'];
   let raw: unknown = {};
+  let ok = !base;
   if (base) {
     try {
       const upstream = await fetch(`${base.replace(/\/$/, '')}/v1/theme`, {
         cache: 'no-store',
         signal: AbortSignal.timeout(1500),
       });
-      if (upstream.ok) raw = ((await upstream.json()) as { look?: unknown }).look ?? {};
+      if (upstream.ok) {
+        raw = ((await upstream.json()) as { look?: unknown }).look ?? {};
+        ok = true;
+      }
     } catch (error: unknown) {
       log.warn(
-        'The theme could not be read; the original look is used',
+        'The theme could not be read; the last look read is kept',
         internalErrorFields(error),
       );
     }
   }
   const parsed = themeLookSchema.safeParse(raw);
-  held = { look: parsed.success ? parsed.data : themeLookSchema.parse({}), at: Date.now() };
+  if (ok && parsed.success) {
+    held = { look: parsed.data, at: Date.now(), ttl: TTL_MS };
+  } else {
+    held = { look: held?.look ?? themeLookSchema.parse({}), at: Date.now(), ttl: RETRY_MS };
+  }
   return held.look;
 }
 

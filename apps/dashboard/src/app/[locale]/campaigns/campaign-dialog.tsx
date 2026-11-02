@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useId, useRef, useState, type ReactNode } from 'react';
 import { Backdrop, useOverlayBehaviour } from '@brandspace/ui';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * D-496 (Shell 7, Campaigns 1, 15, 16, 21) — THE CAMPAIGN DIALOG, the
@@ -154,15 +155,15 @@ export function ArchiveTwoStep({
         submit inside its own click is submitted by that same click.
       */}
       {sure ? (
-        <button
+        <SubmitButton
           key="sure"
-          type="submit"
+
           className="bsp-btn bsp-sm bsp-ghost bsp-cp-archive"
           data-testid="campaign-archive-sure"
           autoFocus
         >
           {sureLabel}
-        </button>
+        </SubmitButton>
       ) : (
         <button
           key="ask"

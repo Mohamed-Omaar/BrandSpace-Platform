@@ -21,6 +21,7 @@ import { listOf } from './compose/format-fit';
 import { PostMenu } from './post-menu';
 import { ChannelMark } from '../calendar/prototype-calendar';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /** S5 (KNOWN bug 16): a text-only post's art — one of the two soft lavender palettes, stable per post. */
 const softSeed = (id: string): MediaSeed => (id.charCodeAt(id.length - 1) % 2 === 0 ? 2 : 5);
@@ -300,13 +301,12 @@ export function ContentLibrary({
             <input type="hidden" name="returnTo" value="/content" />
             <input type="hidden" name="itemId" value={card.id} />
             <input type="hidden" name="to" value="DRAFT" />
-            <button
-              type="submit"
+            <SubmitButton
               className="bsp-btn bsp-sm bsp-sec bsp-post-primary"
               data-testid={`content-restore-${card.id}`}
             >
               {t('content.menu.restore')}
-            </button>
+            </SubmitButton>
           </form>
         ) : (
           open()

@@ -136,7 +136,7 @@ async function expectCoversWindow(backdrop: Locator) {
 
 test.describe('the one backdrop (S5, bugs 8 and 9)', () => {
   for (const locale of ['en', 'ar'] as const) {
-    test(`${locale}: the Add media backdrop covers the window and the drawer fills its height`, async ({
+    test(`${locale}: the Add media backdrop covers the window and the drawer fits its content inside it`, async ({
       page,
       isMobile,
     }) => {
@@ -165,7 +165,18 @@ test.describe('the one backdrop (S5, bugs 8 and 9)', () => {
       });
       expect(sheet.inset).toBeGreaterThan(0);
       expect(Math.abs(sheet.top - sheet.inset)).toBeLessThan(1);
-      expect(Math.abs(sheet.bottom - (sheet.window - sheet.inset))).toBeLessThan(1);
+      // P1 (D-592): as tall as its content, never past the window's inset —
+      // it used to be pinned to the bottom too, a window-high sheet.
+      expect(sheet.bottom).toBeLessThanOrEqual(sheet.window - sheet.inset + 1);
+      const fit = await drawer.evaluate((el) => ({
+        overflow: el.scrollHeight - el.clientHeight,
+        scrolls: getComputedStyle(el).overflowY,
+      }));
+      if (fit.overflow > 1) {
+        // Taller than the window: capped at its inset, and it scrolls itself.
+        expect(Math.abs(sheet.bottom - (sheet.window - sheet.inset))).toBeLessThan(1);
+        expect(fit.scrolls).toBe('auto');
+      }
     });
   }
 

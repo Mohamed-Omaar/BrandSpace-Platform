@@ -9,6 +9,7 @@ import {
   type MediaSeed,
 } from '@brandspace/ui';
 import type { MessageKey } from '../../../i18n/messages';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * The Approvals screen — the prototype's (`Main.dc.html` lines 567–598, D-468
@@ -368,13 +369,12 @@ export function ApprovalsView({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="approvalId" value={row.id} />
                           <input type="hidden" name="tab" value={tab} />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             className="bsp-btn bsp-sm bsp-sec"
                             data-testid={`withdraw-${row.itemId}`}
                           >
                             {t('approvals.withdraw')}
-                          </button>
+                          </SubmitButton>
                         </form>
                       ) : null}
                     </li>
@@ -632,8 +632,7 @@ function DecisionForm({
         data-testid={`decision-note-input-${itemId}`}
       />
       <div className="bsp-apr-verdicts">
-        <button
-          type="submit"
+        <SubmitButton
           name="verdict"
           value={
             andSchedule === 'publish'
@@ -654,18 +653,16 @@ function DecisionForm({
                 ? 'approvals.approveSchedule'
                 : 'approvals.approve',
           )}
-        </button>
-        <button
-          type="submit"
+        </SubmitButton>
+        <SubmitButton
           name="verdict"
           value="REQUEST_CHANGES"
           className="bsp-btn bsp-sec"
           data-testid={`request-changes-${itemId}`}
         >
           {t('approvals.requestChanges')}
-        </button>
-        <button
-          type="submit"
+        </SubmitButton>
+        <SubmitButton
           name="verdict"
           value="REJECT"
           formNoValidate
@@ -673,7 +670,7 @@ function DecisionForm({
           data-testid={`reject-${itemId}`}
         >
           {t('approvals.reject')}
-        </button>
+        </SubmitButton>
       </div>
       {/*
         The prototype's line under the verdicts, in words true of this product:

@@ -52,6 +52,7 @@ import '@brandspace/ui/brand-brain.css';
 import { createBrandAction } from './actions';
 import { aiAvailability, aiAvailableFor } from '../../../server/ai-availability';
 import { dayFormatter } from '../../../server/prototype-dates';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -193,8 +194,7 @@ export default async function BrandBrainPage({
                   font: 'inherit',
                 }}
               />
-              <button
-                type="submit"
+              <SubmitButton
                 data-testid="create-brand"
                 style={{
                   border: 0,
@@ -208,7 +208,7 @@ export default async function BrandBrainPage({
                 }}
               >
                 {t('bb.createBrand')}
-              </button>
+              </SubmitButton>
             </form>
           ) : null}
         </section>

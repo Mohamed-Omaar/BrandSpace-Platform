@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { colourSchemeSchema } from '@brandspace/shared';
 import { isSupportedLocale } from '@brandspace/ui';
-import { COLOUR_SCHEME_COOKIE } from '../../../server/colour-scheme';
+import { COLOUR_SCHEME_COOKIE, storeColourScheme } from '../../../server/colour-scheme';
 
 /**
  * EACH PERSON'S LIGHT / DARK / DEVICE CHOICE (LF). The account menu's
@@ -26,6 +26,9 @@ export async function GET(
   const response = new NextResponse(null, { status: 303, headers: { location: safeBack } });
   const choice = colourSchemeSchema.safeParse(url.searchParams.get('to'));
   if (choice.success) {
+    // P1: on the person's account when signed in, so every device follows it;
+    // the cookie still carries it to the first paint and before sign-in.
+    await storeColourScheme(choice.data).catch(() => false);
     response.cookies.set(COLOUR_SCHEME_COOKIE, choice.data, {
       path: '/',
       maxAge: YEAR,

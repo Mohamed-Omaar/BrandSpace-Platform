@@ -23,6 +23,7 @@ import { createBrandAction } from '../../brand-brain/actions';
 
 import { EmptyAction } from '../../../../components/empty-action';
 import { brandAllowance, isSingleBrand } from '../../../../server/brand-allowance';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -189,9 +190,9 @@ export default async function BrandProfilePage({
             <a href={`/${locale}/settings/brand`} className="bsp-btn bsp-sec">
               {t('brand.addDiscard')}
             </a>
-            <button type="submit" className="bsp-btn bsp-pur" data-testid="brand-add-create">
+            <SubmitButton className="bsp-btn bsp-pur" data-testid="brand-add-create">
               {t('brand.addCreate')}
-            </button>
+            </SubmitButton>
           </form>
         ) : null}
         {data === null ? (
@@ -484,13 +485,9 @@ export default async function BrandProfilePage({
 
               {mayManage ? (
                 <div>
-                  <button
-                    type="submit"
-                    className={buttonClass('primary')}
-                    data-testid="brand-profile-save"
-                  >
+                  <SubmitButton className={buttonClass('primary')} data-testid="brand-profile-save">
                     {t('brandProfile.save')}
-                  </button>
+                  </SubmitButton>
                 </div>
               ) : null}
             </form>

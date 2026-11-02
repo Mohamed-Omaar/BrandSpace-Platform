@@ -11,6 +11,7 @@ import {
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { signInAction } from '../actions';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,13 +104,12 @@ export default async function SignInPage({
           hide={t('password.hide')}
         />
 
-        <button
-          type="submit"
+        <SubmitButton
           data-testid="signin-submit"
           style={{ ...authButtonStyle(), marginBlockStart: spacingTokens.sm }}
         >
           {t('signIn.submit')}
-        </button>
+        </SubmitButton>
       </form>
     </AuthCard>
   );

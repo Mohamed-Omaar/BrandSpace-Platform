@@ -3,10 +3,12 @@
 import type React from 'react';
 import type { UploadRules } from '../../../components/upload-rules';
 import { RefreshWhile } from '../../../components/refresh-while';
+import { FormButton } from '../../../components/pending-submit';
 import {
   UploadFileInput,
   UploadForm,
   UploadRulesLine,
+  UploadButton,
   UploadStatus,
   uploadTexts,
 } from '../../../components/upload-field';
@@ -994,9 +996,9 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                       </select>
                     </Field>
                   ) : null}
-                  <Button type="submit" variant="neutral" size="sm" data-testid="assets-bulk-apply">
+                  <FormButton variant="neutral" size="sm" data-testid="assets-bulk-apply">
                     {t('assets.bulk.apply')}
-                  </Button>
+                  </FormButton>
                 </form>
               ) : null}
               <div
@@ -1135,6 +1137,11 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
       >
         <UploadForm
           action={actions.upload}
+          relay={{ kind: 'asset', each: 'asset-file' }}
+          onUploaded={() => {
+            setChosen([]);
+            setUploadOpen(false);
+          }}
           rules={props.uploadRules}
           locale={props.locale}
           texts={uploadTexts(t)}
@@ -1256,9 +1263,9 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                     : null
               }
             />
-            <Button type="submit" variant="primary" data-testid="assets-upload-submit">
+            <UploadButton variant="primary" data-testid="assets-upload-submit">
               {t('assets.upload')}
-            </Button>
+            </UploadButton>
           </Stack>
         </UploadForm>
       </Dialog>
@@ -1308,9 +1315,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 data-testid="assets-folder-name"
               />
             </Field>
-            <Button type="submit" variant="primary">
-              {t('assets.folderCreate')}
-            </Button>
+            <FormButton variant="primary">{t('assets.folderCreate')}</FormButton>
           </Stack>
         </form>
       </Dialog>
@@ -1331,9 +1336,9 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               {t('assets.confirm.deleteBody')}
             </p>
             <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
-              <Button type="submit" variant="danger" data-testid="assets-delete-confirm">
+              <FormButton variant="danger" data-testid="assets-delete-confirm">
                 {t('assets.action.delete')}
-              </Button>
+              </FormButton>
               <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
                 {t('assets.action.cancel')}
               </Button>
@@ -1869,9 +1874,9 @@ function AssetDetail({
                   data-testid="asset-rights-input"
                 />
               </Field>
-              <Button type="submit" variant="neutral" data-testid="asset-save">
+              <FormButton variant="neutral" data-testid="asset-save">
                 {t('assets.action.select')}
-              </Button>
+              </FormButton>
             </Stack>
           </form>
         ) : null}
@@ -1930,9 +1935,7 @@ function AssetDetail({
                 testId="asset-version-status"
                 result={uploadReason ? { tone: 'error', message: uploadReason } : null}
               />
-              <Button type="submit" variant="neutral">
-                {t('assets.action.newVersion')}
-              </Button>
+              <UploadButton variant="neutral">{t('assets.action.newVersion')}</UploadButton>
             </Stack>
           </UploadForm>
         ) : null}
@@ -1976,9 +1979,9 @@ function AssetDetail({
                         name="versionNumber"
                         value={String(version.versionNumber)}
                       />
-                      <Button type="submit" variant="ghost" size="sm">
+                      <FormButton variant="ghost" size="sm">
                         {t('assets.action.restoreVersion')}
-                      </Button>
+                      </FormButton>
                     </form>
                   ) : null}
                 </li>
@@ -2030,9 +2033,9 @@ function SingleAction({
     <form action={action} style={{ display: 'contents' }}>
       <input type="hidden" name="locale" value={locale} />
       <input type="hidden" name="assetId" value={assetId} />
-      <Button type="submit" variant={variant} data-testid={testId}>
+      <FormButton variant={variant} data-testid={testId}>
         {label}
-      </Button>
+      </FormButton>
     </form>
   );
 }

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
+import { currentColourScheme } from '../../server/colour-scheme';
+import { ColourSchemeSync } from '../../components/colour-scheme-sync';
 import {
   CustomerFrameHost,
   SUPPORTED_LOCALES,
@@ -55,14 +57,20 @@ export default async function LocaleLayout({
   const { locale } = await params;
   if (!isSupportedLocale(locale)) notFound();
   const webfont = webfontHref(process.env['BRANDSPACE_WEBFONTS']);
+  // P1: the person's light / dark / device choice, decided here, on the server.
+  const scheme = await currentColourScheme();
 
   return (
-    <html lang={htmlLangForLocale(locale)} dir={directionForLocale(locale)}>
+    <html
+      lang={htmlLangForLocale(locale)}
+      dir={directionForLocale(locale)}
+      data-color-scheme={scheme}
+    >
       <head>
         {/*
           LF — the Look & feel theme. Custom properties only, served by
-          `/theme.css` so this layout stays static; empty for the original look
-          and on any error.
+          `/theme.css`: the same stylesheet for everyone, whose dark palette
+          follows `data-color-scheme` above (P1).
         */}
         <link rel="stylesheet" href="/theme.css" />
         {/* LF: the theme's favicon; without one it answers with the original icon. */}
@@ -88,6 +96,7 @@ export default async function LocaleLayout({
         ) : null}
       </head>
       <body>
+        <ColourSchemeSync scheme={scheme} />
         {/* Skip link: the first tab stop, a WCAG 2.2 requirement. */}
         <a href="#main" className="skip-link" data-testid="skip-link">
           {locale === 'ar' ? 'تخطَّ إلى المحتوى' : 'Skip to content'}

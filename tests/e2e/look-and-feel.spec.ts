@@ -70,8 +70,12 @@ test.describe('Look & feel', () => {
     const customer = await request.get(`${DASHBOARD_BASE_URL}/theme.css`);
     expect(customer.ok()).toBe(true);
     expect(customer.headers()['content-type']).toContain('text/css');
-    // No light override; nothing but whitespace when the person has not chosen dark.
-    expect((await customer.text()).trim()).toBe('');
+    // No light override. P1 (D-592): the stylesheet is one for everyone, so
+    // the only rules the original look writes are the dark palette, keyed on
+    // the page's `data-color-scheme`; nothing applies to a light page.
+    const css = (await customer.text()).replace(/@font-face \{[^}]*\}/g, '');
+    expect(css).toContain(":root:root[data-color-scheme='dark'] {");
+    expect(css).not.toMatch(/(^|\n)\s*:root(:root)? \{/);
     const console = await request.get(`${ADMIN_BASE_URL}/theme.css`);
     expect((await console.text()).trim()).toBe('');
   });
@@ -88,12 +92,17 @@ test.describe('Look & feel', () => {
     expect(response.status()).toBe(303);
     // A relative address, so the cookie and the session stay on this host.
     expect(response.headers()['location']).toBe('/en/sign-in');
+    // P1 (D-592): the server renders the choice on the page itself, and the
+    // stylesheet's dark palette follows it.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
+    await expect(page.locator('html')).toHaveAttribute('data-color-scheme', 'dark');
     const css = await (await page.request.get(`${DASHBOARD_BASE_URL}/theme.css`)).text();
     expect(css).toContain('color-scheme: dark;');
     // Another person, another device: still the original look.
     const other = await browser.newContext();
-    const theirs = await (await other.request.get(`${DASHBOARD_BASE_URL}/theme.css`)).text();
-    expect(theirs.trim()).toBe('');
+    const theirPage = await other.newPage();
+    await theirPage.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
+    await expect(theirPage.locator('html')).toHaveAttribute('data-color-scheme', 'light');
     await context.close();
     await other.close();
   });

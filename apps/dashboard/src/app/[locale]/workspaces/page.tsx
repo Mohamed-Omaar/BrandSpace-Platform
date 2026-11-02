@@ -11,6 +11,7 @@ import { WholeRowList } from '../../../components/whole-row-list';
 import { switchWorkspaceAction } from '../(auth)/actions';
 import { businessSwitcherModel } from '../../../server/business-switcher';
 import { workspacesFoot } from '../../../server/workspaces-foot';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,8 +81,7 @@ export default async function WorkspacePickerPage({
               <form action={switchWorkspaceAction}>
                 <input type="hidden" name="locale" value={locale} />
                 <input type="hidden" name="workspaceId" value={w.workspaceId} />
-                <button
-                  type="submit"
+                <SubmitButton
                   data-testid={`choose-workspace-${w.workspaceSlug}`}
                   className="bs-liftable bsp-auth-ws"
                 >
@@ -117,7 +117,7 @@ export default async function WorkspacePickerPage({
                   >
                     <path d="M5 12h14M13 6l6 6-6 6" />
                   </svg>
-                </button>
+                </SubmitButton>
               </form>
             </li>
           ))}

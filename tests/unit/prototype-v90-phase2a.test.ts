@@ -761,9 +761,11 @@ describe('B5 · Approvals per person, and a reason for "request changes"', () =>
     expect(form).toMatch(/<textarea[^>]*?\s*name="note"\s*dir="auto"\s*required/);
     expect(form.match(/^\s+formNoValidate$/gm)).toHaveLength(2);
     const requestChanges = form.slice(form.indexOf('value="REQUEST_CHANGES"'));
-    expect(requestChanges.slice(0, requestChanges.indexOf('</button>'))).not.toContain(
-      'formNoValidate',
-    );
+    // P1: the verdict buttons wait for the server (`SubmitButton`); the button
+    // ends at its own closing tag either way.
+    expect(
+      requestChanges.slice(0, requestChanges.search(/<\/(?:button|SubmitButton)>/)),
+    ).not.toContain('formNoValidate');
   });
 
   it('two tabs, "For me" by default for a reviewer and "Sent" otherwise, carried through actions', () => {

@@ -30,6 +30,7 @@ import {
 } from '../app/[locale]/notes-actions';
 import { requestMessageLocale } from '../server/message-locale';
 import { dayFormatter } from '../server/prototype-dates';
+import { SubmitButton } from './pending-submit';
 
 /**
  * CONTEXTUAL COLLABORATION, RENDERED WHERE THE WORK IS (P6-05).
@@ -181,9 +182,9 @@ export async function NotesPanel({
         </noscript>
 
         <div>
-          <button type="submit" data-testid="note-submit" className={buttonClass('primary', 'sm')}>
+          <SubmitButton data-testid="note-submit" className={buttonClass('primary', 'sm')}>
             {t('notes.post')}
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </Card>
@@ -362,14 +363,13 @@ async function NoteThread({
             <MentionPicker locale={locale} members={candidates} id={`reply-mentions-${threadId}`} />
           </noscript>
           <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
-            <button
-              type="submit"
+            <SubmitButton
               className={buttonClass('neutral', 'sm')}
 
               data-testid={`note-reply-submit-${threadId}`}
             >
               {t('notes.reply')}
-            </button>
+            </SubmitButton>
           </div>
         </form>
       )}
@@ -380,14 +380,13 @@ async function NoteThread({
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="threadId" value={threadId} />
             <input type="hidden" name="returnPath" value={returnPath} />
-            <button
-              type="submit"
+            <SubmitButton
               className={buttonClass('ghost', 'sm')}
 
               data-testid={`note-${status === 'RESOLVED' ? 'reopen' : 'resolve'}-${threadId}`}
             >
               {t(status === 'RESOLVED' ? 'notes.reopen' : 'notes.resolve')}
-            </button>
+            </SubmitButton>
           </form>
         ) : null}
 
@@ -401,14 +400,13 @@ async function NoteThread({
           <input type="hidden" name="locale" value={locale} />
           <input type="hidden" name="threadId" value={threadId} />
           <input type="hidden" name="returnPath" value={returnPath} />
-          <button
-            type="submit"
+          <SubmitButton
             className={buttonClass('ghost', 'sm')}
 
             data-testid={`note-mark-read-${threadId}`}
           >
             {t('notes.markRead')}
-          </button>
+          </SubmitButton>
         </form>
       </div>
 
@@ -446,9 +444,9 @@ async function NoteThread({
                   </option>
                 ))}
               </select>
-              <button type="submit" className={buttonClass('neutral', 'sm')}>
+              <SubmitButton className={buttonClass('neutral', 'sm')}>
                 {t('notes.save')}
-              </button>
+              </SubmitButton>
             </form>
             <form action={setNoteDueAction} style={optionRowStyle}>
               {hidden}
@@ -464,14 +462,13 @@ async function NoteThread({
 
                 data-testid={`note-due-input-${threadId}`}
               />
-              <button
-                type="submit"
+              <SubmitButton
                 className={buttonClass('neutral', 'sm')}
 
                 data-testid={`note-due-save-${threadId}`}
               >
                 {t('notes.save')}
-              </button>
+              </SubmitButton>
             </form>
             <form action={setNoteImportanceAction} style={optionRowStyle}>
               {hidden}
@@ -480,14 +477,13 @@ async function NoteThread({
                 name="importance"
                 value={thread.importance === 'IMPORTANT' ? 'NORMAL' : 'IMPORTANT'}
               />
-              <button
-                type="submit"
+              <SubmitButton
                 className={buttonClass('neutral', 'sm')}
 
                 data-testid={`note-importance-${threadId}`}
               >
                 {t(thread.importance === 'IMPORTANT' ? 'notes.markNormal' : 'notes.markImportant')}
-              </button>
+              </SubmitButton>
             </form>
           </div>
         </details>

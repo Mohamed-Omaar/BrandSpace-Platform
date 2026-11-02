@@ -44,6 +44,7 @@ import {
 import { dayLabel } from '../../../server/prototype-dates';
 import { permissionGroups } from '../../../server/permission-groups';
 import { PermissionGroupsList } from '../../../components/permission-groups-view';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -262,14 +263,12 @@ export default async function MembersPage({
           <input type="hidden" name="locale" value={locale} />
           <input type="hidden" name="membershipId" value={membershipId} />
           {accessFields(`member-${testKey}`, current)}
-          <button
-            type="submit"
-
+          <SubmitButton
             className={buttonClass('neutral', 'sm')}
             data-testid={`save-brand-access-${testKey}`}
           >
             {t('common.save')}
-          </button>
+          </SubmitButton>
         </form>
       </details>
     );
@@ -316,13 +315,9 @@ export default async function MembersPage({
             </option>
           ))}
         </select>
-        <button
-          type="submit"
-          data-testid={`change-role-${email}`}
-          className={buttonClass('neutral', 'sm')}
-        >
+        <SubmitButton data-testid={`change-role-${email}`} className={buttonClass('neutral', 'sm')}>
           {t('common.save')}
-        </button>
+        </SubmitButton>
       </form>
     );
   }
@@ -332,13 +327,12 @@ export default async function MembersPage({
       <form action={removeMemberAction}>
         <input type="hidden" name="locale" value={locale} />
         <input type="hidden" name="membershipId" value={membershipId} />
-        <button
-          type="submit"
+        <SubmitButton
           data-testid={`remove-member-${email}`}
           className={buttonClass('danger', 'sm')}
         >
           {t('members.remove')}
-        </button>
+        </SubmitButton>
       </form>
     );
   }
@@ -350,24 +344,16 @@ export default async function MembersPage({
         <form action={resendInvitationAction}>
           <input type="hidden" name="locale" value={locale} />
           <input type="hidden" name="invitationId" value={id} />
-          <button
-            type="submit"
-            data-testid={`resend-${email}`}
-            className={buttonClass('neutral', 'sm')}
-          >
+          <SubmitButton data-testid={`resend-${email}`} className={buttonClass('neutral', 'sm')}>
             {t('members.resend')}
-          </button>
+          </SubmitButton>
         </form>
         <form action={revokeInvitationAction}>
           <input type="hidden" name="locale" value={locale} />
           <input type="hidden" name="invitationId" value={id} />
-          <button
-            type="submit"
-            data-testid={`revoke-${email}`}
-            className={buttonClass('neutral', 'sm')}
-          >
+          <SubmitButton data-testid={`revoke-${email}`} className={buttonClass('neutral', 'sm')}>
             {t('members.revoke')}
-          </button>
+          </SubmitButton>
         </form>
       </div>
     );
@@ -470,9 +456,9 @@ export default async function MembersPage({
         </select>
       </label>
       {brands.length > 0 ? <div className="bsp-tm-wide">{accessFields('invite', [])}</div> : null}
-      <button type="submit" className="bsp-btn bsp-pur" data-testid="invite-submit">
+      <SubmitButton className="bsp-btn bsp-pur" data-testid="invite-submit">
         {t('members.invite')}
-      </button>
+      </SubmitButton>
     </form>
   );
 
@@ -553,9 +539,9 @@ export default async function MembersPage({
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="membershipId" value={opened.membershipId} />
                   {assignableRoles.map((r) => (
-                    <button
+                    <SubmitButton
                       key={r.id}
-                      type="submit"
+
                       name="roleId"
                       value={r.id}
                       className="bsp-chip"
@@ -563,7 +549,7 @@ export default async function MembersPage({
                       data-testid={`change-role-${opened.email}-${r.key}`}
                     >
                       {customerRoleName(locale === 'ar' ? r.nameAr : r.nameEn)}
-                    </button>
+                    </SubmitButton>
                   ))}
                 </form>
               </section>
@@ -604,13 +590,12 @@ export default async function MembersPage({
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="membershipId" value={opened.membershipId} />
                   {accessFields(`member-${opened.email}`, opened.brandScope)}
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className="bsp-btn bsp-sm bsp-sec"
                     data-testid={`save-brand-access-${opened.email}`}
                   >
                     {t('common.save')}
-                  </button>
+                  </SubmitButton>
                 </form>
               </section>
             ) : null}

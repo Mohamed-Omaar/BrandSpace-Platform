@@ -6,6 +6,7 @@ import { statusMessage, translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { acceptInvitationAction, onboardInvitationAction } from '../../(auth)/actions';
 import { signupPolicy } from '../../../../server/signup-policy';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,9 +93,9 @@ export default async function InvitationPage({
         <form action={acceptInvitationAction}>
           <input type="hidden" name="locale" value={locale} />
           <input type="hidden" name="token" value={token} />
-          <button type="submit" data-testid="invitation-accept" style={authButtonStyle()}>
+          <SubmitButton data-testid="invitation-accept" style={authButtonStyle()}>
             {t('invite.accept')}
-          </button>
+          </SubmitButton>
         </form>
       ) : (
         <>
@@ -167,9 +168,9 @@ export default async function InvitationPage({
                 { label: t('password.rule.phrase'), kind: 'note' },
               ]}
             />
-            <button type="submit" data-testid="invitation-setup-submit" style={authButtonStyle()}>
+            <SubmitButton data-testid="invitation-setup-submit" style={authButtonStyle()}>
               {t('invite.setUpSubmit')}
-            </button>
+            </SubmitButton>
           </form>
 
           <p style={{ ...typographyTokens.caption, marginBlockStart: spacingTokens.md }}>

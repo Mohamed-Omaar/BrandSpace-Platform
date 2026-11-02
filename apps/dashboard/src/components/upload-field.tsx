@@ -6,12 +6,17 @@ import {
   useContext,
   useState,
   useTransition,
+  type ButtonHTMLAttributes,
+  type ComponentProps,
   type FormEvent,
   type InputHTMLAttributes,
   type ReactNode,
   type Ref,
 } from 'react';
+import { useRouter } from 'next/navigation';
+import { Button, ProgressBar, Spinner } from '@brandspace/ui';
 import type { MessageKey } from '../i18n/messages';
+import type { UploadRelayKind } from '../app/api/upload/[kind]/route';
 import {
   acceptOf,
   bytesText,
@@ -51,6 +56,8 @@ export interface UploadTexts {
   readonly refusedEmpty: string;
   /** `Uploading {name}…` */
   readonly uploading: string;
+  /** P1: `Uploaded.` — the upload arrived. */
+  readonly uploaded: string;
   /** `The upload didn’t reach us. Check your connection and try again.` */
   readonly connection: string;
   /** PR F (g): `Files aren’t scanned for malware during the beta. Upload and open them at your own risk.` */
@@ -67,6 +74,7 @@ export function uploadTexts(t: (key: MessageKey) => string): UploadTexts {
     refusedSize: t('upload.refusedSize'),
     refusedEmpty: t('upload.refusedEmpty'),
     uploading: t('upload.uploading'),
+    uploaded: t('upload.uploaded'),
     connection: t('upload.connection'),
     notScanned: t('upload.notScanned'),
     notScannedLink: t('upload.notScannedLink'),
@@ -75,7 +83,8 @@ export function uploadTexts(t: (key: MessageKey) => string): UploadTexts {
 
 type Status =
   | { readonly kind: 'idle' }
-  | { readonly kind: 'uploading'; readonly name: string }
+  | { readonly kind: 'uploading'; readonly name: string; readonly percent?: number }
+  | { readonly kind: 'uploaded' }
   | { readonly kind: 'refused'; readonly message: string }
   | { readonly kind: 'connection' };
 
@@ -105,6 +114,36 @@ function useUpload(): UploadState {
 }
 
 /** A redirect or a not-found thrown by a server action is navigation, not a failure. */
+/**
+ * P1 — send a form to the upload relay with `XMLHttpRequest`, the one browser
+ * API that reports how much of a body has gone up. Resolves with the relay's
+ * JSON (`{ location }` or `{ ok, reason }`); rejects when the request never
+ * completed, which the form shows as the connection message.
+ */
+function sendWithProgress(
+  kind: UploadRelayKind,
+  data: FormData,
+  onProgress: (percent: number) => void,
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', `/api/upload/${kind}`);
+    request.setRequestHeader('x-bs-upload', '1');
+    request.responseType = 'json';
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress((event.loaded / event.total) * 100);
+    };
+    request.onload = () => {
+      const body = request.response as Record<string, unknown> | null;
+      if (request.status >= 200 && request.status < 300 && body) resolve(body);
+      else reject(new Error(`upload relay answered ${request.status}`));
+    };
+    request.onerror = () => reject(new Error('upload relay unreachable'));
+    request.onabort = () => reject(new Error('upload relay aborted'));
+    request.send(data);
+  });
+}
+
 function isNavigation(error: unknown): boolean {
   const digest = (error as { digest?: unknown } | null)?.digest;
   return (
@@ -120,6 +159,8 @@ export function UploadForm({
   children,
   formRef,
   each,
+  relay,
+  onUploaded,
   ...form
 }: {
   readonly formRef?: Ref<HTMLFormElement>;
@@ -138,6 +179,18 @@ export function UploadForm({
       readonly refused: readonly { readonly name: string; readonly reason: string | null }[];
     }) => void;
   };
+  /**
+   * P1 — the upload relay kinds for this form's `action` (and its `each`
+   * variant): with them the form shows a progress bar with a percentage. The
+   * relay calls the same server actions, so nothing else changes.
+   */
+  readonly relay?: { readonly kind: UploadRelayKind; readonly each?: UploadRelayKind };
+  /**
+   * P1 — called once a relayed upload has arrived, before its redirect is
+   * followed: what the server action's own navigation used to do to the
+   * screen around the form (the Media dialog closed with it).
+   */
+  readonly onUploaded?: () => void;
   readonly rules: UploadRules;
   readonly locale: string;
   readonly texts: UploadTexts;
@@ -148,6 +201,7 @@ export function UploadForm({
 }) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [pending, start] = useTransition();
+  const router = useRouter();
 
   const check = useCallback(
     (file: File | null | undefined): boolean => {
@@ -187,14 +241,19 @@ export function UploadForm({
         const refused: { name: string; reason: string | null }[] = [];
         let uploaded = 0;
         for (const [index, one] of files.entries()) {
-          setStatus({ kind: 'uploading', name: `${index + 1}/${files.length} · ${one.name}` });
+          const name = `${index + 1}/${files.length} · ${one.name}`;
+          setStatus({ kind: 'uploading', name, ...(relay?.each ? { percent: 0 } : {}) });
           const single = new FormData();
           for (const [key, value] of data.entries()) {
             if (!(value instanceof File)) single.append(key, value);
           }
           single.set('file', one);
           try {
-            const outcome = await each.upload(single);
+            const outcome = relay?.each
+              ? ((await sendWithProgress(relay.each, single, (percent) =>
+                  setStatus({ kind: 'uploading', name, percent }),
+                )) as { ok: boolean; reason: string | null })
+              : await each.upload(single);
             if (outcome.ok) uploaded += 1;
             else refused.push({ name: one.name, reason: outcome.reason });
           } catch (error: unknown) {
@@ -202,13 +261,31 @@ export function UploadForm({
             refused.push({ name: one.name, reason: null });
           }
         }
-        setStatus({ kind: 'idle' });
+        setStatus(uploaded > 0 && refused.length === 0 ? { kind: 'uploaded' } : { kind: 'idle' });
         each.done({ uploaded, refused });
       });
       return;
     }
     const file = files[0];
     if (file && !check(file)) return;
+    if (relay && file) {
+      setStatus({ kind: 'uploading', name: file.name, percent: 0 });
+      start(async () => {
+        try {
+          const outcome = await sendWithProgress(relay.kind, data, (percent) =>
+            setStatus({ kind: 'uploading', name: file.name, percent }),
+          );
+          setStatus({ kind: 'uploaded' });
+          onUploaded?.();
+          // The action's own redirect, followed as the action would have.
+          if (typeof outcome['location'] === 'string') router.push(outcome['location']);
+          else router.refresh();
+        } catch {
+          setStatus({ kind: 'connection' });
+        }
+      });
+      return;
+    }
     setStatus(file ? { kind: 'uploading', name: file.name } : { kind: 'idle' });
     start(async () => {
       try {
@@ -352,6 +429,9 @@ export function UploadStatus({
   } else if (status.kind === 'uploading' && pending) {
     tone = 'info';
     message = texts.uploading.replace('{name}', status.name);
+  } else if (status.kind === 'uploaded') {
+    tone = 'info';
+    message = texts.uploaded;
   } else if (status.kind === 'idle' && result) {
     tone = result.tone;
     message = result.message;
@@ -363,9 +443,47 @@ export function UploadStatus({
       className={className ?? 'bsp-up-status'}
       data-tone={tone ?? undefined}
       data-testid={testId}
+      data-state={status.kind}
       hidden={tone === null}
     >
       {message}
+      {status.kind === 'uploading' && pending && status.percent !== undefined ? (
+        <ProgressBar value={status.percent} label={message} testId={`${testId}-progress`} />
+      ) : null}
     </span>
   );
+}
+
+/**
+ * P1 — THE SUBMIT BUTTON OF AN UPLOAD FORM, WAITING WHILE THE FILE GOES UP.
+ * The upload form sends its file itself (with progress), so React's form
+ * status never sees it; this reads the form's own state instead. At rest it
+ * is exactly the button it replaces.
+ */
+export function UploadSubmitButton({
+  children,
+  className,
+  disabled,
+  ...button
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> & { readonly children?: ReactNode }) {
+  const { pending } = useUpload();
+  return (
+    <button
+      {...button}
+      className={className}
+      type="submit"
+      disabled={disabled === true || pending}
+      aria-busy={pending || undefined}
+      data-pending={pending || undefined}
+    >
+      {pending ? <Spinner /> : null}
+      {children}
+    </button>
+  );
+}
+
+/** P1 — the same, for an upload form's submit built with the design system's `Button`. */
+export function UploadButton(props: Omit<ComponentProps<typeof Button>, 'type' | 'loading'>) {
+  const { pending } = useUpload();
+  return <Button {...props} type="submit" loading={pending} />;
 }

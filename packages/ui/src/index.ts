@@ -40,6 +40,8 @@ export * from './post-card';
 export * from './post-detail-drawer';
 export * from './password-field';
 export * from './primitives';
+export * from './progress';
+export * from './progress-time';
 export * from './save-bar';
 export * from './searchable-select';
 export * from './social-post-preview';

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 /**
  * B9 / F2 (Phase 2B-2) — DATE AND TIME IN THE STUDIO, inline.
@@ -161,14 +162,13 @@ export function InlineSchedule({
         </p>
       ) : null}
       <div className="bsp-st-when-acts">
-        <button
-          type="submit"
+        <SubmitButton
           className="bsp-btn bsp-sm bsp-pur"
           disabled={disabled}
           data-testid="editor-schedule-submit"
         >
           {submitLabel ?? t['editor.schedule.submit']}
-        </button>
+        </SubmitButton>
       </div>
     </form>
   );

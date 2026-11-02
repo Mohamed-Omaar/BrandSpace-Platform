@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { translator } from '../../../i18n/messages';
 import { readAgainSourceAction, removeSourceAction } from './actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * ONE SOURCE, WITH WHAT IT IS RESPONSIBLE FOR (Phase 2C-4, D5) — the
@@ -128,13 +129,12 @@ export function SourceRow({
           <form action={readAgainSourceAction}>
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="documentId" value={source.id} />
-            <button
-              type="submit"
+            <SubmitButton
               className="bsp-btn bsp-sm bsp-ghost"
               data-testid={`source-read-again-${source.id}`}
             >
               {t('bb.source.readAgain')}
-            </button>
+            </SubmitButton>
           </form>
         ) : null}
         {canUpload ? (
@@ -184,8 +184,7 @@ export function SourceRow({
             {t('bb.source.keep')}
           </button>
           {canDrop ? (
-            <button
-              type="submit"
+            <SubmitButton
               name="mode"
               value="drop"
               className="bsp-btn bsp-sm bsp-bb-drop"
@@ -193,7 +192,7 @@ export function SourceRow({
               data-testid={`source-remove-drop-${source.id}`}
             >
               {t('bb.source.drop')}
-            </button>
+            </SubmitButton>
           ) : null}
           <button
             type="button"

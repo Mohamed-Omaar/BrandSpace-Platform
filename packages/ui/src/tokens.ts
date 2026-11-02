@@ -1836,6 +1836,21 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-line-relaxed', value: '1.8' },
   // LF: Home's hero canvas reads its ground and its blobs' strength from here,
   // at the canvas's own values, so the dark palette can darken it.
+  // P1 — ONE FRAME FOR BOTH APPS. The customer dashboard and the Control
+  // Center draw their frame and rail from these, so radius, edge, shadow and
+  // surface cannot drift apart again. Both surfaces are solid: the frame was
+  // white at .93 in one app and .78 in the other, and the rail .7 and .78,
+  // which let the ground's colour show through where a surface is expected.
+  // Sizes are `--bsp-px-*`, so each app keeps its own scale (D-484).
+  { name: '--bs-frame-surface', value: 'var(--bs-surface)' },
+  { name: '--bs-frame-rail', value: '#fafafb' },
+  { name: '--bs-frame-hairline', value: 'var(--bs-hairline)' },
+  { name: '--bs-frame-edge', value: '1px solid var(--bs-frame-hairline)' },
+  { name: '--bs-frame-radius', value: 'calc(var(--bsp-px-34) * var(--bs-radius-scale))' },
+  {
+    name: '--bs-frame-shadow',
+    value: '0 var(--bsp-px-24) var(--bsp-px-70) var(--bs-lit-141023-a1)',
+  },
   { name: '--bs-hero-ground', value: '#F9F7FF' },
   { name: '--bs-hero-blob-strength', value: '1' },
   // D-2: the customer app's field border, one token (D-55 restores it to 3:1 under prefers-contrast).
@@ -1854,6 +1869,8 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-dur-260', value: 'calc(260ms * var(--bs-motion-scale))' },
   { name: '--bs-dur-320', value: 'calc(320ms * var(--bs-motion-scale))' },
   { name: '--bs-dur-380', value: 'calc(380ms * var(--bs-motion-scale))' },
+  // P1: one turn of the waiting spinner.
+  { name: '--bs-dur-800', value: 'calc(800ms * var(--bs-motion-scale))' },
   { name: '--bs-dur-440', value: 'calc(440ms * var(--bs-motion-scale))' },
   { name: '--bs-dur-600', value: 'calc(600ms * var(--bs-motion-scale))' },
   { name: '--bs-ease-02-08-02-1', value: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },

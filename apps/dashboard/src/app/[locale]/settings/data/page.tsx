@@ -13,6 +13,7 @@ import { statusMessage, translator, type MessageKey } from '../../../../i18n/mes
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { requestWorkspaceDeletionAction } from './actions';
 import { RetentionCard } from '../retention-card';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -190,13 +191,12 @@ export default async function DataControlsPage({
                   aria-label={t('data.workspaceDeletion.password')}
                   data-testid="workspace-deletion-password"
                 />
-                <button
-                  type="submit"
+                <SubmitButton
                   className="bsp-btn bsp-dt-del"
                   data-testid="workspace-deletion-confirm"
                 >
                   {t('data.workspaceDeletion.confirm')}
-                </button>
+                </SubmitButton>
               </form>
             ) : (
               <span className="bsp-pill bsp-p-neu bsp-dt-owner">

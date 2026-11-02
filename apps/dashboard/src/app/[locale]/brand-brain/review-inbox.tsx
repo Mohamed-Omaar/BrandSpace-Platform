@@ -5,6 +5,7 @@ import { translator } from '../../../i18n/messages';
 import type { CandidateData } from './brand-brain-view';
 import { reviewCandidateAction } from './actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * D4 + C1 (Phase 2C) — THE ONE REVIEW, in the prototype's review card
@@ -296,13 +297,9 @@ export function ReviewInbox({
                   <input type="hidden" name="area" value={current.area} />
                   <input type="hidden" name="candidateId" value={current.id} />
                   <input type="hidden" name="decision" value="accept" />
-                  <button
-                    type="submit"
-                    className="bsp-btn bsp-pur"
-                    data-testid={`accept-${current.id}`}
-                  >
+                  <SubmitButton className="bsp-btn bsp-pur" data-testid={`accept-${current.id}`}>
                     {t('bb.reviewAccept')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
               {current.acceptAllowed ? (
@@ -320,13 +317,12 @@ export function ReviewInbox({
                 <input type="hidden" name="area" value={current.area} />
                 <input type="hidden" name="candidateId" value={current.id} />
                 <input type="hidden" name="decision" value="reject" />
-                <button
-                  type="submit"
+                <SubmitButton
                   className="bsp-btn bsp-sec bsp-bb-rv-reject"
                   data-testid={`reject-${current.id}`}
                 >
                   {t('bb.reviewReject')}
-                </button>
+                </SubmitButton>
               </form>
               {!current.acceptAllowed && current.replaced && canEdit ? (
                 <button
