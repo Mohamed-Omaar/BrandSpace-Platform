@@ -756,6 +756,12 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
           missing: result.turn.missing,
           saveFact: result.turn.saveFact,
           rejectedToolKeys: result.turn.rejectedToolKeys,
+          // PR B — the permissions a refused workspace read asked for; the
+          // dashboard words the refusal as that screen does.
+          deniedPermissions: result.turn.deniedToolKeys.flatMap((key) => {
+            const tool = findTool(key);
+            return tool ? [tool.permission] : [];
+          }),
           planId: result.created.plan.id,
           planHash: result.created.plan.planHash,
           planVersion: result.created.plan.planVersion,

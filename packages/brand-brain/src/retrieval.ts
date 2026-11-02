@@ -371,7 +371,8 @@ function buildContext(
 
   for (const item of items) {
     const block = fenceUntrusted(
-      `BRAND KNOWLEDGE ${item.area} v${item.version}`,
+      // PR B — the fact's id, so a card can name the fact to edit or remove.
+      `BRAND KNOWLEDGE ${item.area} v${item.version} id ${item.id}`,
       `${item.title}\n${item.body}`,
     );
     if (block.length > budget) break;

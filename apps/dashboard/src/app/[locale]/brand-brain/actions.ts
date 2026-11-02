@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields, validationFieldOf } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields, validationFieldOf } from '@brandspace/shared';
 import {
   acceptConfidentSchema,
   checksumOf,
@@ -473,6 +473,33 @@ export async function acceptConfidentCandidatesAction(formData: FormData): Promi
     });
   } catch (error: unknown) {
     destination = failure(locale, error, 'accept-confident');
+  }
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}
+
+/**
+ * PR B (D-591) — THE ONE-TIME CLEAN-UP: merge today's duplicate facts, once
+ * the owner confirms the card. Review rights, as accepting facts needs.
+ */
+export async function mergeDuplicatesAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.review');
+    const brandId = String(formData.get('brandId') ?? '');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brandId)) {
+      throw new AppError('VALIDATION_FAILED', 'A brand is required.');
+    }
+    const outcome = await inBrandBrain(session.workspace.workspaceId, async ({ knowledge }) =>
+      knowledge.mergeDuplicates({ brandId, actor: knowledgeActor(session) }),
+    );
+    destination = pageUrl(locale, {
+      ok: 'DUPLICATES_MERGED',
+      merged: String(outcome.archived + outcome.setAside),
+    });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'merge-duplicates');
   }
   revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);

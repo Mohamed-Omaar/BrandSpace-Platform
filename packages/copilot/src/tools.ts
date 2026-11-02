@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { CopilotActionClass } from '@brandspace/database';
+import { BRAND_KNOWLEDGE_AREAS } from '@brandspace/brand-brain';
 
 /**
  * THE COPILOT'S TOOL REGISTRY — a CLOSED SET, and the reason the Copilot is an
@@ -175,7 +176,115 @@ export const COPILOT_TOOLS = [
     messageKey: 'campaignList',
   },
 
+  /*
+   * PR B (D-591) — THE WORKSPACE READS. "How many credits do we have?" and
+   * "who is on my team?" are answered from these, never from the model: every
+   * number carries the period it covers and the source it was read from.
+   * Each asks the SAME permission as the screen that shows it, so a member who
+   * may not open Billing is refused here exactly as the screen refuses them.
+   * They name no brand (`brandScope: 'none'`); channels are filtered by the
+   * caller's own BrandScope in the executor.
+   */
+  {
+    key: 'team.list',
+    input: z.object({}),
+    permission: 'member.read',
+    brandScope: 'none',
+    actionClass: 'READ_ONLY',
+    spendsCredits: false,
+    undoable: false,
+    messageKey: 'teamList',
+  },
+  {
+    key: 'credits.balance',
+    input: z.object({}),
+    permission: 'credits.read',
+    brandScope: 'none',
+    actionClass: 'READ_ONLY',
+    spendsCredits: false,
+    undoable: false,
+    messageKey: 'creditsBalance',
+  },
+  {
+    key: 'plan.summary',
+    input: z.object({}),
+    permission: 'billing.read',
+    brandScope: 'none',
+    actionClass: 'READ_ONLY',
+    spendsCredits: false,
+    undoable: false,
+    messageKey: 'planSummary',
+  },
+  {
+    key: 'channels.list',
+    input: z.object({}),
+    permission: 'integrations.read',
+    brandScope: 'none',
+    actionClass: 'READ_ONLY',
+    spendsCredits: false,
+    undoable: false,
+    messageKey: 'channelsList',
+  },
+  {
+    key: 'notifications.recent',
+    input: z.object({ limit: z.number().int().min(1).max(20).default(10) }),
+    permission: 'workspace.read',
+    brandScope: 'none',
+    actionClass: 'READ_ONLY',
+    spendsCredits: false,
+    undoable: false,
+    messageKey: 'notificationsRecent',
+  },
+
   // --- B. INTERNAL_REVERSIBLE ----------------------------------------------
+  /*
+   * PR B (D-591) — A FACT IS PROPOSED AS A CARD. The Copilot never writes
+   * Brand Brain on its own: a fact typed in the conversation, an edit and a
+   * removal each become a card the person confirms, and the step then runs
+   * with THEIR permission — `brand_brain.edit` to propose; with
+   * `brand_brain.review` too, an added fact is approved at once, and with edit
+   * alone it is SENT FOR REVIEW (the D7 rule the Brand Brain page applies).
+   * Not undoable here: a fact's own page has its version history, rollback
+   * and Undo archive.
+   */
+  {
+    key: 'brand_brain.add_fact',
+    input: brandArgument.extend({
+      area: z.enum(BRAND_KNOWLEDGE_AREAS as unknown as [string, ...string[]]),
+      title: z.string().trim().min(1).max(200),
+      body: z.string().trim().min(1).max(2_000),
+    }),
+    permission: 'brand_brain.edit',
+    brandScope: 'required',
+    actionClass: 'INTERNAL_REVERSIBLE',
+    spendsCredits: false,
+    undoable: false,
+    messageKey: 'brandBrainAddFact',
+  },
+  {
+    key: 'brand_brain.edit_fact',
+    input: brandArgument.extend({
+      factId: z.string().uuid(),
+      title: z.string().trim().min(1).max(200).optional(),
+      body: z.string().trim().min(1).max(2_000),
+    }),
+    permission: 'brand_brain.edit',
+    brandScope: 'required',
+    actionClass: 'INTERNAL_REVERSIBLE',
+    spendsCredits: false,
+    undoable: false,
+    messageKey: 'brandBrainEditFact',
+  },
+  {
+    key: 'brand_brain.remove_fact',
+    input: brandArgument.extend({ factId: z.string().uuid() }),
+    permission: 'brand_brain.edit',
+    brandScope: 'required',
+    actionClass: 'INTERNAL_REVERSIBLE',
+    spendsCredits: false,
+    undoable: false,
+    messageKey: 'brandBrainRemoveFact',
+  },
   //
   // They change tenant state and they can be put back. Each one has an explicit
   // compensation contract in `undo.ts` — not "run the opposite command and
@@ -377,6 +486,18 @@ export function requiresConfirmation(actionClass: CopilotActionClass): boolean {
  * action somebody cannot take is the dead button §20 forbids, and hiding it
  * keeps the model from proposing plans that can only fail.
  */
+/**
+ * PR B (D-591) — the workspace reads: a request for one the member may not
+ * open is refused in the screen's words (`permission_denied`), not hidden.
+ */
+export const WORKSPACE_READ_KEYS: ReadonlySet<string> = new Set([
+  'team.list',
+  'credits.balance',
+  'plan.summary',
+  'channels.list',
+  'notifications.recent',
+]);
+
 /** The tools that read Brand Brain knowledge, withheld while the brand's switch is off. */
 export const BRAND_BRAIN_TOOL_KEYS: ReadonlySet<string> = new Set(['brand.context']);
 

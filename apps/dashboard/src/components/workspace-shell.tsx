@@ -35,6 +35,7 @@ import { copilotSurfaceForPath } from '../server/copilot-surface';
 import { RATE_METRIC_KEYS, copilotLabels } from '../server/copilot-labels';
 import { copilotDrawerSubject } from '../server/copilot-context';
 import { copilotRetentionDays } from '../server/copilot-retention';
+import { copilotDenials } from '../server/copilot-denials';
 import { shellSession } from '../server/topbar-counts';
 import { GlobalCopilot } from './global-copilot';
 import { NotificationsBell } from './notifications-bell';
@@ -938,6 +939,7 @@ export async function WorkspaceShell({
   // PR B — the conversation's retention, for the line under its composer.
   const shell = !focus && copilot && copilotLink ? await shellSession() : null;
   const copilotRetention = shell ? await copilotRetentionDays(shell.workspace.workspaceId) : null;
+  const copilotDenied = shell ? await copilotDenials(locale, shell) : {};
   const fab =
     focus || !copilot ? null : copilotLink ? (
       <GlobalCopilot
@@ -950,6 +952,7 @@ export async function WorkspaceShell({
         labels={copilotLabels(words, identity)}
         rateMetricKeys={RATE_METRIC_KEYS}
         retentionDays={copilotRetention}
+        denials={copilotDenied}
         strings={{
           chooseBrandTitle: t('brand.chooseTitle'),
           chooseBrandBody: t('copilot.noBrandBody'),

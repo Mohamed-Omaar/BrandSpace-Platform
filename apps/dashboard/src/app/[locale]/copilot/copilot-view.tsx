@@ -86,7 +86,9 @@ interface PlanResponse {
   readonly summary?: { ar: string; en: string };
   /** Phase 2C D9: a brand question while the brand's "Use Brand Brain" is off. */
   /** Phase 2C-3 D8: `brand_brain_missing` — a brand question nothing usable answers. */
-  readonly notice?: 'brand_brain_off' | 'brand_brain_missing' | null;
+  readonly notice?: 'brand_brain_off' | 'brand_brain_missing' | 'permission_denied' | null;
+  /** PR B — the permissions a refused workspace read asked for. */
+  readonly deniedPermissions?: readonly string[];
   /** D8 — the knowledge areas this turn's brand facts came from (retrieval, not the model). */
   readonly brandFactAreas?: readonly string[];
   /** D8 — the key question that would answer it, when one matches. */
@@ -143,6 +145,7 @@ export function CopilotView({
   surface,
   labels,
   creditsLabel,
+  denials = {},
   subject = null,
   initialRequest = '',
   rateMetricKeys = [],
@@ -214,6 +217,11 @@ export function CopilotView({
   readonly labels: CopilotLabels;
   /** Omitted where no real balance can be read. Nothing is invented (§2.2). */
   readonly creditsLabel: string | null;
+  /**
+   * PR B (D-591) — the screen's own refusal (E6) per permission this member
+   * lacks, so "show me our billing" is refused in the words Billing uses.
+   */
+  readonly denials?: Readonly<Record<string, string>>;
 }) {
   /*
    * THE DICTIONARY IS RESOLVED HERE, FROM THE LOCALE — never handed in as a
@@ -472,11 +480,16 @@ export function CopilotView({
           ? t('copilot.notice.brandBrainOff')
           : result.notice === 'brand_brain_missing'
             ? missingSentence(result.missing ?? null)
-            : result.saveFact
-              ? t('copilot.saveFact.summary')
-              : locale === 'ar'
-                ? result.summary?.ar
-                : result.summary?.en;
+            : result.notice === 'permission_denied'
+              ? [...new Set(result.deniedPermissions ?? [])]
+                  .map((key) => denials[key])
+                  .filter((line): line is string => Boolean(line))
+                  .join(' ') || t('copilot.notice.permissionDenied')
+              : result.saveFact
+                ? t('copilot.saveFact.summary')
+                : locale === 'ar'
+                  ? result.summary?.ar
+                  : result.summary?.en;
       if (summary) {
         setMessages((current) => [
           ...current,
@@ -1057,6 +1070,13 @@ function InspectionResults({
   );
 }
 
+/** PR B — a connection's status as the integrations screen words it. */
+const CHANNEL_STATUS: Readonly<Record<string, string>> = {
+  ACTIVE: 'active',
+  NEEDS_REAUTH: 'needsReauth',
+  DISABLED: 'disabled',
+};
+
 function InspectionLines({
   call,
   t,
@@ -1144,8 +1164,110 @@ function InspectionLines({
         );
       }
       break;
+    /*
+     * PR B (D-591) — THE WORKSPACE READS. Every number with its period (or
+     * "as of" for a count now) and the place it was read from, so a figure in
+     * the conversation is always traceable to a screen.
+     */
+    case 'team.list':
+      lines.push(
+        t('copilot.inspection.team', '')
+          .replace('{active}', number.format(Number(result['activeCount'] ?? 0)))
+          .replace('{invited}', number.format(Number(result['invitedCount'] ?? 0))),
+      );
+      for (const member of list('members').slice(0, 20)) {
+        lines.push(
+          `${String(member['name'] ?? '—')} — ${String((member['role'] as Record<string, unknown> | undefined)?.[_locale === 'ar' ? 'ar' : 'en'] ?? member['roleKey'] ?? '')}${member['status'] === 'INVITED' ? ` (${t('copilot.inspection.invited', '')})` : ''}`,
+        );
+      }
+      break;
+    case 'credits.balance':
+      if (typeof result['balanceCredits'] === 'number') {
+        lines.push(
+          t('copilot.inspection.creditsLeft', '').replace(
+            '{credits}',
+            number.format(result['balanceCredits']),
+          ),
+        );
+      }
+      if (typeof result['usedThisPeriodCredits'] === 'number') {
+        lines.push(
+          t('copilot.inspection.creditsUsed', '').replace(
+            '{credits}',
+            number.format(result['usedThisPeriodCredits']),
+          ),
+        );
+      }
+      break;
+    case 'plan.summary':
+      if (typeof result['planKey'] === 'string') {
+        lines.push(
+          t('copilot.inspection.plan', '')
+            .replace(
+              '{plan}',
+              String(
+                (result['planName'] as Record<string, unknown> | null | undefined)?.[
+                  _locale === 'ar' ? 'ar' : 'en'
+                ] ?? result['planKey'],
+              ),
+            )
+            .replace(
+              '{status}',
+              t(`billing.status.${String(result['status'])}`, String(result['status'] ?? '')),
+            ),
+        );
+      }
+      if (typeof result['trialEndsAt'] === 'string' && result['status'] === 'TRIALING') {
+        const at = Date.parse(result['trialEndsAt']);
+        if (!Number.isNaN(at)) {
+          lines.push(
+            t('copilot.inspection.trialEnds', '').replace('{date}', time.format(new Date(at))),
+          );
+        }
+      }
+      break;
+    case 'channels.list':
+      lines.push(
+        t('copilot.inspection.channels', '').replace(
+          '{count}',
+          number.format(Number(result['count'] ?? 0)),
+        ),
+      );
+      for (const channel of list('channels').slice(0, 20)) {
+        lines.push(
+          `${String(channel['name'] ?? '')} — ${t(`integrations.provider.${String(channel['provider']).toLowerCase()}`, String(channel['provider'] ?? ''))} · ${t(`integrations.status.${CHANNEL_STATUS[String(channel['status'])] ?? 'active'}`, String(channel['status'] ?? ''))}`,
+        );
+      }
+      break;
+    case 'notifications.recent':
+      lines.push(
+        t('copilot.inspection.unread', '').replace(
+          '{count}',
+          number.format(Number(result['unreadCount'] ?? 0)),
+        ),
+      );
+      break;
     default:
       break;
+  }
+
+  // PR B — where the numbers came from, and the period they cover.
+  if (typeof result['source'] === 'string' && lines.length > 0) {
+    const period = result['period'] as { from?: unknown; to?: unknown } | null | undefined;
+    const from = typeof period?.from === 'string' ? Date.parse(period.from) : Number.NaN;
+    const to = typeof period?.to === 'string' ? Date.parse(period.to) : Number.NaN;
+    const asOf = typeof result['asOf'] === 'string' ? Date.parse(result['asOf']) : Number.NaN;
+    const source = t(`copilot.source.${result['source']}`, String(result['source']));
+    lines.push(
+      !Number.isNaN(from)
+        ? t('copilot.inspection.sourcePeriod', '')
+            .replace('{source}', source)
+            .replace('{from}', time.format(new Date(from)))
+            .replace('{to}', Number.isNaN(to) ? '—' : time.format(new Date(to)))
+        : t('copilot.inspection.sourceAsOf', '')
+            .replace('{source}', source)
+            .replace('{at}', Number.isNaN(asOf) ? '—' : time.format(new Date(asOf))),
+    );
   }
 
   if (lines.length === 0) {

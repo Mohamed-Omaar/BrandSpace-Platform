@@ -41,10 +41,13 @@ export function GlobalCopilot({
   labels,
   rateMetricKeys = [],
   retentionDays = null,
+  denials = {},
   strings,
 }: {
   /** PR B — how long the one conversation is kept (the line under the composer). */
   readonly retentionDays?: number | null;
+  /** PR B — the screen's own refusal per permission this member lacks. */
+  readonly denials?: Readonly<Record<string, string>>;
   readonly locale: string;
   /**
    * The server's `systemClock.now()`, as ISO: what this client view reads
@@ -263,6 +266,7 @@ export function GlobalCopilot({
                 labels={labels}
                 rateMetricKeys={rateMetricKeys}
                 retentionDays={retentionDays}
+                denials={denials}
                 panel={{
                   greeting: strings.greeting,
                   placeholder: strings.placeholder,
