@@ -930,8 +930,9 @@ workers, sharding, reporter and test selection did not change.
 - **Two E2E shards (D-455), then four (D-593).** The Playwright job runs as four shards, each with
   its own database and seed; the check named "Playwright E2E (RTL/LTR + accessibility)" is an
   aggregate that passes only when every shard passes. `chromium-desktop` is split in half with
-  Playwright's own `--shard` (shards 1 and 2); shard 3 is `chromium-mobile`, `admin-console` and
-  `owner-simple-mode`; shard 4 every other project. A coverage step fails a shard if the four lists
+  Playwright's own `--shard` (shards 1 and 2); shard 3 is `admin-console`, `owner-simple-mode`,
+  `assets` and `brand-brain-visual`; shard 4 is the old shard 2 exactly, because its serial projects
+  share the seeded workspace and are proven safe together. A coverage step fails a shard if the four lists
   stop covering the whole suite exactly once — a new project must be added to one of them. A project
   that depends on another runs in that project's shard (`phase8-flow` after `brand-brain`, D-457).
 

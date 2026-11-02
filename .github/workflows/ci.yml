@@ -304,8 +304,12 @@ jobs:
     # servers. The aggregate job below keeps the original check name and passes
     # only when every shard passes. `chromium-desktop` is most of the suite, so
     # it is split in half by Playwright's own `--shard` (it runs fully parallel,
-    # so the halves are even); the other projects are grouped by time. A
-    # project stays in the shard of the project it depends on:
+    # so the halves are even). Shard 3 is the projects that ran beside it in
+    # the old shard 1; shard 4 is the old shard 2 exactly, because its serial
+    # projects share the seeded workspace and were proven safe in that company
+    # (taking `chromium-mobile` out let them run against each other, and the
+    # viewer suites then found their seeded rows changed). A project stays in
+    # the shard of the project it depends on:
     # `owner-simple-mode` with `admin-console`, `production-email` with
     # `phase10-platform`, and `phase8-flow` with `brand-brain` (D-457). The
     # coverage step fails the shard if the four lists ever stop covering the
@@ -322,13 +326,14 @@ jobs:
       E2E_SHARD_1: --project=chromium-desktop --shard=1/2
       E2E_SHARD_2: --project=chromium-desktop --shard=2/2
       E2E_SHARD_3: >-
-        --project=chromium-mobile --project=admin-console --project=owner-simple-mode
+        --project=admin-console --project=owner-simple-mode --project=assets
+        --project=brand-brain-visual
       E2E_SHARD_4: >-
-        --project=assets --project=brand-brain-visual --project=brand-brain --project=design-system
-        --project=customer-app --project=content-calendar --project=brand-context
-        --project=approvals --project=analytics-copilot --project=social-publishing
-        --project=phase8-journey --project=phase8-flow --project=content-studio
-        --project=phase10-platform --project=production-email --project=phase4-security
+        --project=chromium-mobile --project=brand-brain --project=design-system --project=customer-app
+        --project=content-calendar --project=brand-context --project=approvals
+        --project=analytics-copilot --project=social-publishing --project=phase8-journey
+        --project=phase8-flow --project=content-studio --project=phase10-platform
+        --project=production-email --project=phase4-security
     # A CEILING, so a hang fails with an uploaded report instead of inheriting
     # GitHub's six-hour default.
     #
