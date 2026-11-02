@@ -47,6 +47,8 @@ const POLICY: CreditPolicy = {
 
 const MODEL_KEY = 'mock-fast';
 const TASK_KEY = 'caption.generate';
+/** PR A2 (item 10) — a translation is routed and priced as its own task. */
+const TRANSLATE_TASK_KEY = 'content.translate';
 
 const CONTENT_POLICY: ContentPolicy = {
   dialects: {
@@ -152,38 +154,43 @@ function configuration(): AiConfiguration {
         costCurrency: 'USD',
       },
     ],
-    routingRules: [
-      {
-        taskKey: TASK_KEY,
-        scope: 'global',
-        planKey: null,
-        workspaceId: null,
-        primaryModelKey: MODEL_KEY,
-        fallbackModelKeys: [],
-        timeoutMs: 5_000,
-        maxCostPerRequestMinor: null,
-        priority: 0,
-        parameters: {
-          temperature: 0.4,
-          maxOutputTokens: 256,
-          promptTemplateVersion: 1,
-          // D-78, and the same reasoning as Brand Brain chat: the STUDIO owns
-          // the artifact. `content_item` and `content_variant` carry the words
-          // and the retention window; asking the gateway to persist them too
-          // would make it a second content store.
-          persistOutput: false,
-          outputRetentionDays: null,
-        },
-        retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
-        moderateInput: false,
-        moderationModelKey: null,
+    routingRules: [TASK_KEY, TRANSLATE_TASK_KEY].map((taskKey) => ({
+      taskKey,
+      scope: 'global' as const,
+      planKey: null,
+      workspaceId: null,
+      primaryModelKey: MODEL_KEY,
+      fallbackModelKeys: [],
+      timeoutMs: 5_000,
+      maxCostPerRequestMinor: null,
+      priority: 0,
+      parameters: {
+        temperature: 0.4,
+        maxOutputTokens: 256,
+        promptTemplateVersion: 1,
+        // D-78, and the same reasoning as Brand Brain chat: the STUDIO owns
+        // the artifact. `content_item` and `content_variant` carry the words
+        // and the retention window; asking the gateway to persist them too
+        // would make it a second content store.
+        persistOutput: false,
+        outputRetentionDays: null,
       },
-    ],
+      retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
+      moderateInput: false,
+      moderationModelKey: null,
+    })),
     creditRules: [
       {
         taskKey: TASK_KEY,
         modelKey: MODEL_KEY,
         baseMilliCredits: 100,
+        perUnitMilliCredits: 50,
+        unit: '1k_tokens',
+      },
+      {
+        taskKey: TRANSLATE_TASK_KEY,
+        modelKey: MODEL_KEY,
+        baseMilliCredits: 70,
         perUnitMilliCredits: 50,
         unit: '1k_tokens',
       },
@@ -813,6 +820,12 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
     expect(variant.id).toBe(variantId);
     expect(variant.body).toBe('حل الربيع.');
     expect(variant.locale).toBe('AR');
+    // PR A2 (item 10) — routed and priced as content.translate, not caption.generate.
+    const request = await platform.aiRequest.findUnique({
+      where: { id: variant.aiRequestId ?? '' },
+      select: { taskKey: true },
+    });
+    expect(request?.taskKey).toBe(TRANSLATE_TASK_KEY);
     expect(variant.arabicDialect).toBe('msa');
     // A caption a person chose to translate is ASSISTED, not generated: the
     // distinction is what makes provenance mean something to a reviewer.
@@ -935,9 +948,14 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
     nextOutput = JSON.stringify({ body: 'ignored', hashtags: ['spring', 'sale'] });
     expect((await run()).variant.hashtags).toEqual(['kunafa', 'Spring', 'sale']);
 
-    // A model that proposes nothing takes nothing away.
+    // A model that proposes nothing takes nothing away — and, PR A2 (item 10),
+    // costs nothing: an edit that changes nothing is refused before the charge.
     nextOutput = JSON.stringify({ body: 'ignored', hashtags: [] });
-    expect((await run()).variant.hashtags).toEqual(['kunafa', 'Spring', 'sale']);
+    await expect(run()).rejects.toMatchObject({ publicDetails: { reason: 'EDIT_NO_CHANGE' } });
+    const after = await inA((_studio, db) =>
+      db.contentVariant.findUnique({ where: { id: variantId }, select: { hashtags: true } }),
+    );
+    expect(after?.hashtags).toEqual(['kunafa', 'Spring', 'sale']);
   });
 
   it('D-284: an AI edit of an APPROVED post returns it to Draft, audibly', async () => {
@@ -1548,5 +1566,157 @@ describe('a customer can write a post without a model (PHASE 2)', () => {
         }),
       ),
     ).rejects.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('PR A2 (item 10) — an AI edit does what its button says, or costs nothing', () => {
+  const tool = (
+    variantId: string,
+    name: 'shorten' | 'expand' | 'tone' | 'rewrite' | 'translate',
+    extra: { argument?: string; targetLocale?: 'AR' | 'EN'; expectedBody?: string } = {},
+  ) =>
+    inA((studio) =>
+      studio.applyTool({
+        variantId,
+        tool: name,
+        idempotencyKey: key(),
+        actorUserId: fixtures.a.userId,
+        planKey: null,
+        actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
+        ...extra,
+      }),
+    );
+  const wallet = () =>
+    platform.creditWallet.findUnique({
+      where: { workspaceId: fixtures.a.workspaceId },
+      select: { balanceMilliCredits: true, reservedMilliCredits: true },
+    });
+  const requests = () =>
+    platform.aiRequest.count({ where: { workspaceId: fixtures.a.workspaceId } });
+  const draftWith = async (body: string) => {
+    nextOutput = reply([{ platformKey: 'instagram', body }]);
+    const generated = await inA((studio) =>
+      studio.generate({ ...baseInput(), idempotencyKey: key() }),
+    );
+    return generated.variants[0]?.id ?? '';
+  };
+  const bodyOf = async (variantId: string) =>
+    (
+      await inA((_studio, db) =>
+        db.contentVariant.findUnique({ where: { id: variantId }, select: { body: true } }),
+      )
+    )?.body;
+  const original =
+    'Our spring collection arrives this Friday in every store, with new colours and the same fair prices.';
+
+  it('Shorter: an answer not at least 30% shorter is refused and not charged; the words stay', async () => {
+    const variantId = await draftWith(original);
+    const before = await wallet();
+    nextOutput = JSON.stringify({ body: original.slice(0, original.length - 5), hashtags: [] });
+    await expect(tool(variantId, 'shorten')).rejects.toMatchObject({
+      publicDetails: { reason: 'EDIT_NOT_SHORTER' },
+    });
+    expect(await wallet()).toEqual(before);
+    expect(await bodyOf(variantId)).toBe(original);
+
+    // At least 30% shorter, the meaning kept: written and charged.
+    nextOutput = JSON.stringify({ body: 'Spring collection: in stores Friday.', hashtags: [] });
+    const result = await tool(variantId, 'shorten');
+    expect(result.variant.body).toBe('Spring collection: in stores Friday.');
+    expect(result.creditsChargedMilli).toBeGreaterThan(0n);
+  });
+
+  it('Shorter states the measurable target in its instruction', async () => {
+    const variantId = await draftWith(original);
+    nextOutput = JSON.stringify({ body: 'Spring: Friday, every store.', hashtags: [] });
+    await tool(variantId, 'shorten');
+    expect(lastPrompt).toContain(`The caption is ${[...original].length} characters.`);
+    expect(lastPrompt).toContain(
+      `Return at most ${Math.floor([...original].length * 0.7)} characters (at least 30% shorter).`,
+    );
+  });
+
+  it('Longer: an answer not at least 30% longer is refused and not charged', async () => {
+    const variantId = await draftWith(original);
+    const before = await wallet();
+    nextOutput = JSON.stringify({ body: `${original} Visit us.`, hashtags: [] });
+    await expect(tool(variantId, 'expand')).rejects.toMatchObject({
+      publicDetails: { reason: 'EDIT_NOT_LONGER' },
+    });
+    expect(await wallet()).toEqual(before);
+    nextOutput = JSON.stringify({
+      body: `${original} Every piece is made to last, and our team will help you choose in store.`,
+      hashtags: [],
+    });
+    expect((await tool(variantId, 'expand')).creditsChargedMilli).toBeGreaterThan(0n);
+  });
+
+  it('a nearly identical answer (Friendlier that changed nothing visible) is not charged', async () => {
+    const variantId = await draftWith(original);
+    const before = await wallet();
+    nextOutput = JSON.stringify({
+      body: original.replace('Friday,', 'Friday') + '!',
+      hashtags: [],
+    });
+    await expect(tool(variantId, 'tone', { argument: 'friendly and warm' })).rejects.toMatchObject({
+      publicDetails: { reason: 'EDIT_NO_CHANGE' },
+    });
+    expect(await wallet()).toEqual(before);
+    expect(await bodyOf(variantId)).toBe(original);
+  });
+
+  it('the edit runs on the words on screen: unsaved words are refused before any request', async () => {
+    const variantId = await draftWith(original);
+    const count = await requests();
+    await expect(
+      tool(variantId, 'shorten', { expectedBody: `${original} (typed, not saved)` }),
+    ).rejects.toMatchObject({ publicDetails: { reason: 'EDIT_STALE' } });
+    expect(await requests()).toBe(count);
+    // The saved words, as on screen: it runs.
+    nextOutput = JSON.stringify({ body: 'Spring: Friday, every store.', hashtags: [] });
+    expect((await tool(variantId, 'shorten', { expectedBody: original })).variant.body).toBe(
+      'Spring: Friday, every store.',
+    );
+  });
+
+  it('Longer on a caption at the channel limit is refused before any request', async () => {
+    nextOutput = reply([{ platformKey: 'x', body: 'b'.repeat(250) }]);
+    const generated = await inA((studio) =>
+      studio.generate({ ...baseInput(), platformKeys: ['x'], idempotencyKey: key() }),
+    );
+    const count = await requests();
+    await expect(tool(generated.variants[0]?.id ?? '', 'expand')).rejects.toMatchObject({
+      publicDetails: { reason: 'EDIT_CANNOT_GROW' },
+    });
+    expect(await requests()).toBe(count);
+  });
+
+  it('Translate is quoted and charged as content.translate, at its own price', async () => {
+    const variantId = await draftWith(original);
+    const quoteCaption = await inA((studio) =>
+      studio.quoteTool({ variantId, tool: 'shorten', planKey: null, actorBrandScope: [] }),
+    );
+    const quoteTranslate = await inA((studio) =>
+      studio.quoteTool({
+        variantId,
+        tool: 'translate',
+        targetLocale: 'AR',
+        planKey: null,
+        actorBrandScope: [],
+      }),
+    );
+    // The fixture prices translation 70 base milli-credits, a caption 100.
+    expect(quoteTranslate.estimateMilli).toBeLessThan(quoteCaption.estimateMilli);
+    nextOutput = JSON.stringify({ body: 'تصل مجموعة الربيع يوم الجمعة.', hashtags: [] });
+    const result = await tool(variantId, 'translate', { targetLocale: 'AR' });
+    const request = await platform.aiRequest.findUnique({
+      where: { id: result.aiRequestId ?? '' },
+      select: { taskKey: true, creditsReservedMilli: true },
+    });
+    expect(request?.taskKey).toBe('content.translate');
+    expect(request?.creditsReservedMilli).toBe(quoteTranslate.estimateMilli);
   });
 });

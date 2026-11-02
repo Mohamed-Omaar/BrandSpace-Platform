@@ -427,6 +427,7 @@ export function registerContentRoutes(app: FastifyInstance): void {
           argument: parsed.data.argument,
           targetLocale: parsed.data.targetLocale,
           idempotencyKey: parsed.data.idempotencyKey,
+          expectedBody: parsed.data.expectedBody,
           actorUserId: caller.userId,
           planKey: facts.planKey,
           actorBrandScope: caller.brandScope,

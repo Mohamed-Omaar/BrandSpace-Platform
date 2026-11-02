@@ -13,6 +13,7 @@ import { ChannelMark } from '../../calendar/prototype-calendar';
 import { generationKeyFor, visitKeyFor } from './idempotency';
 import type { MediaOptionView } from './media-picker';
 import { CalendarGlyph, DraftEditor, SparkGlyph, type StudioNotes } from './draft-editor';
+import type { LastAiEdit } from './ai-edit-compare';
 import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
@@ -433,6 +434,13 @@ export interface ComposerViewProps {
 }
 
 /** The customer-safe codes the proxy and the API can return. */
+/** A short, stable fingerprint of some words, so an edit of new words is a new request. */
+function textKey(text: string): string {
+  let hash = 5381;
+  for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+  return `${text.length}.${(hash >>> 0).toString(36)}`;
+}
+
 const FAILURE_KEYS: Record<string, string> = {
   QUOTA_EXCEEDED: 'content.error.quota',
   AI_PAUSED: 'ai.paused',
@@ -767,8 +775,15 @@ export function ComposerView({
         // provider name and no stack ever reaches this screen (AC-11.6).
         // PR A2: a daily/monthly AI budget is named, with its reset time.
         const key = FAILURE_KEYS[code] ?? 'content.error.generic';
+        // PR A2 (item 10) — an AI edit that was refused names why (and that it was free).
+        const reason = (payload as ApiErrorBody | null)?.error?.details?.['reason'];
+        const editKey =
+          typeof reason === 'string' && reason.startsWith('EDIT_')
+            ? `editor.ai.refused.${reason}`
+            : null;
         setFailure(
-          aiLimitMessage(payload as ApiErrorBody, t, locale) ??
+          (editKey ? t[editKey] : undefined) ??
+            aiLimitMessage(payload as ApiErrorBody, t, locale) ??
             t[key] ??
             t['content.error.generic'] ??
             '',
@@ -856,11 +871,23 @@ export function ComposerView({
     }
   };
 
-  const runTool = async (variantId: string, tool: string, argument?: string) => {
+  /** PR A2 (item 10) — the last AI edit, shown before/after with Undo. */
+  const [lastEdit, setLastEdit] = useState<LastAiEdit | null>(null);
+  const runTool = async (
+    variantId: string,
+    tool: string,
+    argument?: string,
+    visible?: { readonly body: string; readonly hashtags: readonly string[] },
+  ) => {
     setBusy(`${variantId}:${tool}`);
+    setLastEdit(null);
+    const stored = draft?.variants.find((variant) => variant.id === variantId);
+    const before = visible ?? { body: stored?.body ?? '', hashtags: stored?.hashtags ?? [] };
     const payload = await post('tool', {
       variantId,
       tool,
+      // The words on screen: refused (free) if they are not the saved words.
+      expectedBody: before.body,
       ...(tool === 'tone' && argument ? { argument } : {}),
       ...(tool === 'translate'
         ? { targetLocale: draftVariantLocale(draft, variantId) === 'AR' ? 'EN' : 'AR' }
@@ -868,11 +895,21 @@ export function ComposerView({
       // The variant's VERSION is part of the key: the same tool on the same
       // words is a retry, the same tool after an edit is a new request.
       idempotencyKey: `${generationIdempotencyKey}:${tool}:${argument ?? ''}:${variantId}:${
-        draft?.variants.find((variant) => variant.id === variantId)?.updatedAt ?? ''
-      }`,
+        stored?.updatedAt ?? ''
+      }:${textKey(before.body)}`,
     });
     setBusy(null);
     if (payload) {
+      const variant = payload['variant'] as
+        { body?: string | null; hashtags?: readonly string[] } | undefined;
+      if (variant && tool !== 'refresh_facts') {
+        setLastEdit({
+          variantId,
+          tool,
+          before: { body: before.body, hashtags: before.hashtags },
+          after: { body: variant.body ?? '', hashtags: variant.hashtags ?? [] },
+        });
+      }
       // PR D (S6) — every paid action names what it cost (`spend()`).
       const spent = spentMessage(payload['creditsChargedMilli'], t);
       if (spent) showToast({ tone: 'success', message: spent, testId: 'studio-spent-toast' });
@@ -1301,7 +1338,23 @@ export function ComposerView({
           failed={failed}
           {...(startFrom ? { startFrom } : {})}
           canGenerateMedia={can.generateMedia ?? false}
-          onTool={(variantId, tool, argument) => void runTool(variantId, tool, argument)}
+          onTool={(variantId, tool, argument, visible) =>
+            void runTool(variantId, tool, argument, visible)
+          }
+          lastEdit={lastEdit}
+          onKeepEdit={() => setLastEdit(null)}
+          onUndoEdit={() => {
+            // Undo saves the words from before: an ordinary save, no AI, no credit.
+            if (!lastEdit || !draft) return;
+            const form = new FormData();
+            form.set('locale', locale);
+            form.set('itemId', draft.id);
+            form.set('variantId', lastEdit.variantId);
+            form.set('body', lastEdit.before.body);
+            form.set('hashtags', lastEdit.before.hashtags.join(' '));
+            setLastEdit(null);
+            void actions.save(form);
+          }}
           actions={actions}
         />
       ) : (

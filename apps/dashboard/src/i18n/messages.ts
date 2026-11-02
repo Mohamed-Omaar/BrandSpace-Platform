@@ -2042,6 +2042,21 @@ export const messages = {
       'تستهلك تعديلات الذكاء الاصطناعي رصيدًا وتغيّر نسخة هذه المنصة فقط. يمكنك تعديل النتيجة.',
     'editor.ai.saveFirst':
       'احفظ تغييراتك أولًا — تبدأ تعديلات الذكاء الاصطناعي من النسخة المحفوظة.',
+    'editor.ai.compare.label': 'ما غيّره تعديل الذكاء الاصطناعي',
+    'editor.ai.compare.before': 'قبل',
+    'editor.ai.compare.after': 'بعد',
+    'editor.ai.compare.undo': 'تراجع',
+    'editor.ai.compare.keep': 'إبقاء',
+    'editor.ai.refused.EDIT_NOT_SHORTER':
+      'لم يقصّر الذكاء الاصطناعي النص بنسبة 30% على الأقل، لذا لم يُخصم أي رصيد. حاول مرة أخرى.',
+    'editor.ai.refused.EDIT_NOT_LONGER':
+      'لم يُطِل الذكاء الاصطناعي النص بنسبة 30% على الأقل، لذا لم يُخصم أي رصيد. حاول مرة أخرى.',
+    'editor.ai.refused.EDIT_NO_CHANGE':
+      'أعاد الذكاء الاصطناعي النص نفسه تقريبًا، لذا لم يُخصم أي رصيد. حاول مرة أخرى.',
+    'editor.ai.refused.EDIT_CANNOT_GROW':
+      'لا يتسع حد هذه المنصة لنص أطول بنسبة 30%. لم يُخصم أي رصيد.',
+    'editor.ai.refused.EDIT_STALE':
+      'تغيّر النص منذ آخر حفظ. احفظ ثم حاول مرة أخرى، ولم يُخصم أي رصيد.',
     'editor.saveBeforeReview': 'احفظ تغييراتك قبل الإرسال للمراجعة.',
     'editor.preview.title': 'معاينة مباشرة',
     'editor.preview.compare': 'قارن المعاينات',
@@ -6370,6 +6385,21 @@ export const messages = {
     'editor.ai.hint':
       'AI edits use credits and change only this platform version. You can edit the result.',
     'editor.ai.saveFirst': 'Save your changes first — AI edits start from the saved version.',
+    'editor.ai.compare.label': 'What the AI edit changed',
+    'editor.ai.compare.before': 'Before',
+    'editor.ai.compare.after': 'After',
+    'editor.ai.compare.undo': 'Undo',
+    'editor.ai.compare.keep': 'Keep',
+    'editor.ai.refused.EDIT_NOT_SHORTER':
+      'The AI did not make it at least 30% shorter, so nothing was charged. Please try again.',
+    'editor.ai.refused.EDIT_NOT_LONGER':
+      'The AI did not make it at least 30% longer, so nothing was charged. Please try again.',
+    'editor.ai.refused.EDIT_NO_CHANGE':
+      'The AI returned almost the same text, so nothing was charged. Please try again.',
+    'editor.ai.refused.EDIT_CANNOT_GROW':
+      'This channel’s limit has no room for a 30% longer caption. Nothing was charged.',
+    'editor.ai.refused.EDIT_STALE':
+      'The caption changed since it was saved. Save and try again; nothing was charged.',
     'editor.saveBeforeReview': 'Save your changes before sending for review.',
     'editor.preview.title': 'Live preview',
     'editor.preview.compare': 'Compare previews',

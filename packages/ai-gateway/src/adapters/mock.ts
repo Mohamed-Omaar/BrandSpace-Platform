@@ -235,6 +235,8 @@ const STRUCTURED_TASKS = new Set([
   'analytics.explain',
   // Phase 2B-3 PR 6 — DRAFT_IDEAS asks for exactly three titles, as JSON.
   'ideas.generate',
+  // PR A2 (item 10) — a Studio translation is its own task now.
+  'content.translate',
 ]);
 
 /** The platform keys a caption request named, read from the prompt's own line. */
@@ -399,11 +401,46 @@ function ideasDocument(prompt: string): string {
   return JSON.stringify({ ideas: titles.map((title) => ({ title })) });
 }
 
+/**
+ * PR A2 (item 10) — AN AI EDIT OF A CAPTION, answered as a model that FOLLOWS
+ * the measurable instruction would: "at most N characters" cuts the caption to
+ * N at a word, "at least N" adds a fixed sentence until it reaches N, a tone
+ * change or rewrite opens differently, a translation is a fixed sample line in
+ * the language asked for, and the hashtag tool proposes one fixed tag. Fixed
+ * text only: nothing here may read as something a model wrote about the brand.
+ */
+function editDocument(prompt: string): string {
+  const caption = prompt.slice(prompt.indexOf('\nCaption to edit:\n') + 18);
+  const atMost = /Return at most (\d+) characters/.exec(prompt);
+  const atLeast = /Return at least (\d+) characters/.exec(prompt);
+  const arabic = /^Language: Arabic\./m.test(prompt);
+  let body: string;
+  if (/Translate the caption/.test(prompt)) {
+    body = arabic ? 'نص مترجم تجريبي من المحاكاة.' : 'A sample translation from the mock.';
+  } else if (/Propose hashtags/.test(prompt)) {
+    return JSON.stringify({ body: caption, hashtags: ['mocktag'] });
+  } else if (atMost) {
+    const limit = Number(atMost[1]);
+    const cut = [...caption].slice(0, limit).join('');
+    const space = cut.lastIndexOf(' ');
+    body = (space > limit / 2 ? cut.slice(0, space) : cut).trim();
+  } else if (atLeast) {
+    const target = Number(atLeast[1]);
+    body = caption;
+    const more = arabic ? ' المزيد من هذه العلامة قريبًا.' : ' More from this brand soon.';
+    while ([...body].length < target) body += more;
+  } else {
+    body = `${arabic ? 'مرحبًا بكم! ' : 'Hello, friends! '}${caption}`;
+  }
+  return JSON.stringify({ body, hashtags: [] });
+}
+
 function captionDocument(
   prompt: string,
   context: readonly string[],
   maxOutputTokens: number,
 ): string {
+  if (prompt.includes('\nCaption to edit:\n')) return editDocument(prompt);
   const material = answerFrom(context, maxOutputTokens).replace(/\s+/g, ' ').trim();
   const body = material === '' ? 'A short note from this brand.' : material.slice(0, 180);
   return JSON.stringify({
@@ -593,7 +630,7 @@ export class MockProviderAdapter implements AiProviderAdapter {
     const structured = request.taskKey !== undefined && STRUCTURED_TASKS.has(request.taskKey);
 
     const document = structured
-      ? request.taskKey === 'caption.generate'
+      ? request.taskKey === 'caption.generate' || request.taskKey === 'content.translate'
         ? captionDocument(request.prompt, context, request.maxOutputTokens)
         : request.taskKey === 'ideas.generate'
           ? ideasDocument(request.prompt)

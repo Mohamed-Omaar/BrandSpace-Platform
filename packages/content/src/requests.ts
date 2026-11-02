@@ -55,11 +55,17 @@ export const contentToolRequestSchema = z.object({
   argument: z.string().min(1).max(120).optional(),
   targetLocale: z.enum(['AR', 'EN']).optional(),
   idempotencyKey: z.string().min(8).max(200),
+  /**
+   * PR A2 (item 10) — the caption on the person's screen. An edit whose words
+   * on screen are not the saved words is refused before the model is called.
+   */
+  expectedBody: z.string().max(20_000).optional(),
 });
 
 /** PHASE 6 FINAL (D-284) — what one inline AI edit would cost, before it runs. */
 export const contentToolQuoteRequestSchema = contentToolRequestSchema.omit({
   idempotencyKey: true,
+  expectedBody: true,
 });
 
 export type ContentToolQuoteRequest = z.infer<typeof contentToolQuoteRequestSchema>;

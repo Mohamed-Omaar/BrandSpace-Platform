@@ -55,6 +55,14 @@ import {
 } from './templates';
 import { parseGeneratedContent, type GeneratedContent } from './schemas';
 import { normaliseHashtags } from './hashtags';
+import {
+  checkEdit,
+  checkHashtags,
+  EDIT_REJECTION_REASON,
+  measurableDirective,
+  refuseBeforeCall,
+  type EditRejection,
+} from './edit-checks';
 
 /**
  * AI Content Studio — Phase 5 scope item 3, docs/PRODUCT.md §5 module 7.
@@ -265,6 +273,25 @@ export interface ApplyToolInput {
   actorBrandScope: readonly string[];
   /** Q8 — whether this editor may schedule decides what the edit does to a scheduled post. */
   actorPermissionKeys: readonly string[];
+  /**
+   * PR A2 (item 10) — the caption the person SEES. When it is not the saved
+   * caption, the edit is refused before the model is called (nothing is
+   * charged): an edit runs on the words on screen, saved first.
+   */
+  expectedBody?: string | undefined;
+}
+
+/**
+ * PR A2 (item 10) — the task an edit is priced and routed as. A translation is
+ * `content.translate`, at its own price; every other edit writes a caption.
+ */
+export function taskKeyForTool(tool: ContentTool): 'caption.generate' | 'content.translate' {
+  return tool === 'translate' ? 'content.translate' : 'caption.generate';
+}
+
+/** PR A2 (item 10) — an edit refused for a reason the screen names. */
+export function editRefused(reason: EditRejection): AppError {
+  return new AppError('CONFLICT', EDIT_REJECTION_REASON[reason], { reason });
 }
 
 interface ToolRequest {
@@ -617,12 +644,17 @@ export class ContentStudioService extends ContentLibraryService {
       // the whole edit (`applyTool`), that is the old serialisation; when each
       // step is its own short transaction, the server-derived gateway key and
       // the re-read in `#persistTool` keep it to one charge and one write.
-      ...(await studio.#toolRequest({ ...input, lockForRewrite: input.tool === 'refresh_facts' })),
+      ...(await studio.#toolRequest({
+        ...input,
+        lockForRewrite: input.tool === 'refresh_facts',
+        forRun: true,
+      })),
       gateway: studio.#gateway,
       workspaceId: studio.workspaceId,
     }));
-    const { variant, request, refreshKey, gateway } = prepared;
+    const { variant, request, refreshKey, gateway, platform } = prepared;
     let parsed: GeneratedContent | null = null;
+    let rejection: EditRejection | null = null;
     const parse = (output: AiOutput): GeneratedContent =>
       rejectUnusable(() => {
         if (output.kind !== 'text') throw new Error('not text');
@@ -636,7 +668,7 @@ export class ContentStudioService extends ContentLibraryService {
     const result = await gateway.execute({
       workspaceId: prepared.workspaceId,
       userId: input.actorUserId,
-      taskKey: 'caption.generate',
+      taskKey: taskKeyForTool(input.tool),
       planKey: input.planKey,
       /*
        * D10 — A REWRITE OF THE SAME CHANGES IS THE SAME REQUEST. Its key is
@@ -649,6 +681,17 @@ export class ContentStudioService extends ContentLibraryService {
       input: request,
       accept: async (output) => {
         parsed = parse(output);
+        /*
+         * PR A2 (item 10) — DID THE EDIT DO ITS JOB? Checked before the charge:
+         * not 30% shorter or longer, or nearly the same words, is released.
+         */
+        const produced = parsed.variants[0];
+        rejection = produced
+          ? input.tool === 'hashtags'
+            ? checkHashtags(variant.hashtags, produced.hashtags)
+            : checkEdit(input.tool, variant.body ?? '', produced.body, platform.maxBodyChars)
+          : null;
+        if (rejection) throw new OutputRejectedError(EDIT_REJECTION_REASON[rejection]);
         const current = await run((studio) =>
           studio.db.contentVariant.findUnique({
             where: { id: variant.id },
@@ -668,6 +711,7 @@ export class ContentStudioService extends ContentLibraryService {
       },
     });
 
+    if (rejection && result.status !== 'SUCCEEDED') throw editRefused(rejection);
     if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
       throw generationFailed(result.failureMessage);
     }
@@ -826,7 +870,7 @@ export class ContentStudioService extends ContentLibraryService {
     const { request } = await this.#toolRequest(input);
     return this.#gateway.quote({
       workspaceId: this.workspaceId,
-      taskKey: 'caption.generate',
+      taskKey: taskKeyForTool(input.tool),
       planKey: input.planKey,
       input: request,
     });
@@ -841,6 +885,9 @@ export class ContentStudioService extends ContentLibraryService {
     actorBrandScope: readonly string[];
     /** D10 — the rewrite itself (never its quote) holds the variant's row. */
     lockForRewrite?: boolean | undefined;
+    /** PR A2 (item 10) — the run (never its quote) refuses what it cannot do. */
+    forRun?: boolean | undefined;
+    expectedBody?: string | undefined;
   }) {
     // D-132: the scope is a PREDICATE, so an out-of-scope variant is never read.
     const variant = await this.db.contentVariant.findFirst({
@@ -855,6 +902,18 @@ export class ContentStudioService extends ContentLibraryService {
 
     const platform = findPlatform(this.policy, variant.platformKey);
     if (!platform) throw unsupportedPlatform();
+    /*
+     * PR A2 (item 10) — refused before any credit is reserved: words on screen
+     * that are not the saved words, or a caption a 30% longer version would
+     * not fit.
+     */
+    if (input.forRun) {
+      if (input.expectedBody !== undefined && input.expectedBody !== (variant.body ?? '')) {
+        throw editRefused('EDIT_STALE');
+      }
+      const before = refuseBeforeCall(input.tool, variant.body ?? '', platform.maxBodyChars);
+      if (before) throw editRefused(before);
+    }
 
     const dialect = await this.resolveDialectFor(variant.brandId);
     let retrieval: Grounding;
@@ -915,6 +974,8 @@ export class ContentStudioService extends ContentLibraryService {
       SYSTEM_INSTRUCTION,
       TOOL_DIRECTIVE[input.tool],
       input.tool === 'tone' && input.argument ? `Requested tone: ${input.argument}.` : '',
+      // PR A2 (item 10) — the measurable target the answer is checked against.
+      measurableDirective(input.tool, variant.body ?? '', platform.maxBodyChars),
       // D-573 / D-474: one formal Arabic, never a dialect.
       languageInstruction(targetLocale),
       `Keep it under ${platform.maxBodyChars} characters.`,
