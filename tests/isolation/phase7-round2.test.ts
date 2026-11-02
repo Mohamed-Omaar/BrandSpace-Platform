@@ -280,7 +280,19 @@ describe('R2-A: the plan idempotency constraint is session-scoped, not workspace
     const key = sharedKey();
     const mine = await authorizationFor(fixtures.a.userId);
     const one = await openSession(mine, fixtures.a.brandId);
+    /*
+     * PR B (D-591): a member has ONE active conversation per brand, so opening
+     * again returns the same session. A second session of the same member and
+     * brand now exists only once the first is ARCHIVED — exactly what the
+     * one-assistant migration does to the sessions it merges away — and the key
+     * must still be scoped to the session there.
+     */
+    expect((await openSession(mine, fixtures.a.brandId)).id).toBe(one.id);
+    await inA((db) =>
+      db.copilotSession.update({ where: { id: one.id }, data: { archivedAt: new Date() } }),
+    );
     const two = await openSession(mine, fixtures.a.brandId);
+    expect(two.id).not.toBe(one.id);
 
     const create = (sessionId: string) =>
       inA((db) =>

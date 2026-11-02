@@ -131,6 +131,17 @@ const undoSchema = z.object({ planId: z.string().uuid() });
 
 const cancelSchema = z.object({ planId: z.string().uuid() });
 
+/** PR B — reading the one conversation: a page, older than `before`, or a search. */
+const conversationSchema = z.object({
+  sessionId: z.string().uuid(),
+  before: z.string().datetime().optional(),
+  search: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+/** PR B — "New topic" and "Clear conversation" name only the session. */
+const sessionActionSchema = z.object({ sessionId: z.string().uuid() });
+
 /** The automations domain as the Copilot may reach it — see copilot-automation.ts. */
 async function automationPort(db: TenantScopedClient, workspaceId: string) {
   const policy = await new TenantAutomationPolicySource(db, currentEnvironment()).load();
@@ -410,6 +421,110 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
         return reply.send({ sessionId: session.id });
       } catch (error: unknown) {
         return fail(reply, 'copilot session', error);
+      }
+    },
+  );
+
+  /*
+   * PR B — THE ONE CONVERSATION: read a page (or search it), start a new topic,
+   * or clear it. Each admits the session exactly as a turn does: this person,
+   * this workspace, their brand scope now — anything else is the same 404.
+   */
+  const conversationRun = async <T>(
+    caller: NonNullable<Awaited<ReturnType<typeof resolveCaller>>>,
+    fn: (orchestrator: CopilotOrchestrator, authorization: LiveAuthorization) => Promise<T>,
+  ): Promise<T> =>
+    withWorkspace(
+      caller.workspaceId,
+      async (db) => {
+        const policy = await new TenantCopilotPolicySource(db, currentEnvironment()).load();
+        const automationRuleCheck = await automationRules(db, caller.workspaceId);
+        const orchestrator = new CopilotOrchestrator({
+          db,
+          workspaceId: caller.workspaceId,
+          policy,
+          gateway: gateway(),
+          automationRules: automationRuleCheck,
+        });
+        const authorization = await resolveLiveAuthorization(db, caller.workspaceId, caller.userId);
+        if (!authorization) throw new AppError('NOT_FOUND', 'Conversation not found.');
+        return fn(orchestrator, authorization);
+      },
+      { prisma: getPrisma() },
+    );
+
+  route(
+    app,
+    // POST, like every Copilot route: the dashboard proxy forwards a body, never a query.
+    'POST',
+    '/v1/copilot/conversation',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'workspace.read' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = conversationSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        const page = await conversationRun(caller, (orchestrator, authorization) =>
+          orchestrator.conversation({
+            authorization,
+            sessionId: parsed.data.sessionId,
+            before: parsed.data.before ? new Date(parsed.data.before) : null,
+            search: parsed.data.search ?? null,
+            ...(parsed.data.limit ? { limit: parsed.data.limit } : {}),
+          }),
+        );
+        return reply.send({
+          hasMore: page.hasMore,
+          messages: page.messages.map((message) => ({
+            ...message,
+            createdAt: message.createdAt.toISOString(),
+          })),
+        });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot conversation', error);
+      }
+    },
+  );
+
+  route(
+    app,
+    'POST',
+    '/v1/copilot/topic',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'workspace.write' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = sessionActionSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        await conversationRun(caller, (orchestrator, authorization) =>
+          orchestrator.newTopic({ authorization, sessionId: parsed.data.sessionId }),
+        );
+        return reply.send({ ok: true });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot topic', error);
+      }
+    },
+  );
+
+  route(
+    app,
+    'POST',
+    '/v1/copilot/clear',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'workspace.write' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = sessionActionSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        const result = await conversationRun(caller, (orchestrator, authorization) =>
+          orchestrator.clearConversation({ authorization, sessionId: parsed.data.sessionId }),
+        );
+        return reply.send({ deleted: result.deleted });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot clear', error);
       }
     },
   );

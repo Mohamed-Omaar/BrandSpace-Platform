@@ -78,10 +78,13 @@ class ScriptedAdapter implements AiProviderAdapter {
   }
 
   readonly prompts: string[] = [];
+  /** PR B — the fenced context each call carried (the summary travels there). */
+  readonly contexts: string[] = [];
 
   async generateText(request: TextRequest): Promise<TextResult> {
     this.calls += 1;
     this.prompts.push(request.prompt);
+    this.contexts.push((request.untrustedContext ?? []).join('\n'));
     const step = this.script.shift() ?? { kind: 'text', text: '{"ok":true}' };
     if (step.kind === 'error') {
       throw new ScriptedError(step.failureClass, step.providerCode, step.providerReason);
@@ -681,5 +684,196 @@ describe('H-4 — the provider call runs outside the tenant transaction', () => 
     expect(turn.assistantMessage.body).toBe('Two for one on Fridays.');
     const after = await money(fixtures.a.workspaceId);
     expect(after.charges).toBe(before.charges + 1);
+  });
+});
+
+/*
+ * PR B (D-591) — ONE CONTINUOUS COPILOT CONVERSATION PER PERSON PER BRAND.
+ * Here because this file already holds a scripted provider the prompts can be
+ * read from; the migration that merges existing conversations has its own
+ * suite (pr-b-one-assistant-migration).
+ */
+describe('PR B — the one conversation: memory, New topic, search, Clear', () => {
+  let app: PrismaClient;
+  let fixtures: IsolationFixtures;
+
+  beforeAll(async () => {
+    app = appRoleClient();
+    fixtures = await createIsolationFixtures(app);
+    await ledger.grant({
+      workspaceId: fixtures.a.workspaceId,
+      source: 'PLAN_GRANT',
+      credits: 50,
+      reason: 'PR B conversation fixture allowance',
+      idempotencyKey: `prb-conversation-${fixtures.a.workspaceId}`,
+    });
+  }, 120_000);
+
+  afterAll(async () => {
+    await app?.$disconnect();
+  });
+
+  const inWs = <T>(workspaceId: string, fn: (db: never) => Promise<T>) =>
+    withWorkspace(workspaceId, fn as never, { prisma: app }) as Promise<T>;
+  const inA = <T>(fn: (db: never) => Promise<T>) => inWs(fixtures.a.workspaceId, fn);
+  const orchestratorIn = (db: never, workspaceId = fixtures.a.workspaceId) =>
+    new CopilotOrchestrator({
+      db,
+      workspaceId,
+      policy: parseCopilotPolicy(defaultPayload('copilot')),
+      gateway,
+    });
+  const answer = (en: string) =>
+    JSON.stringify({
+      summary: { ar: en, en },
+      steps: [],
+      brandBrainQuestion: false,
+      saveFact: null,
+    });
+
+  async function me() {
+    const authorization = await inA((db) =>
+      resolveLiveAuthorization(db, fixtures.a.workspaceId, fixtures.a.userId),
+    );
+    if (!authorization) throw new Error('fixture membership missing');
+    return authorization;
+  }
+  async function open() {
+    const authorization = await me();
+    return inA((db) =>
+      orchestratorIn(db).openSession({
+        authorization,
+        brandId: fixtures.a.brandId,
+        surface: 'general',
+        locale: 'EN',
+        expiresAt: null,
+      }),
+    );
+  }
+  async function say(request: string, reply = 'Noted.') {
+    adapter.script.push({ kind: 'text', text: answer(reply) });
+    const session = await open();
+    await CopilotOrchestrator.turnWith((fn) => inA((db) => fn(orchestratorIn(db))), {
+      sessionId: session.id,
+      request,
+      authorization: await me(),
+      planKey: null,
+      idempotencyKey: `prb-${crypto.randomUUID()}`,
+      expiresAt: null,
+    });
+    return adapter.prompts.at(-1) ?? '';
+  }
+
+  it('opening from any page returns the same conversation, on the page now shown', async () => {
+    const first = await open();
+    const authorization = await me();
+    const again = await inA((db) =>
+      orchestratorIn(db).openSession({
+        authorization,
+        brandId: fixtures.a.brandId,
+        surface: 'content',
+        locale: 'AR',
+        expiresAt: null,
+      }),
+    );
+    expect(again.id).toBe(first.id);
+    expect(again).toMatchObject({ surface: 'content', locale: 'AR', archivedAt: null });
+  });
+
+  it('memory: the next turn sees the previous one ("make it shorter" has its context)', async () => {
+    await say(
+      'Write a line about our autumn opening hours.',
+      'We open at 9 every day this autumn.',
+    );
+    const prompt = await say('Make it shorter.');
+    expect(prompt).toContain('Write a line about our autumn opening hours.');
+    expect(prompt).toContain('We open at 9 every day this autumn.');
+  });
+
+  it('New topic: the model no longer reads what came before the divider, which stays visible', async () => {
+    const session = await open();
+    const authorization = await me();
+    await say('Remember the word PINEAPPLE for later.');
+    await inA((db) => orchestratorIn(db).newTopic({ authorization, sessionId: session.id }));
+    const prompt = await say('What were we talking about?');
+    expect(prompt).not.toContain('PINEAPPLE');
+    const page = await inA((db) =>
+      orchestratorIn(db).conversation({ authorization, sessionId: session.id }),
+    );
+    expect(page.messages.some((m) => m.body?.includes('PINEAPPLE'))).toBe(true);
+    expect(page.messages.filter((m) => m.kind === 'topic_break')).toHaveLength(1);
+  });
+
+  it('search finds words inside the conversation', async () => {
+    const session = await open();
+    const authorization = await me();
+    await say('The secret ingredient is cardamom.');
+    const found = await inA((db) =>
+      orchestratorIn(db).conversation({ authorization, sessionId: session.id, search: 'CARDAMOM' }),
+    );
+    expect(found.messages.length).toBeGreaterThan(0);
+    expect(found.messages.every((m) => m.body?.toLowerCase().includes('cardamom'))).toBe(true);
+  });
+
+  it('older turns become the rolling summary, and the summary is in the prompt', async () => {
+    const session = await open();
+    const authorization = await me();
+    await inA((db) => orchestratorIn(db).newTopic({ authorization, sessionId: session.id }));
+    await say('Our founding year is 2019, keep it in mind.');
+    for (let i = 0; i < 6; i += 1) await say(`Filler question number ${i}.`);
+    const stored = await inA((db) =>
+      (db as unknown as PrismaClient).copilotSession.findFirstOrThrow({
+        where: { id: session.id },
+        select: { summary: true, summaryThroughAt: true },
+      }),
+    );
+    expect(stored.summary).toContain('Our founding year is 2019');
+    await say('Which year did I mention?');
+    // Fenced as reference material, like every block of customer text.
+    const context = adapter.contexts.at(-1) ?? '';
+    expect(context).toContain('EARLIER IN THIS CONVERSATION (summary)');
+    expect(context).toContain('Our founding year is 2019');
+  });
+
+  it('another workspace cannot read, divide or clear this conversation (the same 404)', async () => {
+    const session = await open();
+    const theirs = await inWs(fixtures.b.workspaceId, (db) =>
+      resolveLiveAuthorization(db, fixtures.b.workspaceId, fixtures.b.userId),
+    );
+    if (!theirs) throw new Error('fixture membership missing');
+    for (const act of [
+      (o: CopilotOrchestrator) => o.conversation({ authorization: theirs, sessionId: session.id }),
+      (o: CopilotOrchestrator) => o.newTopic({ authorization: theirs, sessionId: session.id }),
+      (o: CopilotOrchestrator) =>
+        o.clearConversation({ authorization: theirs, sessionId: session.id }),
+    ]) {
+      await expect(
+        inWs(fixtures.b.workspaceId, (db) => act(orchestratorIn(db, fixtures.b.workspaceId))),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    }
+  });
+
+  it('Clear conversation deletes the messages and the summary, and is audited', async () => {
+    const session = await open();
+    const authorization = await me();
+    await say('Something to forget.');
+    const result = await inA((db) =>
+      orchestratorIn(db).clearConversation({ authorization, sessionId: session.id }),
+    );
+    expect(result.deleted).toBeGreaterThan(0);
+    const page = await inA((db) =>
+      orchestratorIn(db).conversation({ authorization, sessionId: session.id }),
+    );
+    expect(page.messages).toEqual([]);
+    const stored = await platform.copilotSession.findUniqueOrThrow({
+      where: { id: session.id },
+      select: { summary: true },
+    });
+    expect(stored.summary).toBeNull();
+    const audit = await platform.auditEvent.findFirst({
+      where: { action: 'copilot.conversation_cleared', resourceId: session.id },
+      select: { after: true },
+    });
+    expect(audit?.after).toEqual({ messagesDeleted: result.deleted });
   });
 });
