@@ -1,7 +1,8 @@
-import { cookies, headers } from 'next/headers';
-import { COLOUR_SCHEME_COOKIE } from '../server/colour-scheme';
+import { headers } from 'next/headers';
+import { currentColourScheme } from '../server/colour-scheme';
 import { activeLook, logoHref } from '../server/theme';
 import { systemClock } from '@brandspace/shared';
+import { nextColourScheme } from '@brandspace/shared/theme';
 import { Suspense, type ReactNode } from 'react';
 import {
   CustomerShell,
@@ -58,6 +59,7 @@ import { requestMessageLocale } from '../server/message-locale';
 import { paymentsSwitchedOn } from '../server/payments-switch';
 import { aiAvailability, aiAvailableFor } from '../server/ai-availability';
 import { MessageLocaleProvider } from '../i18n/message-locale-context';
+import { SubmitButton } from './pending-submit';
 
 /**
  * The authenticated customer shell — PORTED FROM `prototype-2026-09-27` (D-468).
@@ -471,11 +473,10 @@ export async function WorkspaceShell({
    * languages — from the name when it is written in Latin letters, else from
    * the email — so the avatar reads the same in `ar` and `en`.
    */
-  // LF: the person's light / dark / device choice, cycled by the account menu.
-  const schemeCookie = (await cookies()).get(COLOUR_SCHEME_COOKIE)?.value;
-  const scheme: 'light' | 'dark' | 'system' =
-    schemeCookie === 'dark' || schemeCookie === 'system' ? schemeCookie : 'light';
-  const nextScheme = scheme === 'light' ? 'dark' : scheme === 'dark' ? 'system' : 'light';
+  // P1: the person's light / dark / device choice, cycled by the account menu —
+  // the same answer the page's `<html>` was rendered with.
+  const scheme = await currentColourScheme();
+  const nextScheme = nextColourScheme(scheme);
   // LF: the theme's logo, when the owner set one, for the surface this person sees.
   const themeLogo = (await activeLook()).logo;
   const lightLogo = themeLogo.light ? logoHref('light', themeLogo.light) : undefined;
@@ -1058,14 +1059,9 @@ export async function WorkspaceShell({
       </PrototypeMenuLink>
       <form action={signOutAction} style={{ margin: 0 }}>
         <input type="hidden" name="locale" value={locale} />
-        <button
-          type="submit"
-          role="menuitem"
-          data-testid="sign-out"
-          className="bsp-menu-item bsp-sign-out"
-        >
+        <SubmitButton role="menuitem" data-testid="sign-out" className="bsp-menu-item bsp-sign-out">
           {t('nav.signOut')}
-        </button>
+        </SubmitButton>
       </form>
     </PrototypeUserCard>
   );
