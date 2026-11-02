@@ -179,6 +179,24 @@ export function automationRuleCatalogueLines(
   ];
 }
 
+/** PR B — the rolling summary's bounds: one short line per turn, the newest kept. */
+const SUMMARY_LINE_CHARS = 200;
+const SUMMARY_MAX_LINES = 40;
+
+/** PR B — one entry of the conversation as the screen shows it. */
+export interface ConversationMessage {
+  readonly id: string;
+  readonly role: 'USER' | 'ASSISTANT';
+  readonly body: string | null;
+  readonly kind: 'message' | 'topic_break';
+  readonly status: string;
+  readonly citations: unknown;
+  readonly insufficientKnowledge: boolean;
+  readonly purged: boolean;
+  readonly createdAt: Date;
+  readonly planId: string | null;
+}
+
 export interface TurnInput {
   readonly sessionId: string;
   /*
@@ -424,18 +442,189 @@ export class CopilotOrchestrator {
     const brandId = await this.#admitBrand(input.brandId, input.authorization);
     const subject = await this.#admitSubject(input.subject ?? null, brandId);
 
-    return this.#db.copilotSession.create({
-      data: {
+    /*
+     * PR B — ONE CONTINUOUS CONVERSATION PER PERSON PER BRAND. Opening the
+     * Copilot from any page returns the person's one active session for this
+     * brand (the partial unique index `copilot_session_one_per_person_brand`
+     * guarantees there is at most one), moved to the page they are on: its
+     * surface and subject are the CURRENT page's, so the model knows where the
+     * person is standing now. The conversation itself never expires as a
+     * whole; each message keeps its own retention.
+     */
+    const where = {
+      workspaceId: this.#workspaceId,
+      userId: input.authorization.userId,
+      brandId,
+      archivedAt: null,
+    };
+    const page = {
+      surface: input.surface,
+      locale: input.locale,
+      subjectType: subject?.type ?? null,
+      subjectId: subject?.id ?? null,
+    };
+    const existing = await this.#db.copilotSession.findFirst({ where });
+    if (existing) {
+      return this.#db.copilotSession.update({ where: { id: existing.id }, data: page });
+    }
+    try {
+      return await this.#db.copilotSession.create({
+        data: {
+          workspaceId: this.#workspaceId,
+          userId: input.authorization.userId,
+          brandId,
+          expiresAt: null,
+          ...page,
+        },
+      });
+    } catch (error) {
+      // Two tabs opening at once: the other one created it. Use that one.
+      if ((error as { code?: unknown }).code !== 'P2002') throw error;
+      const raced = await this.#db.copilotSession.findFirst({ where });
+      /* c8 ignore next -- the unique index just told us it exists. */
+      if (!raced) throw error;
+      return this.#db.copilotSession.update({ where: { id: raced.id }, data: page });
+    }
+  }
+
+  /**
+   * PR B — THE CONVERSATION AS THE PERSON SEES IT: their messages and the
+   * "New topic" dividers, oldest first, a page at a time (newest page first),
+   * optionally filtered by words. Admission is the session lookup: this
+   * person, this workspace, their brand scope right now.
+   */
+  async conversation(input: {
+    authorization: LiveAuthorization;
+    sessionId: string;
+    before?: Date | null;
+    search?: string | null;
+    limit?: number;
+  }): Promise<{
+    readonly messages: readonly ConversationMessage[];
+    readonly hasMore: boolean;
+  }> {
+    const session = await this.#ownSession(input.sessionId, input.authorization);
+    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const search = input.search?.trim() ?? '';
+    const rows = await this.#db.copilotMessage.findMany({
+      where: {
         workspaceId: this.#workspaceId,
-        userId: input.authorization.userId,
-        brandId,
-        surface: input.surface,
-        locale: input.locale,
-        expiresAt: input.expiresAt,
-        subjectType: subject?.type ?? null,
-        subjectId: subject?.id ?? null,
+        sessionId: session.id,
+        ...(input.before ? { createdAt: { lt: input.before } } : {}),
+        ...(search !== ''
+          ? { kind: 'message', body: { contains: search, mode: 'insensitive' as const } }
+          : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      select: {
+        id: true,
+        role: true,
+        body: true,
+        kind: true,
+        status: true,
+        citations: true,
+        insufficientKnowledge: true,
+        bodyPurgedAt: true,
+        createdAt: true,
+        planId: true,
       },
     });
+    const page = rows.slice(0, limit).reverse();
+    return {
+      hasMore: rows.length > limit,
+      messages: page.map((row) => ({
+        id: row.id,
+        role: row.role,
+        body: row.body,
+        kind: row.kind === 'topic_break' ? 'topic_break' : 'message',
+        status: row.status,
+        citations: row.citations ?? null,
+        insufficientKnowledge: row.insufficientKnowledge,
+        purged: row.bodyPurgedAt !== null,
+        createdAt: row.createdAt,
+        planId: row.planId,
+      })),
+    };
+  }
+
+  /**
+   * PR B — "New topic": a divider. The model does not read the turns before
+   * it (`#history` stops there); they stay visible above it.
+   */
+  async newTopic(input: { authorization: LiveAuthorization; sessionId: string }): Promise<void> {
+    const session = await this.#ownSession(input.sessionId, input.authorization);
+    // Two dividers in a row say nothing more than one.
+    const last = await this.#db.copilotMessage.findFirst({
+      where: { workspaceId: this.#workspaceId, sessionId: session.id },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { kind: true },
+    });
+    if (!last || last.kind === 'topic_break') return;
+    await this.#db.copilotMessage.create({
+      data: {
+        workspaceId: this.#workspaceId,
+        sessionId: session.id,
+        role: 'USER',
+        body: null,
+        kind: 'topic_break',
+        correlationId: randomUUID(),
+      },
+    });
+    await this.#db.copilotSession.update({
+      where: { id: session.id },
+      data: { lastMessageAt: this.#clock.now() },
+    });
+  }
+
+  /**
+   * PR B — "Clear conversation": the messages and the summary are DELETED (the
+   * owner's decision; confirmed in the screen first). Plans, tool calls and
+   * every audit, ledger and credit record stay: they are the evidence of what
+   * was done, not the conversation. Audited without content.
+   */
+  async clearConversation(input: {
+    authorization: LiveAuthorization;
+    sessionId: string;
+  }): Promise<{ readonly deleted: number }> {
+    const session = await this.#ownSession(input.sessionId, input.authorization);
+    const { count } = await this.#db.copilotMessage.deleteMany({
+      where: { workspaceId: this.#workspaceId, sessionId: session.id },
+    });
+    await this.#db.copilotSession.update({
+      where: { id: session.id },
+      data: {
+        summary: null,
+        summaryThroughAt: null,
+        summaryExpiresAt: null,
+        summaryPurgedAt: null,
+        lastMessageAt: null,
+      },
+    });
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'copilot.conversation_cleared',
+      actorType: 'USER',
+      actorId: input.authorization.userId,
+      resourceType: 'CopilotSession',
+      resourceId: session.id,
+      after: { messagesDeleted: count },
+    });
+    return { deleted: count };
+  }
+
+  /** The person's own session, admitted exactly as a turn admits it, or a 404. */
+  async #ownSession(sessionId: string, authorization: LiveAuthorization) {
+    const session = await this.#db.copilotSession.findFirst({
+      where: {
+        id: sessionId,
+        workspaceId: this.#workspaceId,
+        userId: authorization.userId,
+        archivedAt: null,
+        ...nullableBrandIdScopeFilter(authorization.brandScope),
+      },
+    });
+    if (!session) throw copilotSessionNotFound();
+    return session;
   }
 
   /**
@@ -720,9 +909,8 @@ export class CopilotOrchestrator {
      * carry them into this request. The person's own words are kept.
      */
     const brandBrain = await this.#brandBrainEnabled(brandId);
-    const history = (await this.#history(session.id)).filter(
-      (turn) => brandBrain || turn.role !== 'ASSISTANT',
-    );
+    const remembered = await this.#history(session.id, correlationId);
+    const history = remembered.turns.filter((turn) => brandBrain || turn.role !== 'ASSISTANT');
     const grounding = await this.#context(brandId, input.request, brandBrain);
     const context =
       grounding && grounding.items.length > 0
@@ -756,6 +944,10 @@ export class CopilotOrchestrator {
             brandBrain,
           ),
           untrustedContext: [
+            // PR B: what was said before the recent window, as a summary.
+            ...(remembered.summary && brandBrain
+              ? [fenceUntrusted('EARLIER IN THIS CONVERSATION (summary)', remembered.summary)]
+              : []),
             // PR A2 (item 9): the brand profile, approved and read-only.
             ...(profile ? [profile] : []),
             ...(subject ? [subject.fenced] : []),
@@ -894,6 +1086,7 @@ export class CopilotOrchestrator {
       where: { id: session.id },
       data: { lastMessageAt: this.#clock.now() },
     });
+    await this.#rollSummary(session.id);
 
     return {
       brandId,
@@ -986,14 +1179,122 @@ export class CopilotOrchestrator {
   }
 
   /** The recent turns, bounded by the activated policy. */
-  async #history(sessionId: string): Promise<readonly { role: string; body: string }[]> {
+  /**
+   * PR B — WHAT THE MODEL REMEMBERS: the turns after the latest "New topic"
+   * divider only; the most recent `maxContextMessages` of them in full, and
+   * the stored rolling summary for the ones before (when it covers turns after
+   * that divider). The turn being answered is excluded: it is the request.
+   */
+  async #history(
+    sessionId: string,
+    excludeCorrelationId?: string,
+  ): Promise<{
+    readonly turns: readonly { role: string; body: string }[];
+    readonly summary: string | null;
+  }> {
+    const divider = await this.#db.copilotMessage.findFirst({
+      where: { workspaceId: this.#workspaceId, sessionId, kind: 'topic_break' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { createdAt: true },
+    });
     const rows = await this.#db.copilotMessage.findMany({
-      where: { workspaceId: this.#workspaceId, sessionId, body: { not: null } },
-      orderBy: { createdAt: 'desc' },
+      where: {
+        workspaceId: this.#workspaceId,
+        sessionId,
+        kind: 'message',
+        body: { not: null },
+        ...(divider ? { createdAt: { gt: divider.createdAt } } : {}),
+        ...(excludeCorrelationId ? { NOT: { correlationId: excludeCorrelationId } } : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: this.#policy.conversation.maxContextMessages,
       select: { role: true, body: true },
     });
-    return rows.reverse().map((row) => ({ role: row.role, body: row.body ?? '' }));
+    const session = await this.#db.copilotSession.findFirst({
+      where: { id: sessionId, workspaceId: this.#workspaceId },
+      select: { summary: true, summaryThroughAt: true },
+    });
+    const summary =
+      session?.summary &&
+      session.summaryThroughAt &&
+      (!divider || session.summaryThroughAt > divider.createdAt)
+        ? session.summary
+        : null;
+    return {
+      turns: rows.reverse().map((row) => ({ role: row.role, body: row.body ?? '' })),
+      summary,
+    };
+  }
+
+  /**
+   * PR B — THE ROLLING SUMMARY. Turns that fall out of the recent window (and
+   * come after the latest divider) are folded into a short, bounded summary
+   * stored on the session, so "and in English?" still has its context weeks
+   * later without replaying every turn. Built from the turns themselves, with
+   * no model call: the reply is the only charge. Customer content, so it
+   * carries the expiry of the newest turn it covers and is purged with it.
+   */
+  async #rollSummary(sessionId: string): Promise<void> {
+    const window = this.#policy.conversation.maxContextMessages;
+    const divider = await this.#db.copilotMessage.findFirst({
+      where: { workspaceId: this.#workspaceId, sessionId, kind: 'topic_break' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { createdAt: true },
+    });
+    const session = await this.#db.copilotSession.findFirst({
+      where: { id: sessionId, workspaceId: this.#workspaceId },
+      select: { summary: true, summaryThroughAt: true, summaryExpiresAt: true },
+    });
+    const recent = await this.#db.copilotMessage.findMany({
+      where: {
+        workspaceId: this.#workspaceId,
+        sessionId,
+        kind: 'message',
+        body: { not: null },
+        ...(divider ? { createdAt: { gt: divider.createdAt } } : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: window,
+      select: { role: true, body: true, createdAt: true, expiresAt: true },
+    });
+    if (recent.length === 0) return;
+    const keep =
+      session?.summary &&
+      session.summaryThroughAt &&
+      (!divider || session.summaryThroughAt > divider.createdAt)
+        ? session.summary.split('\n')
+        : [];
+    const through = keep.length > 0 ? (session?.summaryThroughAt ?? null) : null;
+    const fresh = recent
+      .filter((row) => !through || row.createdAt > through)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    if (fresh.length === 0) return;
+    const lines = [
+      ...keep,
+      ...fresh.map(
+        (row) =>
+          `${row.role === 'USER' ? 'Person' : 'Copilot'}: ${(row.body ?? '')
+            .replace(/\s+/g, ' ')
+            .slice(0, SUMMARY_LINE_CHARS)}`,
+      ),
+    ].slice(-SUMMARY_MAX_LINES);
+    const newest = fresh[fresh.length - 1];
+    /* c8 ignore next -- `fresh` is not empty here. */
+    if (!newest) return;
+    const expiries = [session?.summaryExpiresAt ?? null, ...fresh.map((row) => row.expiresAt)];
+    const latest = expiries.reduce<Date | null>(
+      (max, value) => (value && (!max || value > max) ? value : max),
+      null,
+    );
+    await this.#db.copilotSession.update({
+      where: { id: sessionId },
+      data: {
+        summary: lines.join('\n'),
+        summaryThroughAt: newest.createdAt,
+        summaryExpiresAt: latest,
+        summaryPurgedAt: null,
+      },
+    });
   }
 
   #prompt(
