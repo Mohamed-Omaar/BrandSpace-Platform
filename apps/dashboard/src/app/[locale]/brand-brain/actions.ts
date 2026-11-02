@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { AppError, createLogger, internalErrorFields, validationFieldOf } from '@brandspace/shared';
+import { AppError, createLogger, isAppError, internalErrorFields, validationFieldOf } from '@brandspace/shared';
 import {
   acceptConfidentSchema,
   checksumOf,
@@ -609,7 +609,8 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
             area,
             ...tabParam(formData),
           }
-        : { ok: 'SOURCE_UPLOADED', area, ...tabParam(formData) },
+        : // PR B — the new source's id, so the Copilot's Add card follows it.
+          { ok: 'SOURCE_UPLOADED', area, source: received.document.id, ...tabParam(formData) },
       back,
     );
   } catch (error: unknown) {
@@ -769,4 +770,41 @@ export async function removeSourceAction(formData: FormData): Promise<void> {
   revalidatePath(`/${locale}/brand-brain`);
   revalidatePath(`/${locale}`);
   redirect(destination);
+}
+
+/**
+ * PR B (D-591) — "Approve all" FOR ONE ADDED FILE, from the Copilot's Add card.
+ * The person's own `brand_brain.review` (as on the Knowledge strip); every
+ * waiting fact of that file, whatever its confidence; the server still skips a
+ * fact in conflict. Returns the counts — the card stays in the conversation.
+ */
+export async function approveSourceFactsAction(input: {
+  readonly locale: string;
+  readonly brandId: string;
+  readonly documentId: string;
+}): Promise<{ readonly accepted: number; readonly skipped: number } | { readonly error: string }> {
+  try {
+    const session = await requireWorkspaceAction(input.locale, 'brand_brain.review');
+    return await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy, db }) => {
+      const pending = await db.brandKnowledgeCandidate.findMany({
+        where: {
+          brandId: input.brandId,
+          sourceDocumentId: input.documentId,
+          status: 'PENDING',
+        },
+        select: { id: true },
+      });
+      if (pending.length === 0) return { accepted: 0, skipped: 0 };
+      const outcome = await knowledge.reviewCandidates({
+        brandId: input.brandId,
+        candidateIds: pending.map((row) => row.id),
+        minimumConfidenceMilli: 0,
+        actor: knowledgeActor(session),
+        policy: (await policy()).staleness,
+      });
+      return { accepted: outcome.accepted.length, skipped: outcome.skipped.length };
+    });
+  } catch (error: unknown) {
+    return { error: isAppError(error) ? error.code : 'INTERNAL' };
+  }
 }

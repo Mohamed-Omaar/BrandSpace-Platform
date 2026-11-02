@@ -36,6 +36,7 @@ export function ConversationTools({
   onNewTopic,
   onClear,
   disabled,
+  attach,
 }: {
   readonly labels: ConversationToolLabels;
   readonly search: string;
@@ -43,6 +44,11 @@ export function ConversationTools({
   readonly onNewTopic: () => void;
   readonly onClear: () => void;
   readonly disabled: boolean;
+  /**
+   * PR B — "+", the retired Brand Brain chat's attach: a file chosen here is
+   * only held in the tab until its Add card is confirmed (`SourceCard`).
+   */
+  readonly attach?: { readonly label: string; readonly onFile: (file: File) => void };
 }) {
   const [confirming, setConfirming] = useState(false);
   return (
@@ -57,6 +63,22 @@ export function ConversationTools({
         maxLength={200}
         data-testid="copilot-search"
       />
+      {attach ? (
+        <label className="bsp-chip bsp-st-sm" data-testid="copilot-attach">
+          + {attach.label}
+          <input
+            type="file"
+            className="bs-control bsp-bb-file"
+            aria-label={attach.label}
+            data-testid="copilot-attach-input"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) attach.onFile(file);
+              event.target.value = '';
+            }}
+          />
+        </label>
+      ) : null}
       <button
         type="button"
         className="bsp-chip bsp-st-sm"

@@ -133,6 +133,12 @@ export default async function CopilotPage({
             labels={copilotLabels(messageLocale, session.customer.name ?? session.customer.email)}
             rateMetricKeys={RATE_METRIC_KEYS}
             retentionDays={await copilotRetentionDays(workspace.workspaceId)}
+            // PR B — "+" adds a file to Brand Brain for a member who may upload.
+            sources={
+              workspace.permissionKeys.includes('brand_brain.upload')
+                ? { review: workspace.permissionKeys.includes('brand_brain.review') }
+                : null
+            }
             denials={await copilotDenials(locale, session)}
           />
         )}

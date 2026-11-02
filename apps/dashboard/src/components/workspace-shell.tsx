@@ -948,6 +948,11 @@ export async function WorkspaceShell({
         labels={copilotLabels(words, identity)}
         rateMetricKeys={RATE_METRIC_KEYS}
         retentionDays={copilotRetention}
+        sources={
+          permissionKeys.includes('brand_brain.upload')
+            ? { review: permissionKeys.includes('brand_brain.review') }
+            : null
+        }
         denials={copilotDenied}
         strings={{
           chooseBrandTitle: t('brand.chooseTitle'),

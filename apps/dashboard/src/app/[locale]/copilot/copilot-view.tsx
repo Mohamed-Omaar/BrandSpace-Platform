@@ -24,6 +24,7 @@ import { messages as catalogue, statusMessage, type MessageKey } from '../../../
 import { type DateFormatterLike, whenFormatter } from '../../../server/prototype-dates';
 import { aiLimitMessage } from '../../../components/ai-limit';
 import { ConversationFoot, ConversationTools } from './conversation-tools';
+import { SourceCard, type SourceCardLabels } from './source-card';
 
 /**
  * THE COPILOT, WIRED TO A REAL PROVIDER FOR THE FIRST TIME.
@@ -146,6 +147,7 @@ export function CopilotView({
   labels,
   creditsLabel,
   denials = {},
+  sources = null,
   subject = null,
   initialRequest = '',
   rateMetricKeys = [],
@@ -222,6 +224,11 @@ export function CopilotView({
    * lacks, so "show me our billing" is refused in the words Billing uses.
    */
   readonly denials?: Readonly<Record<string, string>>;
+  /**
+   * PR B — "+" attaches a file to Brand Brain (the retired chat's attach),
+   * for a member who may upload sources; `review` offers Approve all.
+   */
+  readonly sources?: { readonly review: boolean } | null;
 }) {
   /*
    * THE DICTIONARY IS RESOLVED HERE, FROM THE LOCALE — never handed in as a
@@ -288,6 +295,7 @@ export function CopilotView({
    */
   const [history, setHistory] = useState<readonly HistoryRow[]>([]);
   const [search, setSearch] = useState('');
+  const [attached, setAttached] = useState<File | null>(null);
   const [found, setFound] = useState<readonly HistoryRow[] | null>(null);
   const [price, setPrice] = useState<string | null>(null);
 
@@ -971,6 +979,14 @@ export function CopilotView({
           onNewTopic={() => void newTopic()}
           onClear={() => void clearConversation()}
           disabled={busy || !sessionId}
+          {...(sources
+            ? {
+                attach: {
+                  label: t('copilot.attach'),
+                  onFile: (file: File) => setAttached(file),
+                },
+              }
+            : {})}
         />
         <CopilotBody
           labels={panel ? { ...labels, promptPlaceholder: panel.placeholder } : labels}
@@ -1006,6 +1022,17 @@ export function CopilotView({
             submitTestId: 'copilot-propose',
           }}
         />
+        {attached && sources ? (
+          <SourceCard
+            key={`${attached.name}-${attached.lastModified}`}
+            file={attached}
+            locale={locale}
+            brandId={brand.id}
+            canReview={sources.review}
+            labels={sourceCardLabels(t)}
+            onDone={() => setAttached(null)}
+          />
+        ) : null}
         <ConversationFoot
           price={price}
           retention={
@@ -1295,4 +1322,32 @@ function digest(value: string): string {
     out = (out * 31 + value.charCodeAt(index)) >>> 0;
   }
   return out.toString(16).padStart(8, '0');
+}
+
+/** PR B — the Add card's words, in the reader's language. */
+function sourceCardLabels(t: (key: MessageKey) => string): SourceCardLabels {
+  return {
+    askTitle: t('copilot.source.askTitle'),
+    askBody: t('copilot.source.askBody'),
+    add: t('copilot.source.add'),
+    notNow: t('copilot.source.notNow'),
+    uploading: t('copilot.source.uploading'),
+    stage: {
+      QUEUED: t('copilot.source.stage.queued'),
+      EXTRACTING: t('copilot.source.stage.reading'),
+      CHUNKING: t('copilot.source.stage.reading'),
+      EXTRACTING_FACTS: t('copilot.source.stage.facts'),
+      COMPLETED: t('copilot.source.stage.facts'),
+    },
+    progressLabel: t('copilot.source.progressLabel'),
+    coverage: t('copilot.source.coverage'),
+    coverageNoSkips: t('copilot.source.coverageNoSkips'),
+    todaysExtraction: t('copilot.source.todays'),
+    approveOrReview: t('copilot.source.approveOrReview'),
+    approveAll: t('copilot.source.approveAll'),
+    review: t('copilot.source.review'),
+    approved: t('copilot.source.approved'),
+    failed: t('copilot.source.failed'),
+    refused: t('copilot.source.refused'),
+  };
 }
