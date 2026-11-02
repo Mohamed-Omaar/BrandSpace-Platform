@@ -98,6 +98,25 @@ export interface AiGatewayOptions {
   readonly onPlatformThreshold?: (
     crossings: readonly PlatformThresholdCrossing[],
   ) => Promise<void> | void;
+  /**
+   * PR A2 (item 12, F-107) — told when a request's actual usage priced above
+   * its reservation by more than `ai.budgets.reservationOverrunAlertPercent`.
+   * The customer is charged at most the reservation (D-573); this is how the
+   * owner learns the platform absorbed the difference. Never fails a request.
+   */
+  readonly onReservationOverrun?: (overrun: ReservationOverrun) => Promise<void> | void;
+}
+
+/** PR A2 (item 12) — one request whose usage outran its reservation. */
+export interface ReservationOverrun {
+  readonly requestId: string;
+  readonly taskKey: string;
+  readonly modelKey: string;
+  readonly reservedMilli: bigint;
+  readonly meteredMilli: bigint;
+  /** How far above the reservation, in whole percent, rounded down. */
+  readonly overrunPercent: number;
+  readonly thresholdPercent: number;
 }
 
 /** The active AI configuration, already parsed. */
@@ -128,6 +147,12 @@ export interface AiConfiguration {
    * other host before a connection is opened.
    */
   readonly allowedHosts?: readonly string[];
+  /**
+   * PR A2 (item 12, F-107) — `ai.budgets.reservationOverrunAlertPercent`: alert
+   * the owner when usage prices this far above the reservation. Null or absent
+   * is off.
+   */
+  readonly reservationOverrunAlertPercent?: number | null;
 }
 
 export interface AiProviderConfig {
@@ -312,6 +337,7 @@ export class AiGateway {
   readonly #clock: Clock;
   readonly #random: () => number;
   readonly #onPlatformThreshold: AiGatewayOptions['onPlatformThreshold'];
+  readonly #onReservationOverrun: AiGatewayOptions['onReservationOverrun'];
   /** Crossings this process has already reported, so each is reported once. */
   readonly #reportedCrossings = new Set<string>();
 
@@ -325,6 +351,7 @@ export class AiGateway {
     this.#clock = options.clock ?? systemClock;
     this.#random = options.random ?? Math.random;
     this.#onPlatformThreshold = options.onPlatformThreshold;
+    this.#onReservationOverrun = options.onReservationOverrun;
   }
 
   async execute(request: AiGatewayRequest): Promise<AiGatewayResult> {
@@ -703,6 +730,24 @@ export class AiGateway {
     return { id: outcome.id };
   }
 
+  /**
+   * PR A2 (item 12, F-107) — usage that priced above its reservation by more
+   * than the owner's margin is reported. Fire and forget: the customer's
+   * request neither waits for nor fails on it.
+   */
+  #reportOverrun(
+    thresholdPercent: number | null | undefined,
+    overrun: Omit<ReservationOverrun, 'overrunPercent' | 'thresholdPercent'>,
+  ): void {
+    const result = reservationOverrun(thresholdPercent, overrun);
+    if (!result || !this.#onReservationOverrun) return;
+    try {
+      void Promise.resolve(this.#onReservationOverrun(result)).catch(() => undefined);
+    } catch {
+      // A throwing callback is the caller's bug, never the customer's failure.
+    }
+  }
+
   /** Hand new crossings to the owner's alert, once each per process. */
   #reportCrossings(crossings: readonly PlatformThresholdCrossing[]): void {
     if (!this.#onPlatformThreshold) return;
@@ -974,6 +1019,13 @@ export class AiGateway {
            */
           const metered = creditsChargedMilli(usage, creditRule, multiplier);
           const charged = metered > args.reservationEstimate ? args.reservationEstimate : metered;
+          this.#reportOverrun(config.reservationOverrunAlertPercent, {
+            requestId,
+            taskKey: request.taskKey,
+            modelKey,
+            reservedMilli: args.reservationEstimate,
+            meteredMilli: metered,
+          });
 
           /*
            * L-13 — THE SETTLE IS NOT A PROVIDER ATTEMPT. It used to run here,
@@ -1707,14 +1759,73 @@ function worstCaseUsage(request: AiGatewayRequest, route: ResolvedRoute): UsageU
   if (request.input.kind === 'image') {
     return { imageCount: request.input.count };
   }
-  const contextChars = (request.input.untrustedContext ?? []).reduce(
-    (total, entry) => total + entry.length,
-    0,
-  );
   return {
-    promptTokens: Math.ceil((request.input.prompt.length + contextChars) / 4),
+    promptTokens: estimatePromptTokens([
+      request.input.prompt,
+      ...(request.input.untrustedContext ?? []),
+    ]),
     completionTokens: route.parameters.maxOutputTokens,
   };
+}
+
+/**
+ * PR A2 (item 12, F-107) — HOW MANY TOKENS A PROMPT IS, BY SCRIPT.
+ *
+ * "Characters ÷ 4" is a fair estimate for English and an under-estimate for
+ * Arabic, which takes more tokens per character, so an Arabic request reserved
+ * less than it used and the platform absorbed the difference (D-573). Each
+ * character now counts by its script: Arabic at 2 characters a token, CJK and
+ * other scripts that encode a character per token at 1, everything else at 4.
+ * Estimating HIGH is the safe direction: the charge is the metered usage, at
+ * most the reservation, so a generous reservation never overcharges.
+ */
+export function estimatePromptTokens(parts: readonly string[]): number {
+  let quarterTokens = 0;
+  for (const part of parts) {
+    for (const char of part) {
+      const code = char.codePointAt(0) ?? 0;
+      quarterTokens += isArabicScript(code) ? 2 : isDenseScript(code) ? 4 : 1;
+    }
+  }
+  return Math.ceil(quarterTokens / 4);
+}
+
+function isArabicScript(code: number): boolean {
+  return (
+    (code >= 0x0600 && code <= 0x06ff) ||
+    (code >= 0x0750 && code <= 0x077f) ||
+    (code >= 0x08a0 && code <= 0x08ff) ||
+    (code >= 0xfb50 && code <= 0xfdff) ||
+    (code >= 0xfe70 && code <= 0xfeff)
+  );
+}
+
+/** CJK, Hangul, Thai and emoji: roughly a token (or more) per character. */
+function isDenseScript(code: number): boolean {
+  return (
+    (code >= 0x0e00 && code <= 0x0e7f) ||
+    (code >= 0x1100 && code <= 0x11ff) ||
+    (code >= 0x3000 && code <= 0x9fff) ||
+    (code >= 0xac00 && code <= 0xd7af) ||
+    code >= 0x1f000
+  );
+}
+
+/**
+ * PR A2 (item 12) — the overrun to report, or null: off when no threshold is
+ * set, and nothing to say while usage stayed within reservation + threshold.
+ */
+export function reservationOverrun(
+  thresholdPercent: number | null | undefined,
+  overrun: Omit<ReservationOverrun, 'overrunPercent' | 'thresholdPercent'>,
+): ReservationOverrun | null {
+  if (thresholdPercent === null || thresholdPercent === undefined) return null;
+  if (overrun.reservedMilli <= 0n || overrun.meteredMilli <= overrun.reservedMilli) return null;
+  const overrunPercent = Number(
+    ((overrun.meteredMilli - overrun.reservedMilli) * 100n) / overrun.reservedMilli,
+  );
+  if (overrunPercent <= thresholdPercent) return null;
+  return { ...overrun, overrunPercent, thresholdPercent };
 }
 
 /** Audit-safe metadata. Never the prompt itself — §11. */

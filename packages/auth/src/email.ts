@@ -75,6 +75,12 @@ export const EMAIL_TEMPLATE_KEYS = [
    * the numbers are on the Control Center's Home, behind its sign-in.
    */
   'platform.ai_spend_alert',
+  /*
+   * PR A2 (item 12, F-107) — a request's usage outran its credit reservation by
+   * more than the owner's margin. Once per UTC day, task and model; fixed
+   * text, no figure, no link: the numbers are in the Control Center's audit.
+   */
+  'platform.ai_reservation_overrun',
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];

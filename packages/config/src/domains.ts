@@ -530,6 +530,13 @@ const aiBudgetsSchema = z.object({
       currency: z.string().length(3).default('USD'),
     })
     .default({}),
+  /*
+   * PR A2 (item 12, F-107) — ALERT THE OWNER WHEN A REQUEST OUTRUNS ITS
+   * RESERVATION by more than this percentage of it. A customer is charged at
+   * most the reservation (D-573), so the platform absorbs the difference; this
+   * is how the owner hears about it. `null` is off.
+   */
+  reservationOverrunAlertPercent: z.number().min(0).max(1000).nullable().default(null),
 });
 
 const aiCreditRulesSchema = z.object({

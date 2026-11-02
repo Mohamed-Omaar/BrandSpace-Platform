@@ -6,6 +6,7 @@ import {
   customerMessageFor,
   type PlatformThresholdCrossing,
   type ProviderCredentialSource,
+  type ReservationOverrun,
 } from '@brandspace/ai-gateway';
 import { aiAdapterRegistry } from '@brandspace/ai-gateway/adapters';
 import { ConfigurationService } from '@brandspace/config';
@@ -100,6 +101,9 @@ export function platformAiGateway(): AiGateway {
     credentials: vaultCredentials((ref) => secrets().resolveSecret(ref, environment)),
     environment,
     onPlatformThreshold: (crossings) => alertPlatformOwner(crossings),
+    onReservationOverrun: async (overrun) => {
+      await alertReservationOverrun(overrun);
+    },
   });
   return cachedGateway;
 }
@@ -183,4 +187,68 @@ export async function alertPlatformOwner(
       .send({ to: owner.email, templateKey: 'platform.ai_spend_alert', locale: 'EN' })
       .catch(() => log.error('platform AI ceiling alert email failed', { alerts: raised }));
   }
+}
+
+/** PR A2 (item 12, F-107) — the audit action that records an overrun alert. */
+export const RESERVATION_OVERRUN_ALERT_ACTION = 'ai.reservation_overrun.alert_raised';
+
+/**
+ * PR A2 (item 12, F-107) — TELL THE OWNER A REQUEST OUTRAN ITS RESERVATION by
+ * more than their margin. ONCE PER UTC DAY, TASK AND MODEL, across processes:
+ * an advisory lock named for that triple and its own audit event, the same
+ * pattern as the platform-ceiling alert. The event carries counts and keys,
+ * never content; the email is fixed text pointing to the Control Center.
+ */
+export async function alertReservationOverrun(
+  overrun: ReservationOverrun,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const prisma = getPlatformClient();
+  const reason = `overrun:${now.toISOString().slice(0, 10)}:${overrun.taskKey}:${overrun.modelKey}`;
+  const created = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey(reason)}::bigint)`;
+    const existing = await tx.auditEvent.findFirst({
+      where: { action: RESERVATION_OVERRUN_ALERT_ACTION, reason, workspaceId: null },
+      select: { id: true },
+    });
+    if (existing) return false;
+    await tx.auditEvent.create({
+      data: {
+        workspaceId: null,
+        actorType: 'SYSTEM',
+        action: RESERVATION_OVERRUN_ALERT_ACTION,
+        resourceType: 'ai.budgets',
+        resourceId: overrun.requestId,
+        severity: 'WARNING',
+        reason,
+        after: {
+          taskKey: overrun.taskKey,
+          modelKey: overrun.modelKey,
+          reservedMilliCredits: String(overrun.reservedMilli),
+          meteredMilliCredits: String(overrun.meteredMilli),
+          overrunPercent: overrun.overrunPercent,
+          thresholdPercent: overrun.thresholdPercent,
+        } satisfies Prisma.InputJsonValue,
+      },
+    });
+    return true;
+  });
+  if (!created) return false;
+
+  log.warn('AI reservation overrun alert raised', {
+    taskKey: overrun.taskKey,
+    modelKey: overrun.modelKey,
+    overrunPercent: overrun.overrunPercent,
+  });
+  const owners = await prisma.platformUser.findMany({
+    where: { status: 'ACTIVE', role: { key: 'platform_owner' } },
+    select: { email: true },
+  });
+  const email = await getEmailProvider(prisma);
+  for (const owner of owners) {
+    await email
+      .send({ to: owner.email, templateKey: 'platform.ai_reservation_overrun', locale: 'EN' })
+      .catch(() => log.error('AI reservation overrun alert email failed', {}));
+  }
+  return true;
 }

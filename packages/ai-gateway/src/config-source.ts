@@ -134,6 +134,8 @@ export class ConfigurationAiSource implements AiConfigurationSource {
       // allow-list of provider hosts beyond each adapter's official ones.
       platformBudget: budgets.platform,
       allowedHosts: providers.allowedHosts,
+      // PR A2 (item 12, F-107) — the owner's overrun margin; null is off.
+      reservationOverrunAlertPercent: budgets.reservationOverrunAlertPercent,
     };
   }
 }
