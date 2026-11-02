@@ -116,7 +116,9 @@ test.describe('P1 · one rule for light, dark and device', () => {
   test('the account menu sets the choice, a reload keeps it, and a second tab agrees', async ({
     page,
     context,
+    isMobile,
   }) => {
+    test.skip(isMobile === true, 'the rail copy of the menu (D-468(b)); the desktop run covers it');
     await signIn(page, 'en');
     await withScheme(context, 'light');
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
