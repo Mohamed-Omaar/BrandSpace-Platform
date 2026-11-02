@@ -31,6 +31,7 @@ describe('D-574 · the secret_version trigger migration', () => {
     expect(EXPECTED_MIGRATIONS.slice(EXPECTED_MIGRATIONS.indexOf(NAME))).toEqual([
       NAME,
       '20261101090000_ai_output_failure_classes',
+      '20261102120000_one_assistant',
     ]);
   });
 

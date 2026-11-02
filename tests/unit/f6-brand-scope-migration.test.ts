@@ -89,6 +89,7 @@ describe('F6 — the brandScope migration', () => {
       '20261028090000_secret_version_kek_rewrap',
       // PR A: the AI output failure classes and the operator's failure detail.
       '20261101090000_ai_output_failure_classes',
+      '20261102120000_one_assistant',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe(
       '20261012092000_publish_job_published_population_index',

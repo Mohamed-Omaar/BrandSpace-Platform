@@ -1580,10 +1580,10 @@ model AiRequest {
   /// this column would violate NOT NULL.
   attemptedModelKeys String[] @default([])
 
-  status         AiRequestStatus @default(PENDING)
-  failureClass   AiFailureClass?
+  status            AiRequestStatus @default(PENDING)
+  failureClass      AiFailureClass?
   /// Safe to show a customer. Never a raw provider error or a credential.
-  failureMessage String?
+  failureMessage    String?
   /// PR A — the provider's own error code, for the operator. Never in a
   /// customer response. CHECK: `^[A-Za-z0-9_.:-]{1,64}$`, failures only.
   providerErrorCode String?
@@ -5036,6 +5036,16 @@ model CopilotSession {
   /// D-116 / D-117 retention.
   expiresAt DateTime? @db.Timestamptz(6)
 
+  /// PR B — THE ROLLING SUMMARY of the turns older than the recent window.
+  /// Customer content: purged with retention like a message body
+  /// (`summaryPurgedAt` records it; a CHECK keeps the two consistent).
+  summary          String?
+  /// The newest turn the summary covers.
+  summaryThroughAt DateTime? @db.Timestamptz(6)
+  /// When the newest message the summary covers expires; the purge clears it then.
+  summaryExpiresAt DateTime? @db.Timestamptz(6)
+  summaryPurgedAt  DateTime? @db.Timestamptz(6)
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -5047,6 +5057,11 @@ model CopilotSession {
   toolCalls CopilotToolCall[]
 
   @@unique([workspaceId, id], name: "copilot_session_workspace_scope")
+  /// PR B: ONE ACTIVE conversation per person per brand is enforced by the
+  /// partial unique index `copilot_session_one_per_person_brand`
+  /// (workspaceId, userId, brandId) NULLS NOT DISTINCT WHERE archivedAt IS NULL,
+  /// created in migration 20261102120000. Prisma cannot express a partial
+  /// unique, so it lives in SQL only.
   @@index([workspaceId, userId, lastMessageAt(sort: Desc)])
   @@index([expiresAt])
   @@map("copilot_session")
@@ -5086,6 +5101,17 @@ model CopilotMessage {
 
   /// Joins this turn to its plan, its tool calls and its audit events.
   correlationId String @db.Uuid
+
+  /// PR B — `message`, or `topic_break` (a "New topic" divider: no body; the
+  /// model does not read the turns before it). CHECK-constrained.
+  kind                  String  @default("message")
+  /// PR B — how a streamed reply ended: `streaming` | `complete` | `stopped` |
+  /// `failed`. A stopped or failed reply is never charged.
+  status                String  @default("complete")
+  /// Grounding of an answer about the brand: `[{ itemId, area, version, ... }]`.
+  citations             Json?
+  /// The answer declined for lack of approved knowledge.
+  insufficientKnowledge Boolean @default(false)
 
   expiresAt DateTime? @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
