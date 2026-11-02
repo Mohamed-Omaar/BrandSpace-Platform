@@ -40,6 +40,7 @@ import {
   type ProtoCalendarDay,
   type ProtoCalendarPost,
 } from './prototype-calendar';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * The Content Calendar — the customer screen.
@@ -1052,13 +1053,9 @@ export function CalendarView({
             ) : null}
 
             <div>
-              <button
-                type="submit"
-                data-testid="schedule-submit"
-                className={buttonClass('primary')}
-              >
+              <SubmitButton data-testid="schedule-submit" className={buttonClass('primary')}>
                 {t['calendar.scheduleSubmit']}
-              </button>
+              </SubmitButton>
             </div>
           </form>
         )}
@@ -1227,13 +1224,9 @@ export function CalendarView({
                   </Field>
                 </div>
                 <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
-                  <button
-                    type="submit"
-                    data-testid="reschedule-submit"
-                    className={buttonClass('primary')}
-                  >
+                  <SubmitButton data-testid="reschedule-submit" className={buttonClass('primary')}>
                     {t['calendar.rescheduleSubmit']}
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
             ) : null}
@@ -1258,13 +1251,12 @@ export function CalendarView({
                   <input type="hidden" name="month" value={month} />
                   <input type="hidden" name="returnTo" value="/calendar" />
                   <input type="hidden" name="itemId" value={openSlot.contentItemId} />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     data-testid="calendar-request-approval"
                     className={buttonClass('neutral')}
                   >
                     {t['calendar.drawer.requestApproval']}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
               {/* B7 — only a plan that has not started publishing can be taken off. */}
@@ -1273,13 +1265,12 @@ export function CalendarView({
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="month" value={month} />
                   <input type="hidden" name="slotId" value={openSlot.slotId} />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     data-testid="calendar-cancel-submit"
                     className={buttonClass('neutral')}
                   >
                     {t['calendar.cancelSubmit']}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
             </div>

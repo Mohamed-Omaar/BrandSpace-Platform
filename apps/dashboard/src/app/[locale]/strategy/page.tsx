@@ -59,6 +59,7 @@ import {
 
 import { EmptyAction } from '../../../components/empty-action';
 import { type DateFormatterLike, dayFormatter, rangeLabel } from '../../../server/prototype-dates';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -527,13 +528,12 @@ export default async function StrategyPage({
                         <input type="hidden" name="locale" value={locale} />
                         <input type="hidden" name="brandId" value={brand.id} />
                         <input type="hidden" name="insightId" value={data.accepted.id} />
-                        <button
-                          type="submit"
+                        <SubmitButton
                           className="bsp-btn bsp-sm bsp-ghost"
                           data-testid="strategy-brain-changed-acknowledge"
                         >
                           {t('strategy.brainChanged.acknowledge')}
-                        </button>
+                        </SubmitButton>
                       </form>
                     ) : null}
                   </div>
@@ -899,9 +899,9 @@ export default async function StrategyPage({
                               {t('strategy.startsFromGoal')}
                             </span>
                           ) : null}
-                          <button type="submit" className="bsp-btn bsp-sm bsp-pur">
+                          <SubmitButton className="bsp-btn bsp-sm bsp-pur">
                             {t('strategy.generate')}
-                          </button>
+                          </SubmitButton>
                           <StartBusyReporter />
                         </form>
                       </section>
@@ -954,36 +954,31 @@ export default async function StrategyPage({
                                     <input type="hidden" name="locale" value={locale} />
                                     <input type="hidden" name="insightId" value={proposal.id} />
                                     <input type="hidden" name="decision" value="accept" />
-                                    <button
-                                      type="submit"
+                                    <SubmitButton
                                       className="bsp-btn bsp-sm bsp-pur"
                                       data-testid={`strategy-accept-${proposal.id}`}
                                     >
                                       {t('insights.accept')}
-                                    </button>
+                                    </SubmitButton>
                                   </form>
                                   <form action={reviewInsightAction}>
                                     <input type="hidden" name="locale" value={locale} />
                                     <input type="hidden" name="insightId" value={proposal.id} />
                                     <input type="hidden" name="decision" value="dismiss" />
-                                    <button
-                                      type="submit"
-                                      className="bsp-btn bsp-sm bsp-ghost bsp-sp-discard"
-                                    >
+                                    <SubmitButton className="bsp-btn bsp-sm bsp-ghost bsp-sp-discard">
                                       {t('insights.dismiss')}
-                                    </button>
+                                    </SubmitButton>
                                   </form>
                                   {mayReview ? (
                                     <form action={proposeLearningsAction}>
                                       <input type="hidden" name="locale" value={locale} />
                                       <input type="hidden" name="insightId" value={proposal.id} />
-                                      <button
-                                        type="submit"
+                                      <SubmitButton
                                         className="bsp-btn bsp-sm bsp-sec"
                                         data-testid="propose-learnings"
                                       >
                                         {t('insights.proposeLearnings')}
-                                      </button>
+                                      </SubmitButton>
                                     </form>
                                   ) : null}
                                 </div>

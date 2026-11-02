@@ -48,6 +48,7 @@ import {
 } from '../labels';
 import { briefFrom } from '../../../../server/campaign-form';
 import { whenLabel } from '../../../../server/prototype-dates';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -576,9 +577,9 @@ export default async function CampaignDetailPage({
                 <input type="hidden" name="locale" value={locale} />
                 <input type="hidden" name="campaignId" value={campaign.id} />
                 <input type="hidden" name="version" value={campaign.version} />
-                <button type="submit" className="bsp-btn bsp-sm" data-testid="campaign-start-now">
+                <SubmitButton className="bsp-btn bsp-sm" data-testid="campaign-start-now">
                   {t('campaigns.startNow')}
-                </button>
+                </SubmitButton>
               </form>
             ) : null}
             {mayCreate && campaign.status !== 'ARCHIVED' ? (

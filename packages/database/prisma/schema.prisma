@@ -272,6 +272,9 @@ model User {
   /// `Asia/Riyadh` was a guess about all of them. Whoever creates the row
   /// resolves it.
   timezone        String
+  /// P1 (D-592): the person's own light / dark / device choice; NULL = none,
+  /// so the Look & feel default applies. CHECK: light, dark or system.
+  colorScheme     String?
   status          UserStatus @default(PENDING)
 
   // MFA. `mfaSecretRef` is the PLATFORM Secret Service reference, used where a

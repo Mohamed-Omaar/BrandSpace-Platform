@@ -9,6 +9,7 @@ import { AuthCard } from '../../../components/auth-card';
 import { signOutAction } from '../(auth)/actions';
 import { cancelWorkspaceDeletionAction } from './actions';
 import { dayFormatter } from '../../../server/prototype-dates';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,9 +72,9 @@ export default async function DeletionPendingPage({
         {mayCancel ? (
           <form action={cancelWorkspaceDeletionAction}>
             <input type="hidden" name="locale" value={locale} />
-            <button type="submit" className={buttonClass('primary')} data-testid="deletion-cancel">
+            <SubmitButton className={buttonClass('primary')} data-testid="deletion-cancel">
               {t('deletion.cancel')}
-            </button>
+            </SubmitButton>
           </form>
         ) : (
           <p
@@ -89,9 +90,9 @@ export default async function DeletionPendingPage({
           </Link>
           <form action={signOutAction}>
             <input type="hidden" name="locale" value={locale} />
-            <button type="submit" className={buttonClass('ghost', 'sm')} data-testid="sign-out">
+            <SubmitButton className={buttonClass('ghost', 'sm')} data-testid="sign-out">
               {t('nav.signOut')}
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </div>

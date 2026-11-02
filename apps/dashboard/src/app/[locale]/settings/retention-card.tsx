@@ -3,6 +3,7 @@ import { inContentStudio } from '../../../server/content-context';
 import { translator } from '../../../i18n/messages';
 import { requestMessageLocale } from '../../../server/message-locale';
 import { saveRetentionAction } from '../content/actions';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * D-117 — THE CUSTOMER'S OWN RETENTION CONTROL, in Settings → Data, where the
@@ -70,9 +71,9 @@ export async function RetentionCard({
                 placeholder={t('content.retention.placeholder')}
                 aria-describedby="retention-note"
               />
-              <button type="submit" data-testid="retention-save" className="bsp-btn bsp-sm bsp-pur">
+              <SubmitButton data-testid="retention-save" className="bsp-btn bsp-sm bsp-pur">
                 {t('content.retention.save')}
-              </button>
+              </SubmitButton>
             </span>
           </label>
           <span id="retention-note" className="bsp-dt-sub">

@@ -1,6 +1,7 @@
 import QRCode from 'qrcode';
 import { CopyTextButton } from './copy-text-button';
 import { Field, colorTokens, spacingTokens, typographyTokens, buttonClass } from '@brandspace/ui';
+import { SubmitButton } from './pending-submit';
 
 /**
  * SETTING UP AN AUTHENTICATOR (G4 / Q23, prototype v94 Phase 2B-1, D-333).
@@ -104,9 +105,9 @@ export async function MfaEnrolmentPanel({
         />
       </Field>
       <div>
-        <button type="submit" data-testid={`${testId}-confirm`} className={buttonClass('primary')}>
+        <SubmitButton data-testid={`${testId}-confirm`} className={buttonClass('primary')}>
           {labels.confirm}
-        </button>
+        </SubmitButton>
       </div>
     </form>
   );

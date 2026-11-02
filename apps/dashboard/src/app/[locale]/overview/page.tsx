@@ -56,6 +56,7 @@ import { setupFactsFor } from '../../../server/setup-wizard';
 import { setupSteps } from '../../../server/setup-wizard-state';
 import { connectableChannels } from '../../../server/connectable-channels';
 import { heldSlot } from '../calendar/slot-moves';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -942,13 +943,12 @@ export default async function OverviewPage({
                             {jobs.map((jobId) => (
                               <input key={jobId} type="hidden" name="jobId" value={jobId} />
                             ))}
-                            <button
-                              type="submit"
+                            <SubmitButton
                               className="bsp-btn bsp-sm bsp-sec"
                               data-testid={`attention-retry-${entry.id}`}
                             >
                               {t('publishing.retry')}
-                            </button>
+                            </SubmitButton>
                           </form>
                         ) : (
                           <Link

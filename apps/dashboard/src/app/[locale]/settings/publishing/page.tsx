@@ -37,6 +37,7 @@ import {
   saveTemplateAction,
   setDefaultTemplateAction,
 } from './actions';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -429,16 +430,14 @@ export default async function PublishingDefaultsPage({
                                   name="templateId"
                                   value={template.isDefault ? '' : template.id}
                                 />
-                                <button
-                                  type="submit"
-
+                                <SubmitButton
                                   className={buttonClass('ghost', 'sm')}
                                   data-testid={`template-set-default-${template.id}`}
                                 >
                                   {template.isDefault
                                     ? t('templates.clearDefault')
                                     : t('templates.makeDefault')}
-                                </button>
+                                </SubmitButton>
                               </form>
                               {/* DELETE ASKS TWICE — the Automations screen's pattern. */}
                               <details data-testid={`template-delete-${template.id}`}>
@@ -459,14 +458,12 @@ export default async function PublishingDefaultsPage({
                                   <input type="hidden" name="locale" value={locale} />
                                   <input type="hidden" name="templateId" value={template.id} />
                                   <span style={hintStyle}>{t('templates.deleteBody')}</span>
-                                  <button
-                                    type="submit"
-
+                                  <SubmitButton
                                     className={buttonClass('danger', 'sm')}
                                     data-testid={`template-delete-confirm-${template.id}`}
                                   >
                                     {t('templates.deleteConfirm')}
-                                  </button>
+                                  </SubmitButton>
                                 </form>
                               </details>
                             </span>
@@ -616,14 +613,12 @@ export default async function PublishingDefaultsPage({
                           minBlockSize: layoutTokens.minTargetSize,
                         }}
                       >
-                        <button
-                          type="submit"
-
+                        <SubmitButton
                           className={buttonClass('primary', 'sm')}
                           data-testid={`template-save-${brand.id}`}
                         >
                           {t('templates.save')}
-                        </button>
+                        </SubmitButton>
                         {editing ? (
                           <Link href={templatesHref} className={buttonClass('ghost', 'sm')}>
                             {t('templates.cancelEdit')}

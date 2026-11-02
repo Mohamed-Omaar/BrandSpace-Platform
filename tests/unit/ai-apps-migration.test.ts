@@ -196,7 +196,7 @@ describe('D-566 · the AI apps migration', () => {
   });
 
   it('comes directly after connectors B; only its D-112 fix (D-568) and the D-573 ceiling follow', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-6)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-7)).toEqual([
       '20261022092000_publish_job_handle_lookup_index',
       NAME,
       '20261023091000_ai_app_token_replaced_scoped',
@@ -206,6 +206,8 @@ describe('D-566 · the AI apps migration', () => {
       '20261028090000_secret_version_kek_rewrap',
       // PR A: the AI output failure classes and the operator's failure detail.
       '20261101090000_ai_output_failure_classes',
+      // P1: each person's light / dark / device choice (D-592).
+      '20261102090000_user_colour_scheme',
     ]);
   });
 });

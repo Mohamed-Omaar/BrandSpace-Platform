@@ -1,6 +1,7 @@
 import { translator } from '../../../i18n/messages';
 import { AuthCard } from '../../../components/auth-card';
 import { signOutAction } from '../(auth)/actions';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,9 +22,9 @@ export default async function NoWorkspacePage({ params }: { params: Promise<{ lo
       <p data-testid="workspace-suspended-hint">{t('ws.suspended')}</p>
       <form action={signOutAction}>
         <input type="hidden" name="locale" value={locale} />
-        <button type="submit" data-testid="sign-out" style={{ minBlockSize: 'var(--bsp-px-40)' }}>
+        <SubmitButton data-testid="sign-out" style={{ minBlockSize: 'var(--bsp-px-40)' }}>
           {t('nav.signOut')}
-        </button>
+        </SubmitButton>
       </form>
     </AuthCard>
   );

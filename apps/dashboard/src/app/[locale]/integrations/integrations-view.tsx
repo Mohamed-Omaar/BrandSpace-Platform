@@ -16,6 +16,7 @@ import {
 import type { MessageKey } from '../../../i18n/messages';
 import { MoreDisclosure } from '../../../components/more-disclosure';
 import { ChannelMark } from '../calendar/prototype-calendar';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * Connected accounts and publishing history — Phase 6.
@@ -231,13 +232,9 @@ export function IntegrationsView({
                 </label>
               ))}
             </fieldset>
-            <button
-              type="submit"
-              className={buttonClass('primary')}
-              data-testid="select-target-submit"
-            >
+            <SubmitButton className={buttonClass('primary')} data-testid="select-target-submit">
               {t('integrations.selectTargetSubmit')}
-            </button>
+            </SubmitButton>
           </form>
         </Card>
       ) : null}
@@ -325,13 +322,9 @@ export function IntegrationsView({
                 <form action={actions.check}>
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="connectionId" value={row.id} />
-                  <button
-                    type="submit"
-                    className="bsp-btn bsp-sm bsp-sec"
-                    data-testid={`check-${row.id}`}
-                  >
+                  <SubmitButton className="bsp-btn bsp-sm bsp-sec" data-testid={`check-${row.id}`}>
                     {t('integrations.check')}
-                  </button>
+                  </SubmitButton>
                 </form>
               </MoreDisclosure>
               {/*
@@ -363,13 +356,12 @@ export function IntegrationsView({
                         {t('integrations.disconnectMetaNote')}
                       </span>
                     ) : null}
-                    <button
-                      type="submit"
+                    <SubmitButton
                       className="bsp-btn bsp-sm bsp-acc-danger"
                       data-testid={`disconnect-confirm-${row.id}`}
                     >
                       {t('integrations.disconnectConfirmSubmit')}
-                    </button>
+                    </SubmitButton>
                   </form>
                 </details>
               ) : null}
@@ -417,9 +409,9 @@ export function IntegrationsView({
                       ))}
                     </select>
                   )}
-                  <button type="submit" className="bsp-btn bsp-sm bsp-pur">
+                  <SubmitButton className="bsp-btn bsp-sm bsp-pur">
                     {t('integrations.connectShort')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ))
           : null}
@@ -478,13 +470,9 @@ export function IntegrationsView({
                         ))}
                       </select>
                     </label>
-                    <button
-                      type="submit"
-                      className="bsp-btn bsp-sm bsp-pur"
-                      data-testid="connect-submit"
-                    >
+                    <SubmitButton className="bsp-btn bsp-sm bsp-pur" data-testid="connect-submit">
                       {t('integrations.connect')}
-                    </button>
+                    </SubmitButton>
                     {/*
                       CAPABILITIES ARE DECLARED, AND THE CUSTOMER SEES THEM
                       BEFORE THEY COMMIT.
@@ -588,13 +576,12 @@ export function IntegrationsView({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="returnTo" value="/integrations?history=1" />
                           <input type="hidden" name="jobId" value={row.id} />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             className={buttonClass('neutral')}
                             data-testid={`cancel-${row.id}`}
                           >
                             {t('publishing.cancel')}
-                          </button>
+                          </SubmitButton>
                         </form>
                       ) : null}
                       {row.canRetry ? (
@@ -602,13 +589,12 @@ export function IntegrationsView({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="returnTo" value="/integrations?history=1" />
                           <input type="hidden" name="jobId" value={row.id} />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             className={buttonClass('neutral')}
                             data-testid={`retry-${row.id}`}
                           >
                             {t('publishing.retry')}
-                          </button>
+                          </SubmitButton>
                         </form>
                       ) : null}
                     </div>

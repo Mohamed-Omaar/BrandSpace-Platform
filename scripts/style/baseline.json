@@ -24,10 +24,10 @@
       "size": 4
     },
     "packages/ui/src/prototype.css": {
-      "border-width": 186,
+      "border-width": 185,
       "font-family": 3,
       "letter-spacing": 37,
-      "lit-token": 457,
+      "lit-token": 454,
       "radius": 1,
       "shadow": 23,
       "size": 53,

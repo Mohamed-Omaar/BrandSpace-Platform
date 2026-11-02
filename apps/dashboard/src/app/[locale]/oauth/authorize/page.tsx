@@ -10,6 +10,7 @@ import {
 import { translator, type MessageKey } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle } from '../../../../components/auth-card';
 import { decideConsentAction } from './actions';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -178,24 +179,22 @@ export default async function ConsentPage({
             </fieldset>
             <p className="bsp-consent-note">{t('consent.asYou')}</p>
             <div className="bsp-consent-actions">
-              <button
-                type="submit"
+              <SubmitButton
                 name="decision"
                 value="allow"
                 style={authButtonStyle()}
                 data-testid="consent-allow"
               >
                 {t('consent.allow')}
-              </button>
-              <button
-                type="submit"
+              </SubmitButton>
+              <SubmitButton
                 name="decision"
                 value="cancel"
                 className="bsp-btn bsp-ghost bsp-consent-cancel"
                 data-testid="consent-cancel"
               >
                 {t('consent.cancel')}
-              </button>
+              </SubmitButton>
             </div>
           </form>
         ) : (
@@ -203,15 +202,14 @@ export default async function ConsentPage({
             <input type="hidden" name="locale" value={locale} />
             {hiddenParams(request)}
             <Banner tone="warning">{t('consent.noWorkspace')}</Banner>
-            <button
-              type="submit"
+            <SubmitButton
               name="decision"
               value="cancel"
               className="bsp-btn bsp-ghost bsp-consent-cancel"
               data-testid="consent-cancel"
             >
               {t('consent.cancel')}
-            </button>
+            </SubmitButton>
           </form>
         )}
       </div>

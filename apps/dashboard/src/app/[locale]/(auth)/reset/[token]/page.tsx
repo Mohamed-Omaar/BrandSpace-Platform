@@ -3,6 +3,7 @@ import { statusMessage, translator } from '../../../../../i18n/messages';
 import { AuthCard, authButtonStyle } from '../../../../../components/auth-card';
 import { completePasswordResetAction } from '../../actions';
 import { signupPolicy } from '../../../../../server/signup-policy';
+import { SubmitButton } from '../../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,13 +69,12 @@ export default async function ResetCompletePage({
             { label: t('password.rule.phrase'), kind: 'note' },
           ]}
         />
-        <button
-          type="submit"
+        <SubmitButton
           data-testid="reset-submit"
           style={{ ...authButtonStyle(), marginBlockStart: spacingTokens.lg }}
         >
           {t('reset.submit')}
-        </button>
+        </SubmitButton>
       </form>
     </AuthCard>
   );

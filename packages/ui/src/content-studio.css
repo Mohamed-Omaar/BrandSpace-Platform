@@ -350,6 +350,17 @@
   gap: var(--bsp-px-8);
 }
 
+/* P1 — the actions row of a field group stands clear of the last field
+   (the media drawer's "Estimate cost" and "Generate image" sat on the
+   select), and its buttons line up on one centre line. */
+.cs-field > .cs-form-actions {
+  align-items: center;
+  margin-block-start: var(--bsp-px-16);
+}
+.cs-field > .bs-working {
+  margin-block-start: var(--bsp-px-12);
+}
+
 /* --- the demo's own breakpoints, with its own values ----------------- */
 
 @media (max-width: 1200px) {

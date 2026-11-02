@@ -29,6 +29,7 @@ import {
 import { MfaEnrolmentPanel } from '../../../../components/mfa-enrolment';
 import { CheckboxRow } from '../../../../components/checkbox-row';
 import { RECOVERY_CODES_COOKIE } from '../../../../server/mfa-codes';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -173,9 +174,9 @@ export default async function SecuritySettingsPage({
               {mfaAvailable && !account.mfaEnabled && !pending ? (
                 <form action={beginMfaEnrolmentAction}>
                   <input type="hidden" name="locale" value={locale} />
-                  <button type="submit" data-testid="mfa-begin" className="bsp-btn bsp-sm bsp-pur">
+                  <SubmitButton data-testid="mfa-begin" className="bsp-btn bsp-sm bsp-pur">
                     {t('security.enrolStart')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
             </div>
@@ -213,13 +214,12 @@ export default async function SecuritySettingsPage({
                 />
                 <form action={cancelNewPhoneAction}>
                   <input type="hidden" name="locale" value={locale} />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     data-testid="mfa-new-phone-cancel"
                     className="bsp-btn bsp-sm bsp-ghost"
                   >
                     {t('common.cancel')}
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             ) : null}
@@ -260,13 +260,9 @@ export default async function SecuritySettingsPage({
                     aria-label={t('security.orPassword')}
                     data-testid="mfa-disable-password"
                   />
-                  <button
-                    type="submit"
-                    data-testid="mfa-disable"
-                    className="bsp-btn bsp-sm bsp-sec"
-                  >
+                  <SubmitButton data-testid="mfa-disable" className="bsp-btn bsp-sm bsp-sec">
                     {t('security.disable')}
-                  </button>
+                  </SubmitButton>
                 </span>
               </form>
             ) : null}
@@ -298,13 +294,12 @@ export default async function SecuritySettingsPage({
                     aria-label={t('security.code')}
                     data-testid="mfa-new-phone-code"
                   />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     data-testid="mfa-new-phone-begin"
                     className="bsp-btn bsp-sm bsp-sec"
                   >
                     {t('security.newPhone')}
-                  </button>
+                  </SubmitButton>
                 </span>
               </form>
             </div>
@@ -340,13 +335,12 @@ export default async function SecuritySettingsPage({
                   </ul>
                   <form action={dismissRecoveryCodesAction}>
                     <input type="hidden" name="locale" value={locale} />
-                    <button
-                      type="submit"
+                    <SubmitButton
                       data-testid="recovery-codes-saved"
                       className="bsp-btn bsp-sm bsp-sec"
                     >
                       {t('security.recoverySaved')}
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
               ) : null}
@@ -369,13 +363,12 @@ export default async function SecuritySettingsPage({
                       aria-label={t('security.code')}
                       data-testid="recovery-regen-code"
                     />
-                    <button
-                      type="submit"
+                    <SubmitButton
                       data-testid="recovery-regenerate"
                       className="bsp-btn bsp-sm bsp-sec"
                     >
                       {t('security.recoveryRegenerate')}
-                    </button>
+                    </SubmitButton>
                   </span>
                 </form>
               ) : null}
@@ -401,13 +394,12 @@ export default async function SecuritySettingsPage({
                 checked={workspace.requireMfa === true}
                 testId="mfa-require"
               />
-              <button
-                type="submit"
+              <SubmitButton
                 data-testid="mfa-require-save"
                 className="bsp-btn bsp-sm bsp-sec bsp-secu-req-save"
               >
                 {t('common.save')}
-              </button>
+              </SubmitButton>
             </form>
           ) : null}
 
@@ -421,9 +413,9 @@ export default async function SecuritySettingsPage({
               <span className="bsp-secu-t">{t('security.sessionsHeading')}</span>
               <span className="bsp-secu-s">{t('security.sessionsExplain')}</span>
             </span>
-            <button type="submit" data-testid="sessions-revoke" className="bsp-btn bsp-sm bsp-sec">
+            <SubmitButton data-testid="sessions-revoke" className="bsp-btn bsp-sm bsp-sec">
               {t('security.signOutOthers')}
-            </button>
+            </SubmitButton>
           </form>
 
           <div className="bsp-row bsp-secu-row" data-testid="security-activity">

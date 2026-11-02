@@ -14,6 +14,7 @@ import { statusMessage, translator } from '../../../i18n/messages';
 import { AuthCard, authButtonStyle } from '../../../components/auth-card';
 import { MfaEnrolmentPanel } from '../../../components/mfa-enrolment';
 import { beginMfaEnrolmentAction, confirmMfaEnrolmentAction } from '../settings/security/actions';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,9 +103,9 @@ export default async function MfaSetupPage({
         <form action={beginMfaEnrolmentAction}>
           <input type="hidden" name="locale" value={locale} />
           <input type="hidden" name="from" value="setup" />
-          <button type="submit" data-testid="mfa-setup-begin" style={authButtonStyle()}>
+          <SubmitButton data-testid="mfa-setup-begin" style={authButtonStyle()}>
             {t('mfaSetup.start')}
-          </button>
+          </SubmitButton>
         </form>
       )}
       {workspaces.length > 1 ? (

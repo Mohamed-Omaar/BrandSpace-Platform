@@ -47,6 +47,7 @@ import { dayFormatter, dayLabel, whenFormatter } from '../../../server/prototype
 
 import { EmptyAction } from '../../../components/empty-action';
 import { listOf } from '../content/compose/format-fit';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -1475,13 +1476,12 @@ export default async function AnalyticsPage({
                         <input type="hidden" name="insightId" value={insight.id} />
                         <input type="hidden" name="decision" value="dismiss" />
                         <input type="hidden" name="returnTo" value="/analytics" />
-                        <button
-                          type="submit"
+                        <SubmitButton
                           className="bsp-btn bsp-sm bsp-ghost"
                           data-testid={`analytics-insight-dismiss-${insight.id}`}
                         >
                           {t('analytics.notUseful')}
-                        </button>
+                        </SubmitButton>
                       </form>
                     ) : null}
                   </div>
@@ -1533,13 +1533,12 @@ function SaveAsLearning({
       <input type="hidden" name="insightId" value={insightId} />
       <input type="hidden" name="range" value={String(range)} />
       <input type="hidden" name="view" value="insights" />
-      <button
-        type="submit"
+      <SubmitButton
         className="bsp-btn bsp-sm bsp-sec"
         data-testid={`insight-save-learning-${insightId}`}
       >
         {t('insights.saveAsLearning')}
-      </button>
+      </SubmitButton>
     </form>
   );
 }
@@ -1577,9 +1576,9 @@ function ExplainForm({
       <input type="hidden" name="range" value={String(days)} />
       <input type="hidden" name="compare" value={compare ? '1' : '0'} />
       {view ? <input type="hidden" name="view" value={view} /> : null}
-      <button type="submit" className="bsp-btn bsp-sm bsp-pur" data-testid={testId}>
+      <SubmitButton className="bsp-btn bsp-sm bsp-pur" data-testid={testId}>
         {label}
-      </button>
+      </SubmitButton>
     </form>
   );
 }

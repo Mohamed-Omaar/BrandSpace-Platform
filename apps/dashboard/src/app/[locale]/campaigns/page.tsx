@@ -26,6 +26,7 @@ import { CAMPAIGN_OBJECTIVES } from '../../../server/campaign-form';
 
 import { EmptyAction } from '../../../components/empty-action';
 import { whenLabel } from '../../../server/prototype-dates';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -578,8 +579,7 @@ export default async function CampaignsPage({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="campaignId" value={campaign.id} />
                           <input type="hidden" name="brandId" value={campaign.brandId} />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             className="bsp-camp-toggle"
                             data-testid={`campaign-pause-${campaign.id}`}
                             aria-label={`${t('campaigns.card.pause')} — ${campaign.name}`}
@@ -595,7 +595,7 @@ export default async function CampaignsPage({
                               <rect x="14" y="5" width="4" height="14" rx="1" />
                             </svg>
                             {t('campaigns.card.pause')}
-                          </button>
+                          </SubmitButton>
                         </form>
                       ) : null}
                       {/*
@@ -608,8 +608,7 @@ export default async function CampaignsPage({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="campaignId" value={campaign.id} />
                           <input type="hidden" name="brandId" value={campaign.brandId} />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             className="bsp-camp-toggle"
                             data-testid={`campaign-resume-${campaign.id}`}
                             aria-label={`${t('campaigns.card.resume')} — ${campaign.name}`}
@@ -624,7 +623,7 @@ export default async function CampaignsPage({
                               <path d="M7 5v14l12-7z" />
                             </svg>
                             {t('campaigns.card.resume')}
-                          </button>
+                          </SubmitButton>
                         </form>
                       ) : null}
                       <Link

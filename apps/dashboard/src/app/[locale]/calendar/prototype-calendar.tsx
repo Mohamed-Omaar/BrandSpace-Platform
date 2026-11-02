@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { AbstractMedia, AssetMedia, SegmentPill, type MediaSeed } from '@brandspace/ui';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * THE CALENDAR, PORTED FROM `prototype-2026-09-27` (D-468, batch 2).
@@ -510,13 +511,12 @@ export function PrototypeCalendar({
                         <input type="hidden" name="locale" value={duplicate.locale} />
                         <input type="hidden" name="itemId" value={post.itemId} />
                         <input type="hidden" name="token" value={`calendar:${post.id}`} />
-                        <button
-                          type="submit"
+                        <SubmitButton
                           className="bsp-btn bsp-sm bsp-ghost"
                           data-testid="calendar-pop-duplicate"
                         >
                           {labels.duplicate}
-                        </button>
+                        </SubmitButton>
                       </form>
                     ) : null}
                     {/* D-290 — the product's post drawer, which the prototype does not draw. */}

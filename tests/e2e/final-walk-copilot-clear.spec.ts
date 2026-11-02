@@ -10,13 +10,19 @@ import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from '.
  *
  * At 1536x864 it sat on the end of the Calendar's last line ("…The time stays
  * the same.") on the first screen: the page's end padding cleared it only once
- * the page was scrolled to its end. The shell now keeps a lane for the button
- * below the scroll area, so nothing — no piece of text, no control, no image —
- * may lie under it, with the page at rest AND with every scroller at its end,
- * on every signed-in customer screen, at 1536x864, 1920x1080 and 1024x768, in
- * English and Arabic. The workspace is the seeded one, whose AI (the
- * development double) is on, so the button is shown and the screens carry
- * data.
+ * the page was scrolled to its end. The shell then kept a lane for the button
+ * below the scroll area.
+ *
+ * P1 (owner, after #93-#111): THAT LANE WAS AN EMPTY STRIP UNDER THE BUTTON,
+ * AND IT IS GONE. The button floats over the page again, so at rest it may pass
+ * over a line as the page scrolls beneath it. What stays true, and is checked
+ * here, is the part the owner cares about: with every scroller at its end,
+ * nothing — no piece of text, no control, no image — lies under it, so every
+ * line can be scrolled clear of it; and the scroll area runs to the frame's
+ * edge, so there is no strip. On every signed-in customer screen, at 1536x864,
+ * 1920x1080 and 1024x768, in English and Arabic. The workspace is the seeded
+ * one, whose AI (the development double) is on, so the button is shown and the
+ * screens carry data.
  */
 
 function credentials(): E2eAdminCredentials {
@@ -165,11 +171,20 @@ for (const locale of ['en', 'ar'] as const) {
         expect(response?.status() ?? 0, route).toBeLessThan(400);
         await page.waitForLoadState('networkidle');
         await page.evaluate(() => document.fonts.ready);
-        for (const at of ['rest', 'end'] as const) {
-          const result = await covered(page, at);
-          shownSomewhere ||= result.shown;
-          for (const item of result.under) problems.push(`${route} (${at}): covers ${item}`);
-        }
+        // No strip: where the button is shown, the scroll area reaches the
+        // bottom of the panel it scrolls in.
+        const strip = await page.evaluate(() => {
+          const main = document.querySelector<HTMLElement>('.bsp-main[data-fab]');
+          const scroll = main?.querySelector<HTMLElement>(':scope > .bsp-scroll');
+          if (!main || !scroll) return 0;
+          return Math.round(
+            main.getBoundingClientRect().bottom - scroll.getBoundingClientRect().bottom,
+          );
+        });
+        if (strip > 1) problems.push(`${route}: a ${strip}px strip under the scroll area`);
+        const result = await covered(page, 'end');
+        shownSomewhere ||= result.shown;
+        for (const item of result.under) problems.push(`${route} (end): covers ${item}`);
       }
       // The button is there to be checked: AI is on in the seeded workspace.
       expect(shownSomewhere, 'the floating Copilot is shown somewhere').toBe(true);

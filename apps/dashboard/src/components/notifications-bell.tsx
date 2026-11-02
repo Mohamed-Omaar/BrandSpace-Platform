@@ -5,6 +5,7 @@ import { useCallback, useRef, useState, type MouseEvent, type ReactNode } from '
 import { useDismissOnOutsidePointer, useOverlayBehaviour, usePresence } from '@brandspace/ui';
 import type { FeedItem } from '../app/[locale]/notifications/feed';
 import { markAllNotificationsReadAction } from '../app/[locale]/notifications/actions';
+import { SubmitButton } from './pending-submit';
 
 /**
  * THE BELL OPENS A FEED, NOT A PAGE (Phase 6 final, D-277 §40, D-297) — in the
@@ -191,9 +192,9 @@ export function NotificationsBell({
           {shown.some((item) => item.unread) ? (
             <form action={markAllNotificationsReadAction}>
               <input type="hidden" name="locale" value={locale} />
-              <button type="submit" className="bsp-ntf-all" data-testid="notifications-mark-all">
+              <SubmitButton className="bsp-ntf-all" data-testid="notifications-mark-all">
                 {strings.markAll}
-              </button>
+              </SubmitButton>
             </form>
           ) : null}
         </div>

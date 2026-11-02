@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * THE AUTOMATION AUTHORING FORM.
@@ -1065,13 +1066,12 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
             {props.labels.cancel}
           </Link>
         ) : null}
-        <button
-          type="submit"
+        <SubmitButton
           className="bsp-btn bsp-pur"
           data-testid={editing ? 'automation-edit-submit' : 'automation-submit'}
         >
           {props.labels.submit}
-        </button>
+        </SubmitButton>
       </div>
     </form>
   );

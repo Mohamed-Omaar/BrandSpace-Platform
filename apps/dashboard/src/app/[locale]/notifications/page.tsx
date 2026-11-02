@@ -19,6 +19,7 @@ import { optionalMessage, statusMessage, translator } from '../../../i18n/messag
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { markAllNotificationsReadAction, markNotificationReadAction } from './actions';
 import { whenLabel } from '../../../server/prototype-dates';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,13 +110,9 @@ export default async function NotificationsPage({
               unread > 0 ? (
                 <form action={markAllNotificationsReadAction}>
                   <input type="hidden" name="locale" value={locale} />
-                  <button
-                    type="submit"
-                    className={buttonClass('ghost')}
-                    data-testid="mark-all-read"
-                  >
+                  <SubmitButton className={buttonClass('ghost')} data-testid="mark-all-read">
                     {t('notifications.markAllRead')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : undefined
             }
@@ -199,13 +196,12 @@ export default async function NotificationsPage({
                         <form action={markNotificationReadAction}>
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="id" value={item.id} />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             className={buttonClass('ghost')}
                             data-testid={`mark-read-${item.id}`}
                           >
                             {t('notifications.markRead')}
-                          </button>
+                          </SubmitButton>
                         </form>
                       )}
                     </div>

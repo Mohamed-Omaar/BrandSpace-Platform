@@ -8,6 +8,7 @@ import {
   UploadRulesLine,
   UploadStatus,
   uploadTexts,
+  UploadSubmitButton,
 } from '../../../components/upload-field';
 import { prefersReducedMotion, visuallyHiddenStyle } from '@brandspace/ui';
 import { translator } from '../../../i18n/messages';
@@ -19,6 +20,7 @@ import {
   uploadSourceAction,
 } from './actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /** Q19 — the key question a person chose to answer: its fact key and its words. */
 export interface QuestionFocus {
@@ -282,13 +284,12 @@ export function AreaDrawer({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="area" value={area.area} />
                           <input type="hidden" name="itemId" value={item.id} />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             className="bsp-btn bsp-sm bsp-ghost"
                             data-testid={`archive-${item.id}`}
                           >
                             {t('bb.archive')}
-                          </button>
+                          </SubmitButton>
                         </form>
                       ) : null}
                     </span>
@@ -356,13 +357,12 @@ export function AreaDrawer({
                       testId={`valid-until-${item.id}`}
                     />
                     <span className="bsp-bb-editbox-acts">
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="bsp-btn bsp-sm bsp-pur"
                         data-testid={`save-item-${item.id}`}
                       >
                         {t('common.save')}
-                      </button>
+                      </SubmitButton>
                       <button
                         type="button"
                         className="bsp-btn bsp-sm bsp-ghost"
@@ -470,9 +470,9 @@ export function AreaDrawer({
                   {t('bb.sendForReviewNote')}
                 </small>
               )}
-              <button type="submit" className="bsp-btn bsp-sm" data-testid="save-knowledge">
+              <SubmitButton className="bsp-btn bsp-sm" data-testid="save-knowledge">
                 {permissions.review ? t('bb.addApprove') : t('bb.sendForReview')}
-              </button>
+              </SubmitButton>
             </form>
           ) : null}
 
@@ -496,13 +496,12 @@ export function AreaDrawer({
                 aria-label={t('bb.uploadChoose')}
                 data-testid="drawer-upload-input"
               />
-              <button
-                type="submit"
+              <UploadSubmitButton
                 className="bsp-btn bsp-sm bsp-sec"
                 data-testid="drawer-upload-submit"
               >
                 {t('bb.upload')}
-              </button>
+              </UploadSubmitButton>
               <UploadRulesLine className="bsp-bb-uphint" />
               <UploadStatus testId="drawer-upload-status" />
             </UploadForm>

@@ -917,9 +917,10 @@ export function AppShell({
             paddingInline: layoutTokens.railPadInline,
             paddingBlockStart: layoutTokens.railPadBlockStart,
             paddingBlockEnd: layoutTokens.railPadBlockEnd,
-            // `.sidebar { background: rgba(250,250,251,.78) }` — translucent,
-            // like the shell it sits inside.
-            background: colorTokens.shellSidebarAlpha,
+            // P1: the one rail both apps draw — solid, with the shared
+            // hairline (`--bs-frame-*`, tokens.ts).
+            background: 'var(--bs-frame-rail)',
+            borderInlineEnd: 'var(--bs-frame-edge)',
           }}
         >
           {sidebarBody}
