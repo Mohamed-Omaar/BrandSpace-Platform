@@ -14,7 +14,7 @@ import type { Prisma } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import { CreditLedgerService } from '@brandspace/entitlements';
 import { SecretService } from '@brandspace/secrets';
-import { createLogger, currentEnvironment, isAppError } from '@brandspace/shared';
+import { createLogger, currentEnvironment, isAppError, systemClock } from '@brandspace/shared';
 
 import { getEmailProvider } from './email-provider';
 
@@ -201,7 +201,7 @@ export const RESERVATION_OVERRUN_ALERT_ACTION = 'ai.reservation_overrun.alert_ra
  */
 export async function alertReservationOverrun(
   overrun: ReservationOverrun,
-  now: Date = new Date(),
+  now: Date = systemClock.now(),
 ): Promise<boolean> {
   const prisma = getPlatformClient();
   const reason = `overrun:${now.toISOString().slice(0, 10)}:${overrun.taskKey}:${overrun.modelKey}`;

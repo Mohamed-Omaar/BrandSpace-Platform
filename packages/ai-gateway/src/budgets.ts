@@ -1,4 +1,4 @@
-import { AppError } from '@brandspace/shared';
+import { AppError, systemClock } from '@brandspace/shared';
 
 /**
  * Budgets and limits — docs/AI-GATEWAY.md §8.
@@ -151,7 +151,7 @@ export function assessBudget(
 /** Turn a refused decision into the error the caller sees. */
 export function budgetRefusal(
   decision: BudgetDecision,
-  now: Date = new Date(),
+  now: Date = systemClock.now(),
 ): BudgetExceededError {
   /* c8 ignore next -- callers only reach here for a refusal. */
   const breach = decision.breached ?? 'credits_per_day';
