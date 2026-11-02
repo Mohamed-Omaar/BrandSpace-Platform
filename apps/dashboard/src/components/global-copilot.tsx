@@ -41,11 +41,14 @@ export function GlobalCopilot({
   labels,
   rateMetricKeys = [],
   retentionDays = null,
+  sources = null,
   denials = {},
   strings,
 }: {
   /** PR B — how long the one conversation is kept (the line under the composer). */
   readonly retentionDays?: number | null;
+  /** PR B — "+" adds a file to Brand Brain (`brand_brain.upload`). */
+  readonly sources?: { readonly review: boolean } | null;
   /** PR B — the screen's own refusal per permission this member lacks. */
   readonly denials?: Readonly<Record<string, string>>;
   readonly locale: string;
@@ -266,6 +269,7 @@ export function GlobalCopilot({
                 labels={labels}
                 rateMetricKeys={rateMetricKeys}
                 retentionDays={retentionDays}
+                sources={sources}
                 denials={denials}
                 panel={{
                   greeting: strings.greeting,
