@@ -48,6 +48,19 @@ async function signIn(page: Page, locale: string): Promise<void> {
   await page.waitForURL(new RegExp(`/${locale}/overview$`));
 }
 
+/** Sign in as any seeded member, choosing the seeded workspace when asked. */
+async function signInAs(page: Page, email: string, password: string): Promise<void> {
+  const { customer } = credentials();
+  await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
+  await page.fill('#email', email);
+  await page.fill('#password', password);
+  await page.click('[data-testid="signin-submit"]');
+  await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
+  const pick = page.getByTestId(`choose-workspace-${customer.workspaceSlug}`);
+  if (await pick.count()) await pick.click();
+  await page.waitForURL(/\/en\/(overview|content|calendar|approvals)/);
+}
+
 /** The relative luminance of the page's own surface, 0 (black) to 1 (white). */
 async function surfaceLuminance(page: Page): Promise<number> {
   return page.evaluate(() => {
@@ -113,32 +126,54 @@ test.describe('P1 · one rule for light, dark and device', () => {
     await expect.poll(() => isDark(page)).toBe(false);
   });
 
-  test('the account menu sets the choice, a reload keeps it, and a second tab agrees', async ({
+  test('the account menu sets the choice, a reload keeps it, a second tab agrees, and the account remembers it', async ({
     page,
     context,
+    browser,
     isMobile,
   }) => {
     test.skip(isMobile === true, 'the rail copy of the menu (D-468(b)); the desktop run covers it');
-    await signIn(page, 'en');
-    await withScheme(context, 'light');
-    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
-    const other = await context.newPage();
-    await other.goto(`${DASHBOARD_BASE_URL}/en/content`);
-    await expect(other.locator('html')).toHaveAttribute('data-color-scheme', 'light');
+    // THE COPYWRITER, NOT THE OWNER: the choice is now stored on the account,
+    // and the seeded owner is the person every other suite signs in as.
+    const { customer } = credentials();
+    try {
+      await signInAs(page, customer.copywriterEmail, customer.copywriterPassword);
+      await withScheme(context, 'light');
+      await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+      const other = await context.newPage();
+      await other.goto(`${DASHBOARD_BASE_URL}/en/content`);
+      await expect(other.locator('html')).toHaveAttribute('data-color-scheme', 'light');
 
-    await page.click('[data-testid="profile-menu"]');
-    await page.getByTestId('account-appearance').click();
-    await expect(page.locator('html')).toHaveAttribute('data-color-scheme', 'dark');
-    expect(await isDark(page)).toBe(true);
-    // The other tab takes the same value without being touched.
-    await expect(other.locator('html')).toHaveAttribute('data-color-scheme', 'dark');
-    await expect.poll(() => isDark(other)).toBe(true);
+      await page.click('[data-testid="profile-menu"]');
+      await page.getByTestId('account-appearance').click();
+      await expect(page.locator('html')).toHaveAttribute('data-color-scheme', 'dark');
+      expect(await isDark(page)).toBe(true);
+      // The other tab takes the same value without being touched.
+      await expect(other.locator('html')).toHaveAttribute('data-color-scheme', 'dark');
+      await expect.poll(() => isDark(other)).toBe(true);
 
-    await page.reload();
-    await expect(page.locator('html')).toHaveAttribute('data-color-scheme', 'dark');
-    await other.reload();
-    await expect(other.locator('html')).toHaveAttribute('data-color-scheme', 'dark');
-    await other.close();
+      await page.reload();
+      await expect(page.locator('html')).toHaveAttribute('data-color-scheme', 'dark');
+      await other.reload();
+      await expect(other.locator('html')).toHaveAttribute('data-color-scheme', 'dark');
+      await other.close();
+
+      // Stored on the account: another device, with no cookie at all and a
+      // light device setting, signs in and gets the person's own choice.
+      const device = await browser.newContext({ colorScheme: 'light' });
+      const fresh = await device.newPage();
+      await signInAs(fresh, customer.copywriterEmail, customer.copywriterPassword);
+      await fresh.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+      await expect(fresh.locator('html')).toHaveAttribute('data-color-scheme', 'dark');
+      await device.close();
+    } finally {
+      await withPlatformPrisma((prisma) =>
+        prisma.user.update({
+          where: { email: customer.copywriterEmail },
+          data: { colorScheme: null },
+        }),
+      );
+    }
   });
 });
 
