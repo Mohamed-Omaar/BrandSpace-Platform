@@ -120,6 +120,146 @@ interface ProviderLike {
   privacyReviewRef?: string | null;
 }
 
+/*
+ * CREDIT PRICES THE RUNTIME CAN ACTUALLY FIND (incident 2026-11-01).
+ *
+ * A credit-rules document whose rows sat under a key the schema does not know
+ * parsed to `costs: []` — Zod drops unknown keys and `costs` defaults to empty —
+ * so it VALIDATED CLEAN, was activated, and every AI price on staging then
+ * failed with "No credit rule prices task …". Validation now refuses what the
+ * runtime cannot price, by the runtime's own rule:
+ *
+ *   - an unknown key at the top of the document or in a row is an error, never
+ *     silently dropped;
+ *   - every task/model pair the active `ai.routing` can call must be priced:
+ *     a text model by a row with no image quality, an image model at every
+ *     quality (by one row each, or by one row with no quality);
+ *   - two rows for the same task, model and quality are an error (F-114),
+ *     since the runtime would silently take the first.
+ *
+ * `pricedBy` is `findCreditRule` (packages/ai-gateway/src/pricing.ts) restated
+ * here because this package cannot import the gateway; the unit test
+ * pr-credit-rules-runtime.test.ts proves the two agree by loading every
+ * document that validates through `ConfigurationAiSource`.
+ */
+const IMAGE_QUALITIES = ['low', 'medium', 'high'] as const;
+
+interface CostLike {
+  taskKey: string;
+  modelKey: string;
+  imageQuality?: string | null;
+}
+
+function pricedBy(
+  costs: readonly CostLike[],
+  taskKey: string,
+  modelKey: string,
+  imageQuality: string | undefined,
+): boolean {
+  const forModel = costs.filter((c) => c.taskKey === taskKey && c.modelKey === modelKey);
+  return (
+    (imageQuality !== undefined && forModel.some((c) => c.imageQuality === imageQuality)) ||
+    forModel.some((c) => c.imageQuality === null || c.imageQuality === undefined)
+  );
+}
+
+/** Every task/model pair the routing document can call, with where it is named. */
+function routedPairs(
+  routing: unknown,
+): { taskKey: string; modelKey: string; rule: number; where: string }[] {
+  const rules = ((routing as { rules?: unknown[] } | undefined)?.rules ?? []) as Record<
+    string,
+    unknown
+  >[];
+  const pairs: { taskKey: string; modelKey: string; rule: number; where: string }[] = [];
+  for (const [i, rule] of rules.entries()) {
+    const taskKey = String(rule['taskKey'] ?? '');
+    const primary = rule['primaryModelKey'];
+    if (typeof primary === 'string' && primary !== '') {
+      pairs.push({ taskKey, modelKey: primary, rule: i, where: 'primaryModelKey' });
+    }
+    for (const [j, key] of ((rule['fallbackModelKeys'] ?? []) as unknown[]).entries()) {
+      if (typeof key === 'string' && key !== '') {
+        pairs.push({ taskKey, modelKey: key, rule: i, where: `fallbackModelKeys.${j}` });
+      }
+    }
+  }
+  return pairs;
+}
+
+/** Which prices are missing for one routed pair: `[]` when it is fully priced. */
+function missingPrices(
+  costs: readonly CostLike[],
+  taskKey: string,
+  modelKey: string,
+  models: readonly ModelLike[],
+): (string | undefined)[] {
+  const isImage = models.find((m) => m.key === modelKey)?.modality === 'image';
+  const asked: (string | undefined)[] = isImage ? [...IMAGE_QUALITIES] : [undefined];
+  return asked.filter((quality) => !pricedBy(costs, taskKey, modelKey, quality));
+}
+
+function unpricedMessage(taskKey: string, modelKey: string, missing: (string | undefined)[]) {
+  const quality = missing.filter((q): q is string => q !== undefined);
+  return (
+    `Task "${taskKey}" on model "${modelKey}" is routed by ai.routing but has no credit price` +
+    (quality.length > 0 ? ` for ${quality.join(', ')} quality` : '') +
+    ': every such request would fail with "No credit rule". Add a row' +
+    (quality.length > 0
+      ? ' per quality, or one row with no imageQuality.'
+      : ' with no imageQuality.')
+  );
+}
+
+/** Keys of the credit-rules document and of its rows the schema knows. */
+const CREDIT_RULES_KEYS = new Set([
+  'unit',
+  'costs',
+  'targetGrossMarginPercent',
+  'minimumGrossMarginPercent',
+  'creditValueMicroMinor',
+  'referenceCurrency',
+]);
+const CREDIT_ROW_KEYS = new Set([
+  'taskKey',
+  'modelKey',
+  'baseMilliCredits',
+  'perUnitMilliCredits',
+  'unit',
+  'imageQuality',
+]);
+
+/** An unknown key would be dropped without a word: refuse it instead. */
+function unknownCreditRuleKeys(payload: unknown): ValidationIssue[] {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return [];
+  const issues: ValidationIssue[] = [];
+  for (const key of Object.keys(payload)) {
+    if (!CREDIT_RULES_KEYS.has(key)) {
+      issues.push({
+        severity: 'error',
+        path: key,
+        message: `Unknown field "${key}". The runtime would ignore it; the document must start with "costs".`,
+      });
+    }
+  }
+  const costs = (payload as { costs?: unknown }).costs;
+  if (Array.isArray(costs)) {
+    for (const [i, row] of costs.entries()) {
+      if (typeof row !== 'object' || row === null) continue;
+      for (const key of Object.keys(row)) {
+        if (!CREDIT_ROW_KEYS.has(key)) {
+          issues.push({
+            severity: 'error',
+            path: `costs.${i}.${key}`,
+            message: `Unknown field "${key}" in a credit rule. The runtime would ignore it.`,
+          });
+        }
+      }
+    }
+  }
+  return issues;
+}
+
 function semantic(
   domain: ConfigDomain,
   payload: unknown,
@@ -960,6 +1100,37 @@ function semantic(
   }
 
   if (domain === 'ai.credit-rules') {
+    const costs = (doc['costs'] ?? []) as CostLike[];
+    const seenRows = new Map<string, number>();
+    for (const [i, cost] of costs.entries()) {
+      const selector = `${cost.taskKey}|${cost.modelKey}|${cost.imageQuality ?? ''}`;
+      const first = seenRows.get(selector);
+      if (first !== undefined) {
+        issues.push({
+          severity: 'error',
+          path: `costs.${i}`,
+          message: `Duplicates costs.${first}: the same task, model and image quality are priced twice, and only the first would ever apply.`,
+        });
+      } else {
+        seenRows.set(selector, i);
+      }
+    }
+    const models = ((context['ai.models'] as { models?: ModelLike[] })?.models ??
+      []) as ModelLike[];
+    const reported = new Set<string>();
+    for (const pair of routedPairs(context['ai.routing'])) {
+      const key = `${pair.taskKey}|${pair.modelKey}`;
+      if (reported.has(key)) continue;
+      const missing = missingPrices(costs, pair.taskKey, pair.modelKey, models);
+      if (missing.length > 0) {
+        reported.add(key);
+        issues.push({
+          severity: 'error',
+          path: 'costs',
+          message: unpricedMessage(pair.taskKey, pair.modelKey, missing),
+        });
+      }
+    }
     for (const [i, cost] of ((doc['costs'] ?? []) as Record<string, unknown>[]).entries()) {
       if (Number(cost['baseMilliCredits']) === 0 && Number(cost['perUnitMilliCredits']) === 0) {
         issues.push({
@@ -984,6 +1155,34 @@ function semantic(
           message:
             'Customers see whole credits, rounded up. Price this task in whole credits per action (unit "request", no per-unit amount, base a multiple of 1,000 milli-credits) so the shown price equals the charge.',
         });
+      }
+    }
+  }
+
+  /*
+   * THE SAME GUARANTEE FROM THE OTHER SIDE: a routing change may not send a task
+   * to a model the ACTIVE credit rules do not price. Checked only once credit
+   * rules exist, so a fresh installation can still be configured in any order;
+   * the order that always works is "price it, then route to it".
+   */
+  if (domain === 'ai.routing' && context['ai.credit-rules'] !== undefined) {
+    const active = CONFIG_DOMAINS['ai.credit-rules'].schema.safeParse(context['ai.credit-rules']);
+    if (active.success) {
+      const costs = (active.data as { costs: CostLike[] }).costs;
+      const models = ((context['ai.models'] as { models?: ModelLike[] })?.models ??
+        []) as ModelLike[];
+      for (const pair of routedPairs(doc)) {
+        const missing = missingPrices(costs, pair.taskKey, pair.modelKey, models);
+        if (missing.length > 0) {
+          issues.push({
+            severity: 'error',
+            path: `rules.${pair.rule}.${pair.where}`,
+            message: unpricedMessage(pair.taskKey, pair.modelKey, missing).replace(
+              'is routed by ai.routing but has no credit price',
+              'has no price in the active ai.credit-rules',
+            ),
+          });
+        }
       }
     }
   }
@@ -1013,6 +1212,7 @@ export function validateConfiguration(
   context: ConfigContext = {},
 ): ValidationReport {
   const { issues: structuralIssues, parsed } = structural(domain, payload);
+  if (domain === 'ai.credit-rules') structuralIssues.push(...unknownCreditRuleKeys(payload));
   // Semantic checks assume a well-formed document, so they only run once the
   // structure holds — otherwise every error would be reported twice. They run
   // against the PARSED document, so a field the author omitted is seen as its
