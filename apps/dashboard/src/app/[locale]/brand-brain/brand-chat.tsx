@@ -281,7 +281,7 @@ export function BrandChat({
   };
 
   const failureText = useCallback(
-    (code: string, field?: string): string => {
+    (code: string, field?: string, ref?: string): string => {
       if (code === 'VALIDATION_FAILED') {
         if (field === 'area') return t('bb.chatMode.missingArea');
         if (field === 'title') return t('bb.chatMode.missingTitle');
@@ -292,7 +292,10 @@ export function BrandChat({
       if (code === 'CHANGED') return t('bb.chatMode.changedSince');
       if (code.startsWith('FORBIDDEN')) return t('bb.chatMode.forbidden');
       if (code === 'NOT_FOUND') return t('bb.chatMode.notFound');
-      return labels.error;
+      // PR A2 (item 11) — the generic failure carries the reference the server logged.
+      return ref && /^[0-9a-f-]{36}$/i.test(ref)
+        ? `${labels.error} (${t('bb.chatMode.reference')}: ${ref})`
+        : labels.error;
     },
     [labels.error, t],
   );
@@ -415,7 +418,7 @@ export function BrandChat({
         ...(addKey ? { itemKey: addKey } : {}),
       });
       if (!result.ok) {
-        setOutcome({ tone: 'error', text: failureText(result.code, result.field) });
+        setOutcome({ tone: 'error', text: failureText(result.code, result.field, result.ref) });
         return;
       }
       setOutcome({
@@ -449,7 +452,7 @@ export function BrandChat({
     try {
       const result = await chatFindFactsAction({ locale, brandId, query });
       if (!result.ok) {
-        setOutcome({ tone: 'error', text: failureText(result.code, result.field) });
+        setOutcome({ tone: 'error', text: failureText(result.code, result.field, result.ref) });
         setMatches(null);
         return;
       }
@@ -488,7 +491,7 @@ export function BrandChat({
           // CHANGED SINCE: nothing was written; show what it says now.
           choose(result.fresh);
         }
-        setOutcome({ tone: 'error', text: failureText(result.code, result.field) });
+        setOutcome({ tone: 'error', text: failureText(result.code, result.field, result.ref) });
         return;
       }
       if (result.fact) setChosen(result.fact);

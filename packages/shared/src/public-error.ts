@@ -121,8 +121,51 @@ export function toPublicErrorCode(error: unknown): PublicErrorCode {
  * layer runs over them; the point is that this NEVER travels to a browser.
  */
 export function internalErrorFields(error: unknown): Record<string, unknown> {
+  /*
+   * PR A2 (item 11) — A VALIDATION FAILURE IS LOGGED BY ITS SHAPE, NEVER ITS
+   * WORDS. A schema's message can quote what was typed ("received 'Our secret
+   * launch date…'"), so a ZodError logs the paths and codes of its issues and
+   * nothing else: enough to find the cause, no customer content.
+   */
+  const issues = schemaIssues(error);
+  if (issues) {
+    return {
+      errorName: 'ZodError',
+      errorCode: 'VALIDATION_FAILED',
+      issues: issues
+        .slice(0, 10)
+        .map((issue) => ({ path: issue.path.join('.'), code: issue.code })),
+    };
+  }
   if (error instanceof Error) {
-    return { errorName: error.name, errorMessage: error.message };
+    return {
+      errorName: error.name,
+      ...(error instanceof AppError ? { errorCode: error.code } : {}),
+      errorMessage: error.message,
+      // The cause's KIND, so "Something went wrong" always has one in the log.
+      ...(error.cause instanceof Error ? { causeName: error.cause.name } : {}),
+    };
   }
   return { errorName: 'UnknownError', errorMessage: String(error) };
+}
+
+interface SchemaIssue {
+  readonly path: readonly (string | number)[];
+  readonly code: string;
+}
+
+/** A schema validation error's issues (Zod's shape, read structurally), or null. */
+function schemaIssues(error: unknown): readonly SchemaIssue[] | null {
+  if (!(error instanceof Error) || error.name !== 'ZodError') return null;
+  const issues = (error as { issues?: unknown }).issues;
+  return Array.isArray(issues) ? (issues as SchemaIssue[]) : null;
+}
+
+/**
+ * PR A2 (item 11) — the first field a schema refused, for a field error in
+ * place of "Something went wrong". Null for every other error.
+ */
+export function validationFieldOf(error: unknown): string | null {
+  const first = schemaIssues(error)?.[0]?.path[0];
+  return typeof first === 'string' ? first : null;
 }

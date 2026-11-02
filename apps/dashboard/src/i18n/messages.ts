@@ -1495,6 +1495,7 @@ export const messages = {
     'bb.chatMode.changedSince': 'تغيّرت هذه المعلومة منذ فتحتها. لم يُستبدل شيء — هذه أحدث نسخة.',
     'bb.chatMode.forbidden': 'دورك لا يسمح بهذا الإجراء.',
     'bb.chatMode.notFound': 'هذه المعلومة لم تعد موجودة.',
+    'bb.chatMode.reference': 'المرجع',
     'bb.chatMode.missing': 'لا يملك عقل العلامة «{question}» بعد ({area}).',
     'bb.chatMode.addIt': 'أضفها الآن',
     'bb.chatMode.jobTitle': 'هذه مهمة للمساعد',
@@ -5822,6 +5823,7 @@ export const messages = {
       'This fact changed since you opened it. Nothing was overwritten — here is the latest version.',
     'bb.chatMode.forbidden': 'Your role does not allow this.',
     'bb.chatMode.notFound': 'That fact is no longer here.',
+    'bb.chatMode.reference': 'reference',
     'bb.chatMode.missing': 'Brand Brain doesn’t have “{question}” yet ({area}).',
     'bb.chatMode.addIt': 'Add it now',
     'bb.chatMode.jobTitle': 'This is a job for Copilot',
@@ -9045,6 +9047,19 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   RATE_LIMITED: {
     en: 'Too many attempts. Wait a moment and try again.',
     ar: 'محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.',
+  },
+  // PR A2 (item 11) — a Brand Brain form missing a field names it.
+  'VALIDATION_FAILED:area': {
+    en: 'Choose the area this fact belongs to.',
+    ar: 'اختر المجال الذي تنتمي إليه هذه المعلومة.',
+  },
+  'VALIDATION_FAILED:title': {
+    en: 'Give this fact a title.',
+    ar: 'أضف عنوانًا لهذه المعلومة.',
+  },
+  'VALIDATION_FAILED:body': {
+    en: 'Write the fact itself before saving it.',
+    ar: 'اكتب نص المعلومة قبل حفظها.',
   },
   INTERNAL: {
     en: 'Something went wrong and nothing was changed.',
