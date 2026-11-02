@@ -186,7 +186,16 @@ function fail(reply: FastifyReply, action: string, error: unknown) {
     if (error.httpStatus >= 500) {
       log.error(`content ${action} failed`, { code: error.code, ...internalErrorFields(error) });
     }
-    return reply.code(error.httpStatus).send({ error: { code: error.code } });
+    /*
+     * PR A2 — THE PUBLIC DETAILS TRAVEL WITH THE CODE, as `phase7-context`'s
+     * `fail` already sends them. Without them the Studio could not say WHY an
+     * AI edit was refused (and that it was free), nor "Today's AI limit is
+     * reached. It resets at …": both read `details.reason`. `publicDetails` is
+     * the error's own public half, built for the client; nothing else is added.
+     */
+    return reply
+      .code(error.httpStatus)
+      .send({ error: { code: error.code, details: error.publicDetails } });
   }
   log.error(`content ${action} failed`, internalErrorFields(error));
   return reply.code(500).send({ error: { code: 'INTERNAL' } });

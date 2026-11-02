@@ -288,7 +288,11 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
               ...internalErrorFields(error),
             });
           }
-          return reply.code(error.httpStatus).send({ error: { code: error.code } });
+          // PR A2 — the public details travel with the code (an AI budget
+          // refusal's reason and reset time), as `phase7-context`'s `fail` does.
+          return reply
+            .code(error.httpStatus)
+            .send({ error: { code: error.code, details: error.publicDetails } });
         }
         log.error('brand brain chat failed', internalErrorFields(error));
         return reply.code(500).send({ error: { code: 'INTERNAL' } });

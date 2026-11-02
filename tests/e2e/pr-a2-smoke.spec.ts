@@ -27,7 +27,7 @@ function credentials(): E2eAdminCredentials {
 
 const NOT_FOUND_TEXT = 'That item no longer exists.';
 
-async function draftWith(body: string): Promise<string> {
+async function draftWith(body: string, platformKey = 'instagram'): Promise<string> {
   const loaded = credentials();
   const { customer } = loaded;
   const brandId = brandFixtures(loaded).primaryBrandId;
@@ -52,7 +52,7 @@ async function draftWith(body: string): Promise<string> {
         workspaceId: customer.workspaceId,
         brandId,
         contentItemId: item.id,
-        platformKey: 'instagram',
+        platformKey,
         locale: 'EN',
         body,
         characterCount: body.length,
@@ -186,6 +186,23 @@ test.describe('PR A2 — the five-step AI smoke (fake provider)', () => {
     const after = (await compare.getByTestId('ai-edit-after').textContent()) ?? '';
     expect(after.length).toBeLessThanOrEqual(Math.floor(original.length * 0.7));
     await expect(compare.getByTestId('ai-edit-undo')).toBeVisible();
+  });
+
+  test('4b · an edit chip that cannot do its job says why, and charges nothing', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    // Longer on a caption a 30% longer version would not fit (X: 280 characters).
+    const itemId = await draftWith('b'.repeat(250), 'x');
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
+    await page.getByTestId('editor-ai-more-x').click();
+    await page.locator('[data-testid="content-tool"][data-tool="expand"]').first().click();
+    // The reason reaches the screen (the API sends the error's public details).
+    await expect(page.getByTestId('content-failure')).toHaveText(
+      'This channel’s limit has no room for a 30% longer caption. Nothing was charged.',
+    );
+    await expect(page.getByTestId('studio-spent-toast')).toHaveCount(0);
   });
 
   test('5 · a Brand Brain chat message is answered', async ({ page }) => {
