@@ -16,6 +16,7 @@ import {
   type ChatFact,
 } from './chat-actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
+import { aiLimitMessage, type ApiErrorBody } from '../../../components/ai-limit';
 
 /**
  * Brand Brain chat — the approved demo's panel, with a real backend behind it.
@@ -97,6 +98,9 @@ export interface ChatLabels {
   readonly error: string;
   /** D-573 — the platform AI ceiling is reached. */
   readonly paused?: string;
+  /** PR A2 — "Today's AI limit is reached. It resets at {time}." and the monthly one. */
+  readonly limitDaily?: string;
+  readonly limitMonthly?: string;
   readonly close: string;
   readonly contextAll: string;
   readonly areaDetails: string;
@@ -347,12 +351,18 @@ export function BrandChat({
           // The server answers with a stable code and never an internal message.
           // The screen shows its own copy rather than echoing anything back.
           // D-573: a paused platform says so, in the owner's words.
-          const code = (
-            (await response.json().catch(() => null)) as {
-              error?: { code?: string };
-            } | null
-          )?.error?.code;
-          setError(code === 'AI_PAUSED' && labels.paused ? labels.paused : labels.error);
+          const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
+          const code = body?.error?.code;
+          // PR A2 — a daily or monthly AI budget names itself and its reset time.
+          const limit =
+            labels.limitDaily && labels.limitMonthly
+              ? aiLimitMessage(
+                  body,
+                  { 'ai.limit.daily': labels.limitDaily, 'ai.limit.monthly': labels.limitMonthly },
+                  locale,
+                )
+              : null;
+          setError(limit ?? (code === 'AI_PAUSED' && labels.paused ? labels.paused : labels.error));
           return;
         }
 
