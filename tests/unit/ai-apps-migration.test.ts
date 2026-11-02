@@ -208,6 +208,8 @@ describe('D-566 · the AI apps migration', () => {
       '20261101090000_ai_output_failure_classes',
       // P1: each person's light / dark / device choice (D-592).
       '20261102090000_user_colour_scheme',
+      // PR B: one Copilot conversation per person per brand (D-591).
+      '20261102120000_one_assistant',
     ]);
   });
 });
