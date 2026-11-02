@@ -111,7 +111,7 @@ Global identity. **Not** tenant-owned — a user may belong to several workspace
 | `name`, `avatarAssetId`                          | text/uuid       |                                                                                        |
 | `locale`                                         | enum(`ar`,`en`) | default from signup                                                                    |
 | `timezone`                                       | text            | IANA                                                                                   |
-| `colorScheme`                                    | text null       | the person's own light / dark / device choice (D-590); CHECK light, dark or system     |
+| `colorScheme`                                    | text null       | the person's own light / dark / device choice (D-592); CHECK light, dark or system     |
 | `mfaEnabled`, `mfaSecretRef`                     | bool/text       | secret stored via Secret Service, never inline                                         |
 | `mfaSecretMaterial`, `mfaPendingSecretMaterial`  | jsonb null      | a customer's sealed TOTP seed (D-206), and the one being set up on a new phone (D-333) |
 | `status`                                         | enum            | `pending`, `active`, `suspended`, `deleted`                                            |

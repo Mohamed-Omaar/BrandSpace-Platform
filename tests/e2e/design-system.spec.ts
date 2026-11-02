@@ -816,7 +816,7 @@ test.describe('the shell reproduces the demo geometry', () => {
     // D-468, prototype-2026-09-27 (measured from Main.dc.html at 1440×900):
     // the frame is 1400px wide, `border-radius: 34px; background:
     // rgba(255,255,255,.93); backdrop-filter: blur(30px)` — D-575 removed the
-    // blur (owner, S4). D-590 (owner, P1): the frame's surface is solid, one
+    // blur (owner, S4). D-592 (owner, P1): the frame's surface is solid, one
     // frame for both apps (`--bs-frame-surface`).
     // D-484: every length below is the prototype's at 0.88 (`scale.ts`).
     await expect(shell).toHaveCSS('border-radius', `${scaled(34)}px`);
@@ -825,7 +825,7 @@ test.describe('the shell reproduces the demo geometry', () => {
     // D-484: the frame fills the window less its two margins.
     expect((await shell.boundingBox())?.width).toBe(1440 - 2 * scaled(20));
 
-    // The rail: `sbW = '250px'`; D-590: its surface is solid too
+    // The rail: `sbW = '250px'`; D-592: its surface is solid too
     // (`--bs-frame-rail`, #fafafb), with the shared hairline edge.
     const sidebar = page.locator('.bs-sidebar');
     expect((await sidebar.boundingBox())?.width).toBe(scaled(250));

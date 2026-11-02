@@ -31,7 +31,7 @@ describe('D-574 · the secret_version trigger migration', () => {
     expect(EXPECTED_MIGRATIONS.slice(EXPECTED_MIGRATIONS.indexOf(NAME))).toEqual([
       NAME,
       '20261101090000_ai_output_failure_classes',
-      // P1: each person's light / dark / device choice (D-590).
+      // P1: each person's light / dark / device choice (D-592).
       '20261102090000_user_colour_scheme',
     ]);
   });

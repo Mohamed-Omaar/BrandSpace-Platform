@@ -93,6 +93,8 @@ const REASONING_TASK_KEYS = ['strategy.generate', 'plan.monthly', 'analytics.exp
  * below for the same reason.
  */
 const CONTENT_TASK_KEY = 'caption.generate';
+/** PR A2 (item 10) — a translation is routed and priced as its own task. */
+const TRANSLATE_TASK_KEY = 'content.translate';
 /**
  * PHASE 2B-3 PR 6 — DRAFT_IDEAS's task. Development and E2E only: production's
  * routing and credit rules for it are the owner's, set in Control Center
@@ -303,6 +305,34 @@ const PAYLOADS = {
         moderationModelKey: null,
       },
       {
+        taskKey: TRANSLATE_TASK_KEY,
+        scope: 'global',
+        planKey: null,
+        workspaceId: null,
+        primaryModelKey: MODEL_KEY,
+        fallbackModelKeys: [],
+        timeoutMs: 10_000,
+        maxCostPerRequestMinor: null,
+        priority: 0,
+        parameters: {
+          temperature: 0.6,
+          maxOutputTokens: 900,
+          promptTemplateVersion: 1,
+          /*
+           * OFF, and D-78 again. The Content Studio owns its artifact: the
+           * caption lives in `content_variant` under the D-116/D-117 window.
+           * Asking the gateway to persist it too would make the gateway a
+           * second content store — and a second retention owner for the same
+           * text, which is exactly what the F-73 registry exists to prevent.
+           */
+          persistOutput: false,
+          outputRetentionDays: null,
+        },
+        retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
+        moderateInput: false,
+        moderationModelKey: null,
+      },
+      {
         taskKey: IDEAS_TASK_KEY,
         scope: 'global',
         planKey: null,
@@ -446,6 +476,13 @@ const PAYLOADS = {
       },
       {
         taskKey: CONTENT_TASK_KEY,
+        modelKey: MODEL_KEY,
+        baseMilliCredits: 250,
+        perUnitMilliCredits: 90,
+        unit: '1k_tokens',
+      },
+      {
+        taskKey: TRANSLATE_TASK_KEY,
         modelKey: MODEL_KEY,
         baseMilliCredits: 250,
         perUnitMilliCredits: 90,

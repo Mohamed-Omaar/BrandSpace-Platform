@@ -548,8 +548,13 @@ describe('KNOWN bug — the Copilot bad reply (ZodError, charged failed turn, 20
     });
     await turn('Draft a launch post');
     const prompt = adapter.prompts.at(-1) ?? '';
-    expect(prompt).toMatch(
-      /content\.draft \([A-Za-z_]+.*\) arguments: \{brandId: uuid, brief: string/,
+    // Every argument the MODEL writes is stated. `brandId` is not one of them
+    // (PR A2): the platform sets it to the session's brand, and the prompt
+    // says so — a model asked for an id it was never told invents one.
+    expect(prompt).toMatch(/content\.draft \([A-Za-z_]+.*\) arguments: \{brief: string/);
+    expect(prompt).not.toMatch(/arguments: \{[^\n]*brandId/);
+    expect(prompt).toContain(
+      'Never write "brandId": the platform sets it to this conversation\'s brand.',
     );
   });
 

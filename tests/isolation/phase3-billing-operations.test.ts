@@ -623,6 +623,30 @@ describe('a period and the credits that belong to it cannot split', () => {
     expect((await subscription(workspaceId)).planKey).toBe(FIXTURE_PLAN.key);
   });
 
+  it('PR A2 — a sweep that reads the row AFTER another crossed it does not cross it again', async () => {
+    /*
+     * The race "C" below covers only when both instances read the old row. The
+     * other interleaving — the second instance's transaction reads AFTER the
+     * first committed — saw the new, not-yet-ended period and advanced it too
+     * (seen once in a full isolation run: two periods for one boundary). Made
+     * deterministic here: the second sweep's read is simply sequential.
+     */
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId);
+    const before = await subscription(workspaceId);
+    const subscriptions = new SubscriptionService({ prisma: platform, clock });
+
+    await subscriptions.advanceCycleWithin(platform, workspaceId, null, { onlyIfDue: true });
+    const once = await subscription(workspaceId);
+    expect(once.currentPeriodStart.getTime()).toBe(before.currentPeriodEnd.getTime());
+
+    // The late reader: the period it reads has not ended, so nothing moves.
+    await subscriptions.advanceCycleWithin(platform, workspaceId, null, { onlyIfDue: true });
+    const still = await subscription(workspaceId);
+    expect(still.currentPeriodStart.getTime()).toBe(once.currentPeriodStart.getTime());
+    expect(still.currentPeriodEnd.getTime()).toBe(once.currentPeriodEnd.getTime());
+  });
+
   it('C — TWO SCHEDULER INSTANCES RACING ONE BOUNDARY: one period, one allowance', async () => {
     const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
     await dueSubscription(workspaceId);

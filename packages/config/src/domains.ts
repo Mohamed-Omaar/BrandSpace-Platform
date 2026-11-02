@@ -297,6 +297,21 @@ const aiModelsSchema = z.object({
          * The numbers are the provider's, entered by the operator; none is
          * assumed in code (CLAUDE.md §2.2).
          */
+        /*
+         * PR A2 (F-115) — WHAT ONE IMAGE COSTS, PER QUALITY, at the provider's
+         * reference size of 1024×1024. The recorded provider cost and the
+         * platform-ceiling estimate scale it by the pixels actually requested,
+         * so a low-quality square is not recorded at the high-quality price.
+         * Null: the model's single per-unit rate applies, as before.
+         */
+        imageCostByQualityMicroMinor: z
+          .object({
+            low: z.number().int().nonnegative(),
+            medium: z.number().int().nonnegative(),
+            high: z.number().int().nonnegative(),
+          })
+          .nullable()
+          .default(null),
         imageSizing: z
           .discriminatedUnion('mode', [
             z.object({
@@ -515,6 +530,13 @@ const aiBudgetsSchema = z.object({
       currency: z.string().length(3).default('USD'),
     })
     .default({}),
+  /*
+   * PR A2 (item 12, F-107) — ALERT THE OWNER WHEN A REQUEST OUTRUNS ITS
+   * RESERVATION by more than this percentage of it. A customer is charged at
+   * most the reservation (D-573), so the platform absorbs the difference; this
+   * is how the owner hears about it. `null` is off.
+   */
+  reservationOverrunAlertPercent: z.number().min(0).max(1000).nullable().default(null),
 });
 
 const aiCreditRulesSchema = z.object({

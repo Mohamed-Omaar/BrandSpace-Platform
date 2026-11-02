@@ -46,6 +46,7 @@ import { CheckCard, type CheckConnection } from './check-card';
 import { MediaSources, type MediaSourceTab } from './media-sources';
 import { missingMediaFor } from '@brandspace/config/publishing-media';
 import { StudioCopilotButton } from './studio-copilot';
+import { AiEditCompare, type LastAiEdit } from './ai-edit-compare';
 import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 import type {
   ComposerDraft,
@@ -197,7 +198,17 @@ export interface DraftEditorProps {
   readonly openOn?: string | null;
   /** G6 (D-329): the ★ day the Studio was opened for; its Schedule link opens there. */
   readonly plannedDate?: string | null;
-  readonly onTool: (variantId: string, tool: string, argument?: string) => void;
+  readonly onTool: (
+    variantId: string,
+    tool: string,
+    argument?: string,
+    /** PR A2 (item 10) — the words on screen, which the edit runs on (saved first). */
+    visible?: { readonly body: string; readonly hashtags: readonly string[] },
+  ) => void;
+  /** PR A2 (item 10) — the last AI edit, before and after, until kept or undone. */
+  readonly lastEdit?: LastAiEdit | null;
+  readonly onUndoEdit?: () => void;
+  readonly onKeepEdit?: () => void;
   /** Review of #67, round 2 — the Studio's "Or start from:" chips, kept on an open post. */
   readonly startFrom?: { readonly idea: string; readonly repurpose: string };
   /** Round 5 (A) — what the new-post Studio was doing as this draft opened. */
@@ -337,6 +348,9 @@ export function DraftEditor({
   channelAccess,
   tiktokPosting = null,
   onTool,
+  lastEdit = null,
+  onUndoEdit,
+  onKeepEdit,
   actions,
 }: DraftEditorProps) {
   const router = useRouter();
@@ -2218,6 +2232,9 @@ export function DraftEditor({
                   key={action.key}
                   type="button"
                   className="bsp-chip bsp-st-sm"
+                  // An AI edit starts from the SAVED words, so it waits for the
+                  // save. PR A2 (item 10): it also sends the words on screen, and
+                  // the server refuses (free) when they are not the saved words.
                   disabled={busy !== null || dirty}
                   data-testid="content-tool"
                   data-tool={action.tool}
@@ -2227,6 +2244,7 @@ export function DraftEditor({
                       variant.id,
                       action.tool,
                       action.tool === 'tone' ? (action.argument ?? toneArgument) : undefined,
+                      { body: value.body, hashtags },
                     )
                   }
                 >
@@ -2375,6 +2393,14 @@ export function DraftEditor({
                                   .map((action) => toolButton(action))}
                               </div>
                             </MoreDisclosure>
+                          ) : null}
+                          {lastEdit && lastEdit.variantId === variant.id ? (
+                            <AiEditCompare
+                              t={t}
+                              edit={lastEdit}
+                              onUndo={onUndoEdit}
+                              onKeep={onKeepEdit}
+                            />
                           ) : null}
                           {!dirty && selected && estimate !== undefined ? (
                             <span

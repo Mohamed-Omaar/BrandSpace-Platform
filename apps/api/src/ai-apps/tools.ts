@@ -8,7 +8,7 @@ import {
   countPublishedPosts,
   createAnalyticsRegistry,
 } from '@brandspace/analytics';
-import { approvedFactsFor, localizedFrom } from '@brandspace/brand-brain';
+import { approvedFactsFor, brandProfileFor, localizedFrom } from '@brandspace/brand-brain';
 import {
   ContentApprovalService,
   ContentCalendarService,
@@ -464,7 +464,7 @@ export function buildMcpServer(caller: McpCaller, ctx: AiAppsContext): McpServer
     {
       title: 'Brand summary',
       description:
-        'The facts Brand Brain has approved for a brand: audience, voice, offers, rules. Only approved facts; use these and nothing invented.',
+        'The brand profile (name, colours, fonts, logo, website) and the facts Brand Brain has approved for a brand: audience, voice, offers, rules. Only approved facts; use these and nothing invented.',
       inputSchema: z.object({ brandId: brandIdInput }).strict(),
       annotations: READ,
     },
@@ -503,6 +503,8 @@ export function buildMcpServer(caller: McpCaller, ctx: AiAppsContext): McpServer
           brandId,
           data: {
             brand: { id: brand.id, name: brand.name },
+            // PR A2 (item 9): the approved profile, read from the brand row.
+            profile: await brandProfileFor(db, brandId),
             brandBrainUsedForWriting: enabled,
             facts: out,
             factCount: out.length,

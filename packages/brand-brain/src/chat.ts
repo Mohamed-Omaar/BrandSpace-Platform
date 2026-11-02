@@ -23,6 +23,12 @@ import {
 import { z } from 'zod';
 import { fenceUntrusted, type Citation } from './retrieval';
 import { groundingFor, keyQuestionAnswered, type Grounding } from './grounding';
+import {
+  BRAND_PROFILE_INSTRUCTION,
+  asksAboutProfile,
+  brandProfileBlock,
+  brandProfileFor,
+} from './profile';
 import { conversationNotFound } from './errors';
 import { closestKeyQuestion, type KeyQuestion } from './completion';
 
@@ -325,7 +331,14 @@ export class BrandBrainChatService {
       this.#clock,
     );
 
-    if (retrieval.insufficient) {
+    /*
+     * PR A2 (item 9) — THE BRAND PROFILE, read from the brand row (one source,
+     * never copied into facts). A question about the profile itself — its
+     * colours, fonts, logo, website or name — is answered from it even when no
+     * fact matches; anything else nothing answers is still refused for free.
+     */
+    const profile = brandProfileBlock(await brandProfileFor(this.#db, input.brandId));
+    if (retrieval.insufficient && !(profile && asksAboutProfile(input.message))) {
       // A REFUSAL IS FREE. No gateway call, no reservation, no credits.
       const assistant = await this.#writeAssistant({
         brandId: input.brandId,
@@ -375,9 +388,12 @@ export class BrandBrainChatService {
           kind: 'text',
           // The question is the customer's own words: fenced like every other
           // piece of customer text in a prompt.
-          prompt: `${SYSTEM_INSTRUCTION} ${answerLanguageInstruction(input.fallbackLocale)}\n\n${fenceUntrusted('CUSTOMER QUESTION', input.message)}`,
+          prompt: `${SYSTEM_INSTRUCTION} ${BRAND_PROFILE_INSTRUCTION} ${answerLanguageInstruction(input.fallbackLocale)}\n\n${fenceUntrusted('CUSTOMER QUESTION', input.message)}`,
           // Retrieved content goes here, NOT into the prompt.
-          untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
+          untrustedContext: [
+            ...(profile ? [profile] : []),
+            fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText),
+          ],
         },
       },
     };

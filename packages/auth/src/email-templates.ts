@@ -177,6 +177,21 @@ const TEMPLATES: Readonly<Record<EmailTemplateKey, LocalisedTemplate>> = {
       body: 'بلغ إنفاق الذكاء الاصطناعي 80% أو أكثر من أحد حدود الإنفاق على مستوى المنصة. عند 100% يتوقف الذكاء الاصطناعي لجميع العملاء حتى ينتهي اليوم أو الشهر أو ترفع الحد. افتح مركز التحكم لرؤية الأرقام.',
     },
   },
+  /*
+   * PR A2 (item 12, F-107) — usage outran a credit reservation by more than the
+   * owner's margin. The customer paid at most the quoted price; the platform
+   * absorbed the difference. Fixed text, no figure and no link.
+   */
+  'platform.ai_reservation_overrun': {
+    EN: {
+      subject: 'Brandspace AI reservation alert',
+      body: 'An AI request used more than its credit reservation by more than the margin you set. The customer paid no more than the quoted price, and the platform covered the difference. Open the Control Center audit log to see the task and model.',
+    },
+    AR: {
+      subject: 'تنبيه حجز الذكاء الاصطناعي في Brandspace',
+      body: 'استهلك طلب ذكاء اصطناعي أكثر من رصيده المحجوز بنسبة تتجاوز الهامش الذي حددته. لم يدفع العميل أكثر من السعر المعروض، وتحمّلت المنصة الفرق. افتح سجل التدقيق في مركز التحكم لمعرفة المهمة والنموذج.',
+    },
+  },
 };
 
 /** Escape for an HTML text node or a double-quoted attribute. */

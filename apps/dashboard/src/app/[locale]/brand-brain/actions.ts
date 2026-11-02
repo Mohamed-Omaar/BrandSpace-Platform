@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields } from '@brandspace/shared';
+import { createLogger, internalErrorFields, validationFieldOf } from '@brandspace/shared';
 import {
   acceptConfidentSchema,
   checksumOf,
@@ -106,6 +106,9 @@ function pageUrl(
   return `/${locale}${back.path}${query ? `?${query}` : ''}`;
 }
 
+/** The fields a Brand Brain form names in its own words when one is missing. */
+const FIELD_ERRORS = new Set(['area', 'title', 'body']);
+
 function failure(
   locale: string,
   error: unknown,
@@ -117,7 +120,19 @@ function failure(
   // The correlation id is the ONLY thing joining this screen to the server log,
   // and the log is redacted. No customer content is written either side.
   log.warn('brand brain action failed', { correlationId, action, ...internalErrorFields(error) });
-  return pageUrl(locale, { ...extra, error: actionErrorCode(error), ref: correlationId }, back);
+  /*
+   * PR A2 (item 11) — A MISSING FIELD IS A FIELD ERROR. A form that reached
+   * the schema without an Area (or title, or body) used to be reduced to
+   * INTERNAL, "Something went wrong"; it names the field instead.
+   */
+  const field = validationFieldOf(error);
+  const code =
+    field !== null
+      ? FIELD_ERRORS.has(field)
+        ? `VALIDATION_FAILED:${field}`
+        : 'VALIDATION_FAILED'
+      : actionErrorCode(error);
+  return pageUrl(locale, { ...extra, error: code, ref: correlationId }, back);
 }
 
 function localized(formData: FormData, prefix: string): LocalizedText {

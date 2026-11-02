@@ -102,3 +102,5 @@ export { COPILOT_SURFACES, COPILOT_SURFACE_KEYS, copilotSurface } from './surfac
 export type { CopilotSurface } from './surfaces';
 export { COPILOT_SUBJECT_TYPES, copilotSubjectType } from './subject';
 export type { CopilotSubject, CopilotSubjectType } from './subject';
+
+export { modelArguments } from './orchestrator';

@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { loadRepoEnv, requireDatabaseUrl } from './env-file';
 import { assertServerSide } from './server-only-guard';
+import { createSerialPool } from './serial-pool';
 
 /**
  * PLATFORM CONNECTION POOL — RESTRICTED MODULE.
@@ -49,12 +50,14 @@ export function getPlatformPrisma(repoRoot?: string): PrismaClient {
   );
 
   platformClient = new PrismaClient({
-    adapter: new PrismaPg({
-      connectionString,
-      // Platform work is rare and deliberate. A small pool limits the blast
-      // radius of a leaked credential and makes unusual volume visible.
-      max: 4,
-    }),
+    adapter: new PrismaPg(
+      createSerialPool({
+        connectionString,
+        // Platform work is rare and deliberate. A small pool limits the blast
+        // radius of a leaked credential and makes unusual volume visible.
+        max: 4,
+      }),
+    ),
   });
   return platformClient;
 }

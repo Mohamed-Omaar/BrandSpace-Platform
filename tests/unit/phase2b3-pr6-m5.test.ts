@@ -113,7 +113,7 @@ describe('M5 — order and schema', () => {
       '20261028090000_secret_version_kek_rewrap',
       // PR A: the AI output failure classes and the operator's failure detail.
       '20261101090000_ai_output_failure_classes',
-      // P1: each person's light / dark / device choice (D-590).
+      // P1: each person's light / dark / device choice (D-592).
       '20261102090000_user_colour_scheme',
     ]);
   });

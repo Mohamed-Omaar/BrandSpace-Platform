@@ -165,7 +165,7 @@ test.describe('the one backdrop (S5, bugs 8 and 9)', () => {
       });
       expect(sheet.inset).toBeGreaterThan(0);
       expect(Math.abs(sheet.top - sheet.inset)).toBeLessThan(1);
-      // P1 (D-590): as tall as its content, never past the window's inset —
+      // P1 (D-592): as tall as its content, never past the window's inset —
       // it used to be pinned to the bottom too, a window-high sheet.
       expect(sheet.bottom).toBeLessThanOrEqual(sheet.window - sheet.inset + 1);
       const fit = await drawer.evaluate((el) => ({

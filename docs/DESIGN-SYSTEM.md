@@ -663,7 +663,7 @@ component's look: the shared classes keep drawing, and a theme moves their token
 - **A preview box** (`scope`) re-declares every root alias, because an alias resolves where it is
   declared.
 
-### 10.1c Waiting states and the one frame (P1, D-590)
+### 10.1c Waiting states and the one frame (P1, D-592)
 
 - **`ProgressBar`** (`packages/ui/src/progress.tsx`): a native `<progress>` with its percentage,
   for work whose share is known (uploads). **`WorkingStatus`**: spinner, label and elapsed

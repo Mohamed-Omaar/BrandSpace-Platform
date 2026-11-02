@@ -2562,7 +2562,7 @@ draft alike.
 - **The Look & feel page** in the Control Center is a design-system extension built from the
   shared components (`docs/DESIGN-SYSTEM.md`).
 
-### 6.3.79 Style polish P1 (D-590)
+### 6.3.79 Style polish P1 (D-592)
 
 - **Copilot button:** the empty lane under it is gone; the prototype's scroll area runs to the
   frame's edge again. The page's end padding keeps room for the button (24 + 48 + 16px).
