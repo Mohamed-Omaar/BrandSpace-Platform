@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { aiLimitMessage } from '../../apps/dashboard/src/components/ai-limit';
 import { messages } from '../../apps/dashboard/src/i18n/messages';
@@ -39,12 +39,11 @@ describe('PR A2 — the AI budget message in Copilot and Brand Brain chat', () =
     );
     expect(copilot).toMatch(/aiLimitMessage\([\s\S]*statusMessage\(errorCode, locale\)/);
     expect(copilot).toContain('setErrorDetails(result.error.details ?? null)');
-    const chat = readFileSync('apps/dashboard/src/app/[locale]/brand-brain/brand-chat.tsx', 'utf8');
-    expect(chat).toMatch(/limit \?\? \(code === 'AI_PAUSED'/);
-    const view = readFileSync(
-      'apps/dashboard/src/app/[locale]/brand-brain/brand-brain-view.tsx',
-      'utf8',
-    );
-    expect(view).toContain("limitDaily: t('ai.limit.daily')");
+    // PR B (D-591) — Brand Brain's chat is retired: its questions are the
+    // Copilot's, so the Copilot's own reading above is the one that answers.
+    expect(existsSync('apps/dashboard/src/app/[locale]/brand-brain/brand-chat.tsx')).toBe(false);
+    expect(
+      readFileSync('apps/dashboard/src/app/[locale]/brand-brain/brand-brain-view.tsx', 'utf8'),
+    ).toContain('new CustomEvent(OPEN_COPILOT_EVENT');
   });
 });

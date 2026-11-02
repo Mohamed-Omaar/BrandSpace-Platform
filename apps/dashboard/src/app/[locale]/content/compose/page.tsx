@@ -1058,7 +1058,6 @@ export default async function ComposePage({
           mayFixFacts && entry.state !== 'removed' && fixTarget && draft
             ? `/${locale}/brand-brain?${new URLSearchParams({
                 brand: draft.brandId,
-                tab: 'chat',
                 mode: 'edit',
                 fact: fixTarget,
               }).toString()}`

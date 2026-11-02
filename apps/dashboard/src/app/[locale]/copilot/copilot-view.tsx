@@ -174,7 +174,16 @@ export function CopilotView({
     readonly greeting: string;
     /** The field's short placeholder ("Ask or request something…"). */
     readonly placeholder: string;
-    readonly suggestions: readonly { readonly id: string; readonly label: string }[];
+    /**
+     * PR B — a chip may carry the request it puts in the box (`prompt`) when
+     * that differs from what it reads (Brand Brain's three chips, the page's
+     * own question); otherwise its label is the request.
+     */
+    readonly suggestions: readonly {
+      readonly id: string;
+      readonly label: string;
+      readonly prompt?: string;
+    }[];
   } | null;
   /**
    * The metrics stored in parts per mille, from the analytics catalogue on the
@@ -666,7 +675,7 @@ export function CopilotView({
           ) : null}
           {/*
             D8 — THE COPILOT NEVER SAVES A FACT. A save request becomes this
-            card: a link into Brand Brain's chat, Add mode, prefilled. Nothing
+            card: a link into the Brand Brain area's add form, prefilled. Nothing
             is saved until the person adds it there, with their own permission.
           */}
           {plan.saveFact ? (
@@ -676,7 +685,6 @@ export function CopilotView({
                 <Link
                   href={`/${locale}/brand-brain?${new URLSearchParams({
                     brand: brand.id,
-                    tab: 'chat',
                     mode: 'add',
                     ...(plan.saveFact.area ? { area: plan.saveFact.area } : {}),
                     ...(plan.saveFact.title ? { title: plan.saveFact.title } : {}),
@@ -964,7 +972,7 @@ export function CopilotView({
                 suggestions: panel.suggestions,
                 onSuggestion: (id: string) => {
                   const chosen = panel.suggestions.find((entry) => entry.id === id);
-                  if (chosen && !busy) setRequest(chosen.label);
+                  if (chosen && !busy) setRequest(chosen.prompt ?? chosen.label);
                 },
               }
             : {})}

@@ -550,6 +550,16 @@ export async function WorkspaceShell({
   ]
     .filter((part): part is string => part !== null)
     .join(' · ');
+  /** PR B — the retired "Talk with the brand" tab's three chips, now Copilot's. */
+  const brandChips = [
+    {
+      id: 'positioning',
+      label: t('bb.suggestPositioningLabel'),
+      prompt: t('bb.suggestPositioningPrompt'),
+    },
+    { id: 'gaps', label: t('bb.suggestGapsLabel'), prompt: t('bb.suggestGapsPrompt') },
+    { id: 'voice', label: t('bb.suggestVoiceLabel'), prompt: t('bb.suggestVoicePrompt') },
+  ];
   // The greeting's name is the person's own first name, never their email.
   const firstName = copilotLink ? greetingName(me?.name) : null;
 
@@ -952,11 +962,28 @@ export async function WorkspaceShell({
             ? t('copilot.hello').replace('{name}', firstName)
             : t('copilot.hello').replace(/\s?\{name\}/, ''),
           placeholder: t('copilot.askPlaceholder'),
+          /*
+           * PR B (D-591) — PAGE-AWARE. The Studio asks about the post first;
+           * Brand Brain's three chips (the retired "Talk with the brand" tab's)
+           * lead on Brand Brain and follow the three general ones elsewhere.
+           */
           suggestions: [
+            ...(drawerSurface === 'content'
+              ? [
+                  {
+                    id: 'page',
+                    label: t('copilot.pageAsk.content'),
+                    prompt: t('copilot.pageAsk.contentPrompt'),
+                  },
+                ]
+              : []),
+            ...(drawerSurface === 'brand_brain' ? brandChips : []),
             { id: 'posts', label: t('copilot.suggest.posts') },
             { id: 'engagement', label: t('copilot.suggest.engagement') },
             { id: 'approvals', label: t('copilot.suggest.approvals') },
+            ...(drawerSurface === 'brand_brain' ? [] : brandChips),
           ],
+          openFull: t('copilot.openInPage'),
         }}
       >
         <PrototypeCopilotFab

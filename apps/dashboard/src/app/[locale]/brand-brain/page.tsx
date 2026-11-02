@@ -42,7 +42,6 @@ import {
   type SourceData,
   type VoiceData,
 } from './brand-brain-view';
-import type { ChatStart } from './brand-chat';
 
 /*
  * The approved demo's stylesheet, transcribed. It is imported here rather than
@@ -754,12 +753,13 @@ export default async function BrandBrainPage({
   };
 
   /*
-   * D7 / D8 / D9 (Phase 2C-3) — the chat can open in a mode, prefilled:
-   * `?tab=chat&mode=add&area=…&title=…&body=…&key=…` from the Copilot's "save
-   * this fact" handoff or a miss in Ask, and `?tab=chat&mode=edit&fact=<id>`
-   * from the Studio's "Fix it". A prefill is only a starting point: nothing is
-   * saved until the person presses the button, and the server checks their
-   * permission then. A fact id this reader cannot see simply opens Edit empty.
+   * D7 / D8 / D9 (Phase 2C-3), PR B (D-591) — a hand-over opens an AREA:
+   * `?mode=add&area=…&title=…&body=…&key=…` from the Copilot's "save this
+   * fact" fills that area's add form, and `?mode=edit&fact=<id>` from the
+   * Studio's "Fix it" opens that fact's edit box (the retired chat's Add and
+   * Edit modes). A prefill is only a starting point: nothing is saved until
+   * the person presses the button, and the server checks their permission
+   * then. A fact id this reader cannot see, or an unknown area, opens nothing.
    */
   const param = (key: string, max: number): string | null =>
     typeof query[key] === 'string' ? (query[key] as string).slice(0, max) : null;
@@ -769,32 +769,30 @@ export default async function BrandBrainPage({
     requestedMode === 'edit' && can('brand_brain.edit') && fixFactId
       ? (items.find((item) => item.id === fixFactId) ?? null)
       : null;
-  const chatStart: ChatStart | null =
-    requestedMode === 'add' && can('brand_brain.edit')
-      ? {
-          mode: 'add',
-          area: param('area', 40),
-          title: param('title', 200),
-          body: param('body', 2_000),
-          itemKey: param('key', 120),
-        }
-      : requestedMode === 'edit' && can('brand_brain.edit')
+  const drawerStart: {
+    area: string;
+    prefill: { title: string | null; body: string | null; itemKey: string | null } | null;
+    editFactId: string | null;
+  } | null = (() => {
+    if (!can('brand_brain.edit')) return null;
+    if (requestedMode === 'add') {
+      const area = areaCards.find((entry) => entry.area === param('area', 40))?.area;
+      return area
         ? {
-            mode: 'edit',
-            fact: fixFact
-              ? {
-                  id: fixFact.id,
-                  area: fixFact.area,
-                  itemKey: fixFact.itemKey,
-                  version: fixFact.version,
-                  title: localizedFrom(fixFact.title),
-                  body: localizedFrom(fixFact.body),
-                  validUntil: fixFact.validUntil ? isoDateOf(fixFact.validUntil) : null,
-                  expired: isExpired(fixFact.validUntil, asOf),
-                }
-              : null,
+            area,
+            prefill: {
+              title: param('title', 200),
+              body: param('body', 2_000),
+              itemKey: param('key', 120),
+            },
+            editFactId: null,
           }
         : null;
+    }
+    return requestedMode === 'edit' && fixFact
+      ? { area: fixFact.area, prefill: null, editFactId: fixFact.id }
+      : null;
+  })();
 
   /*
    * D12 (Phase 2C-4) — Home's "Brand Brain is missing: <question>" links here
@@ -806,7 +804,7 @@ export default async function BrandBrainPage({
   const askedArea = param('area', 40);
   const askedQuestion = param('question', 120);
   const initialFocus =
-    askedArea && askedQuestion && !chatStart
+    askedArea && askedQuestion && !drawerStart
       ? (() => {
           const card = areaCards.find((entry) => entry.area === askedArea);
           const question = card?.questions.find((entry) => entry.itemKey === askedQuestion);
@@ -823,12 +821,13 @@ export default async function BrandBrainPage({
    * request to open the drawer again.
    */
   const initialArea =
-    askedArea && !askedQuestion && !chatStart && !status && !error
+    askedArea && !askedQuestion && !drawerStart && !status && !error
       ? (areaCards.find((entry) => entry.area === askedArea)?.area ?? null)
       : null;
 
-  const requestedTab = chatStart ? 'chat' : typeof query['tab'] === 'string' ? query['tab'] : '';
-  const initialTab: BrandBrainTab = (['knowledge', 'look', 'sources', 'chat'] as const).includes(
+  // PR B — a hand-over opens Knowledge; the retired `?tab=chat` lands there too.
+  const requestedTab = drawerStart ? '' : typeof query['tab'] === 'string' ? query['tab'] : '';
+  const initialTab: BrandBrainTab = (['knowledge', 'look', 'sources'] as const).includes(
     requestedTab as BrandBrainTab,
   )
     ? (requestedTab as BrandBrainTab)
@@ -911,7 +910,6 @@ export default async function BrandBrainPage({
         notes={typeof query['thread'] === 'string' ? null : brandNotes}
         locale={locale}
         brandId={brand.id}
-        brandName={brand.name}
         understanding={understanding}
         layers={layers}
         missing={missing}
@@ -959,18 +957,18 @@ export default async function BrandBrainPage({
         areas={areaCards}
         candidates={candidateData}
         sources={sourceData}
-        retentionDays={policy.chat.retentionDays}
-        chatStart={chatStart}
+        drawerStart={drawerStart}
         permissions={{
           edit: can('brand_brain.edit'),
           upload: can('brand_brain.upload'),
           review: can('brand_brain.review'),
           // E3 — archiving a fact needs `brand_brain.edit`, the same as the action.
           remove: can('brand_brain.edit'),
-          // Q18 — a Brand Brain answer spends credits.
-          // PR F (b), Q9 — and a model that can answer (D-507).
-          chat: maySpendCredits(workspace.permissionKeys, 'brand_brain.chat') && aiChat,
-          chatOff: maySpendCredits(workspace.permissionKeys, 'brand_brain.chat') && !aiChat,
+          // PR B (D-591) — "Ask" is the Copilot: a member who may use it
+          // (Q18, an answer spends credits) and a model that can answer
+          // (PR F (b), Q9, D-507).
+          chat: maySpendCredits(workspace.permissionKeys, 'copilot.use') && aiChat,
+          chatOff: maySpendCredits(workspace.permissionKeys, 'copilot.use') && !aiChat,
           aiOff: !aiAny,
         }}
       />

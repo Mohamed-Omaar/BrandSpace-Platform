@@ -5,8 +5,7 @@ import { MoreDisclosure } from '../../../components/more-disclosure';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { BrandOrb, type OrbNode } from './brand-orb';
-import { BrandChat, type ChatStart } from './brand-chat';
-import { AreaDrawer, type QuestionFocus } from './area-drawer';
+import { AreaDrawer, type DrawerPrefill, type QuestionFocus } from './area-drawer';
 import { ReviewInbox, type ConfidentPreviewEntry } from './review-inbox';
 import { VoiceCard } from './voice-card';
 import { LookCard, type LookViewData } from './look-card';
@@ -23,7 +22,8 @@ import {
   uploadTexts,
   useUploadState,
 } from '../../../components/upload-field';
-import { CopilotLink } from '../../../components/copilot-link';
+import { CopilotLink, OPEN_COPILOT_EVENT } from '../../../components/copilot-link';
+import { useRouter } from 'next/navigation';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /**
@@ -42,7 +42,7 @@ import { useMessageLocale } from '../../../i18n/message-locale-context';
  * docs/UI-FIDELITY-CONTRACT.md §4.5 (Brand Brain).
  */
 
-export type BrandBrainTab = 'knowledge' | 'look' | 'sources' | 'chat';
+export type BrandBrainTab = 'knowledge' | 'look' | 'sources';
 
 export interface AreaItemData {
   readonly id: string;
@@ -222,7 +222,6 @@ const AREA_GLYPHS: Record<string, string> = {
 export function BrandBrainView({
   locale,
   brandId,
-  brandName,
   understanding,
   layers,
   missing,
@@ -243,9 +242,8 @@ export function BrandBrainView({
   areas,
   candidates,
   sources,
-  retentionDays,
   permissions,
-  chatStart = null,
+  drawerStart = null,
   initialFocus = null,
   initialArea = null,
   sourceRules = null,
@@ -254,8 +252,6 @@ export function BrandBrainView({
   sourceRules?: UploadRules | null;
   locale: string;
   brandId: string;
-  /** The brand's name — the page's eyebrow says it (the prototype's `T.brandName`). */
-  brandName: string;
   /** "BrandSpace understands this brand from 12 approved facts…" — counted, never scored. */
   understanding: string;
   layers: readonly LayerData[];
@@ -296,15 +292,16 @@ export function BrandBrainView({
   areas: readonly AreaCardData[];
   candidates: readonly CandidateData[];
   sources: readonly SourceData[];
-  /**
-   * The configured retention window. Never a number this app chose: it is read
-   * from the tenant-readable configuration projection, so the notice states what
-   * an owner actually activated (D-78, CLAUDE.md §2.2).
-   */
-  retentionDays: number;
   permissions: BrandBrainPermissions;
-  /** D7/D8/D9 — the chat opens in Add (a handoff) or Edit ("Fix it"), prefilled. */
-  chatStart?: ChatStart | null;
+  /**
+   * D7/D8/D9, PR B — the Copilot's "save this fact" hand-over and the Studio's
+   * "Fix it" open the area: its add form prefilled, or that fact's edit box.
+   */
+  drawerStart?: {
+    readonly area: string;
+    readonly prefill: DrawerPrefill | null;
+    readonly editFactId: string | null;
+  } | null;
   /** D12 (Phase 2C-4) — Home's missing-question link: this area, this question. */
   /** PR D (Strategy 9) — `?area=<key>` alone: that area, open. */
   initialArea?: string | null;
@@ -317,12 +314,12 @@ export function BrandBrainView({
   const t = translator(useMessageLocale(locale));
   const [tab, setTabState] = useState<BrandBrainTab>(initialTab);
   const [openArea, setOpenArea] = useState<string | null>(
-    initialFocus?.area ?? initialArea ?? null,
+    initialFocus?.area ?? drawerStart?.area ?? initialArea ?? null,
   );
   const [focus, setFocus] = useState<QuestionFocus | null>(
     initialFocus ? { itemKey: initialFocus.itemKey, prompt: initialFocus.prompt } : null,
   );
-  const [chatArea, setChatArea] = useState<string | null>(null);
+  const [approveAll, setApproveAll] = useState(false);
   const [inboxArea, setInboxArea] = useState<string | null>(null);
   const [rvOpen, setRvOpen] = useState(reviewOpen || focusCandidateId !== null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -385,15 +382,30 @@ export function BrandBrainView({
     }
   }, []);
 
-  // Final walk (Q9): the chat is AI; while it cannot run nothing offers it.
-  const chatOff = permissions.chatOff === true;
+  /*
+   * PR B (D-591) — ONE ASSISTANT. "Ask the brand", the orb's centre and an
+   * area's "Ask Copilot" open the Copilot's side panel on this page (Brand
+   * Brain is its surface, this brand its brand), an area's question put in the
+   * box and never sent. Where no panel answers the request, the Copilot page
+   * opens with the same question. Final walk (Q9): the Copilot is AI; while it
+   * cannot run, or the member may not use it, nothing offers it.
+   */
+  const chatOff = !permissions.chat;
+  const router = useRouter();
   const openChat = useCallback(
     (area: string | null) => {
-      setChatArea(area);
-      setOpenArea(null);
-      setTab('chat');
+      const label = area ? (byArea.get(area)?.label ?? null) : null;
+      const request = label ? t('bb.copilotAskArea').replace('{area}', label) : '';
+      const open = new CustomEvent(OPEN_COPILOT_EVENT, { cancelable: true, detail: { request } });
+      if (window.dispatchEvent(open) && copilotHref) {
+        router.push(
+          request
+            ? `${copilotHref}${copilotHref.includes('?') ? '&' : '?'}ask=${encodeURIComponent(request)}`
+            : copilotHref,
+        );
+      }
     },
-    [setTab],
+    [byArea, copilotHref, router, t],
   );
 
   /**
@@ -429,12 +441,6 @@ export function BrandBrainView({
     setPendingDrop(null);
   }, [tab, pendingDrop]);
 
-  /** The chat's attach button, wired to the one real upload control on Sources. */
-  const onAttach = useCallback(() => {
-    setTab('sources');
-    window.requestAnimationFrame(() => fileRef.current?.focus());
-  }, [setTab]);
-
   /** Q19 — "What's missing": open the area with that question in the add form. */
   const askMissing = useCallback((entry: MissingQuestionData) => {
     setFocus({ itemKey: entry.itemKey, prompt: entry.prompt });
@@ -455,7 +461,6 @@ export function BrandBrainView({
   }, []);
 
   const openAreaData = openArea ? (byArea.get(openArea) ?? null) : null;
-  const chatAreaLabel = chatArea ? (byArea.get(chatArea)?.label ?? null) : null;
 
   const tabs: { id: BrandBrainTab; label: string; badge?: string }[] = [
     {
@@ -466,8 +471,6 @@ export function BrandBrainView({
     },
     { id: 'look', label: t('bb.tab.look') },
     { id: 'sources', label: t('bb.tab.sources') },
-    // Final walk (Q9): "Talk with the brand" is AI; no tab while it cannot run.
-    ...(chatOff ? [] : [{ id: 'chat' as const, label: t('bb.tab.chat') }]),
   ];
 
   /*
@@ -790,9 +793,24 @@ export function BrandBrainView({
                     <button
                       type="button"
                       className="bsp-btn bsp-sm bsp-sec"
-                      aria-expanded={bulkOpen}
+                      aria-expanded={bulkOpen && approveAll}
+                      data-testid="approve-all-open"
+                      onClick={() => {
+                        setApproveAll(true);
+                        setBulkOpen((open) => !(open && approveAll));
+                      }}
+                    >
+                      {t('bb.approveAll')}
+                    </button>
+                    <button
+                      type="button"
+                      className="bsp-btn bsp-sm bsp-sec"
+                      aria-expanded={bulkOpen && !approveAll}
                       data-testid="accept-confident-open"
-                      onClick={() => setBulkOpen((open) => !open)}
+                      onClick={() => {
+                        setApproveAll(false);
+                        setBulkOpen((open) => !(open && !approveAll));
+                      }}
                     >
                       {confident.length > 0
                         ? t('bb.acceptConfident').replace('{count}', String(confident.length))
@@ -817,7 +835,19 @@ export function BrandBrainView({
               <ConfidentCard
                 locale={locale}
                 brandId={brandId}
-                confident={confident}
+                confident={
+                  approveAll
+                    ? candidates
+                        .filter((entry) => entry.acceptAllowed)
+                        .map((entry) => ({
+                          id: entry.id,
+                          title: entry.title,
+                          areaLabel: entry.areaLabel,
+                          confidencePercent: entry.confidencePercent,
+                        }))
+                    : confident
+                }
+                all={approveAll}
                 onCancel={() => setBulkOpen(false)}
                 onOneByOne={() => openReview(null)}
               />
@@ -851,6 +881,14 @@ export function BrandBrainView({
                   setFocus(null);
                 }}
                 onAskAbout={(area: string) => openChat(area)}
+                prefill={
+                  drawerStart && drawerStart.area === openAreaData.area ? drawerStart.prefill : null
+                }
+                startEditing={
+                  drawerStart && drawerStart.area === openAreaData.area
+                    ? drawerStart.editFactId
+                    : null
+                }
                 onReview={openReview}
               />
             ) : (
@@ -1005,69 +1043,6 @@ export function BrandBrainView({
             </div>
           </section>
         ) : null}
-
-        {tab === 'chat' ? (
-          /* TALK WITH THE BRAND — the prototype's chat card (lines 899–925). */
-          <BrandChat
-            locale={locale}
-            areas={areas.map((entry) => ({ area: entry.area, label: entry.label }))}
-            modes={{ edit: permissions.edit, review: permissions.review }}
-            copilotHref={copilotHref}
-            start={chatStart}
-            brandId={brandId}
-            area={chatArea}
-            areaLabel={chatAreaLabel}
-            canChat={permissions.chat}
-            aiOff={permissions.chatOff === true}
-            canUpload={permissions.upload}
-            initialMessages={[]}
-            onClose={() => setTab('knowledge')}
-            onAttach={onAttach}
-            onAreaDetails={
-              chatArea
-                ? () => {
-                    setTab('knowledge');
-                    setOpenArea(chatArea);
-                  }
-                : null
-            }
-            labels={{
-              // The prototype's chat head: "Brand Brain", answering from n facts.
-              title: t('bb.title'),
-              subtitle: (totalActiveItems === 1
-                ? t('bb.chatSubFacts.one')
-                : t('bb.chatSubFacts')
-              ).replace('{count}', String(totalActiveItems)),
-              placeholder: t('bb.chatPlaceholder'),
-              send: t('bb.chatSend'),
-              cancel: t('bb.chatCancel'),
-              thinking: t('bb.chatThinking'),
-              // The prototype's greeting (`chatHello`), naming the brand.
-              empty: t('bb.chatHello').replace('{brand}', brandName),
-              sources: t('bb.chatSources'),
-              insufficient: t('bb.chatInsufficient'),
-              disclaimer: t('bb.chatDisclaimer'),
-              retention: t('bb.chatRetention').replace('{days}', String(retentionDays)),
-              expired: t('bb.chatExpired'),
-              error: t('bb.chatError'),
-              paused: t('ai.paused'),
-              limitDaily: t('ai.limit.daily'),
-              limitMonthly: t('ai.limit.monthly'),
-              close: t('bb.chatClose'),
-              contextAll: t('bb.chatContextAll'),
-              areaDetails: t('bb.chatAreaDetails'),
-              attach: t('bb.chatAttach'),
-              suggestions: [
-                {
-                  label: t('bb.suggestPositioningLabel'),
-                  prompt: t('bb.suggestPositioningPrompt'),
-                },
-                { label: t('bb.suggestGapsLabel'), prompt: t('bb.suggestGapsPrompt') },
-                { label: t('bb.suggestVoiceLabel'), prompt: t('bb.suggestVoicePrompt') },
-              ],
-            }}
-          />
-        ) : null}
       </div>
     </div>
   );
@@ -1090,12 +1065,15 @@ function ConfidentCard({
   locale,
   brandId,
   confident,
+  all = false,
   onCancel,
   onOneByOne,
 }: {
   locale: string;
   brandId: string;
   confident: readonly ConfidentPreviewEntry[];
+  /** PR B — "Approve all": every fact listed, whatever its confidence. */
+  all?: boolean;
   onCancel: () => void;
   onOneByOne: () => void;
 }) {
@@ -1106,7 +1084,13 @@ function ConfidentCard({
         <form action={acceptConfidentCandidatesAction} className="bsp-bb-bulk-f">
           <input type="hidden" name="locale" value={locale} />
           <input type="hidden" name="brandId" value={brandId} />
-          <b>{t('bb.bulkTitle').replace('{count}', String(confident.length))}</b>
+          {all ? <input type="hidden" name="all" value="1" /> : null}
+          <b>
+            {t(all ? 'bb.approveAllTitle' : 'bb.bulkTitle').replace(
+              '{count}',
+              String(confident.length),
+            )}
+          </b>
           <ul data-testid="accept-confident-list">
             {confident.map((entry) => (
               <li key={entry.id} data-testid={`accept-confident-${entry.id}`}>
