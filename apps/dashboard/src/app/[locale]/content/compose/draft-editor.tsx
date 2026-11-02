@@ -2231,25 +2231,21 @@ export function DraftEditor({
                   key={action.key}
                   type="button"
                   className="bsp-chip bsp-st-sm"
-                  // PR A2 (item 10) — on a draft that saves itself, the press saves
-                  // the words on screen first, then edits exactly those words.
-                  disabled={busy !== null || (dirty && !autosaves)}
+                  // An AI edit starts from the SAVED words, so it waits for the
+                  // save. PR A2 (item 10): it also sends the words on screen, and
+                  // the server refuses (free) when they are not the saved words.
+                  disabled={busy !== null || dirty}
                   data-testid="content-tool"
                   data-tool={action.tool}
                   data-action={action.key}
-                  onClick={() => {
-                    const run = () =>
-                      onTool(
-                        variant.id,
-                        action.tool,
-                        action.tool === 'tone' ? (action.argument ?? toneArgument) : undefined,
-                        { body: value.body, hashtags },
-                      );
-                    if (!dirty) return run();
-                    void flushSaves().then((ok) => {
-                      if (ok) run();
-                    });
-                  }}
+                  onClick={() =>
+                    onTool(
+                      variant.id,
+                      action.tool,
+                      action.tool === 'tone' ? (action.argument ?? toneArgument) : undefined,
+                      { body: value.body, hashtags },
+                    )
+                  }
                 >
                   {busy === `${variant.id}:${action.tool}`
                     ? t['content.tool.running']
