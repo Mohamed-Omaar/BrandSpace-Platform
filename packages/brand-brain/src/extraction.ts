@@ -369,7 +369,7 @@ export interface CandidateFact {
      * many of its keywords the sentence holds, and whether it is the area the
      * uploader aimed the document at.
      */
-    readonly method?: 'keyword';
+    readonly method?: 'keyword' | 'model';
     readonly keywordHits?: number;
     readonly aimedArea?: boolean;
   }[];

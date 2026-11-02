@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@brandspace/ai-gateway": "workspace:*",
     "@brandspace/analytics": "workspace:*",
     "@brandspace/assets": "workspace:*",
     "@brandspace/automation": "workspace:*",
@@ -19,6 +20,7 @@
     "@brandspace/entitlements": "workspace:*",
     "@brandspace/jobs": "workspace:*",
     "@brandspace/notifications": "workspace:*",
+    "@brandspace/secrets": "workspace:*",
     "@brandspace/shared": "workspace:*",
     "@brandspace/social-connectors": "workspace:*",
     "@brandspace/storage": "workspace:*",

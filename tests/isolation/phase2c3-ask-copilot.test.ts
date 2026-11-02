@@ -279,8 +279,11 @@ describe('D8 — the Copilot answers from the same facts and never saves one', (
         where: { workspaceId: fixtures.a.workspaceId },
       }),
     ).toBe(candidatesBefore);
-    // And the prompt tells the model it cannot save facts.
-    expect(model.calls[0]).toContain('You cannot save, add or change brand facts');
+    // PR B (D-591) — and the prompt tells a member who may edit facts that a
+    // save is proposed as a CARD they confirm; nothing is saved before. (A
+    // model that still answers with `saveFact`, as here, is handed off.)
+    expect(model.calls[0]).toContain('propose brand_brain.add_fact');
+    expect(model.calls[0]).toContain('Nothing is saved until the person confirms the card.');
   });
 
   it('with Brand Brain off, D-355’s notice is unchanged', async () => {

@@ -681,10 +681,16 @@ describe('source ownership — the CURRENT version decides', () => {
       }),
     );
 
-    // The same sentence (same key) from a second document, accepted: a newer
-    // version of the SAME fact, now owned by the second document.
+    // The same fact (same key) from a second document, accepted: a newer
+    // version of the SAME fact, now owned by the second document. PR B — its
+    // words differ (an identical sentence is now linked to the fact the brand
+    // already has, not proposed again: pr-b-duplicate-facts).
     const second = await receive(
-      input(strToU8(`${shared}\n\nfiller text for the second source ${randomUUID()}.`)),
+      input(
+        strToU8(
+          `${shared.replace('Gulf region.', 'Gulf region and Oman.')}\n\nfiller text for the second source ${randomUUID()}.`,
+        ),
+      ),
     );
     await runJob(second.job!.id);
     const secondCandidate = await platform.brandKnowledgeCandidate.findFirstOrThrow({

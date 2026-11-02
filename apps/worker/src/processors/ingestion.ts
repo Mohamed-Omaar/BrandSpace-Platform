@@ -1,5 +1,6 @@
 import {
   BrandIngestionService,
+  ModelFactExtractor,
   TenantBrandBrainPolicySource,
   createObjectStore,
   extractSourceDocument,
@@ -9,6 +10,7 @@ import {
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { createLogger, currentEnvironment } from '@brandspace/shared';
 import type { IngestSourceDocumentPayload } from '@brandspace/jobs';
+import { brandExtractPort } from '../brand-extract';
 
 /**
  * Process one uploaded source document.
@@ -62,22 +64,32 @@ export async function processIngestionJob(payload: IngestSourceDocumentPayload):
    * sweep hands the row back once its claim has gone silent, and the next
    * attempt runs under its own id (D-413).
    */
-  const service = (db: TenantScopedClient, policy: Awaited<ReturnType<typeof loadPolicy>>) =>
+  const service = (
+    db: TenantScopedClient,
+    policy: Awaited<ReturnType<typeof loadPolicy>>,
+    factExtractor?: ModelFactExtractor,
+  ) =>
     new BrandIngestionService({
       db,
       workspaceId: payload.workspaceId,
       store: objectStore(),
       policy: policy.ingestion,
       extractors: policy.extractors,
+      ...(factExtractor ? { factExtractor } : {}),
     });
 
-  const { policy, started } = await withWorkspace(payload.workspaceId, async (db) => {
+  const { policy, planKey, started } = await withWorkspace(payload.workspaceId, async (db) => {
     // The SAME configuration the dashboard reads, through the same tenant-side
     // projection. A worker with its own ceilings would be a second set of
     // settings an operator cannot see (CLAUDE.md §2.2).
     const loaded = await loadPolicy(db);
+    const subscription = await db.workspaceSubscription.findFirst({
+      where: { workspaceId: payload.workspaceId },
+      select: { planKey: true },
+    });
     return {
       policy: loaded,
+      planKey: subscription?.planKey ?? null,
       started: await service(db, loaded).startProcessing(payload.ingestionJobId, payload.attempt),
     };
   });
@@ -98,8 +110,22 @@ export async function processIngestionJob(payload: IngestSourceDocumentPayload):
     started,
   });
 
+  /*
+   * PR B (D-591) — `brand.extract`: the whole source in one model call, made
+   * HERE, between the parse and the write transaction (H-4). Unavailable or
+   * failed, nothing is prepared and today's keyword extraction runs.
+   */
+  const facts = new ModelFactExtractor(
+    brandExtractPort({
+      workspaceId: payload.workspaceId,
+      planKey,
+      idempotencyKey: `brand.extract:${started.jobId}:${started.attempt}`,
+    }),
+  );
+  if (outcome.ok) await facts.prepare(outcome.extracted.text);
+
   const result = await withWorkspace(payload.workspaceId, async (db) =>
-    service(db, policy).finishProcessing(started, outcome),
+    service(db, policy, facts).finishProcessing(started, outcome),
   );
 
   log.info('source document processed', {

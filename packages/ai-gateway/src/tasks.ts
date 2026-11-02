@@ -100,6 +100,19 @@ export const AI_TASKS = [
     async: false,
     mvpApproved: true,
   },
+  /*
+   * PR B (D-591, owner-approved new task key) — WHOLE-SOURCE FACT EXTRACTION:
+   * one call per added file reads it whole and proposes its facts, which wait
+   * in Pending for a person. Priced per source in `ai.credit-rules`; until a
+   * route and a price are active, Add uses today's keyword extraction.
+   */
+  {
+    key: 'brand.extract',
+    capability: 'CONTENT_STANDARD',
+    modality: 'text',
+    async: false,
+    mvpApproved: true,
+  },
   {
     key: 'content.translate',
     capability: 'TEXT_LIGHT',
@@ -195,6 +208,7 @@ export const JSON_OUTPUT_TASKS: ReadonlySet<string> = new Set([
   'strategy.generate',
   'analytics.explain',
   'copilot.chat',
+  'brand.extract',
 ]);
 
 /** Which product tasks actually request a capability. Empty is legitimate. */

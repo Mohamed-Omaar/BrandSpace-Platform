@@ -555,6 +555,36 @@ function workspaceReadSteps(prompt: string, request: string): unknown[] {
   ).map((read) => ({ toolKey: read.key, arguments: {} }));
 }
 
+/*
+ * PR B (D-591) — `brand.extract`, AS A MODEL WOULD ANSWER IT. The double lists
+ * the source's own sentences as facts (nothing invented), each with the area
+ * its words point to and itself as the quote, so the whole-source path, the
+ * coverage line and Pending can be shown without a vendor (D-13).
+ */
+const EXTRACT_AREAS: readonly { readonly area: string; readonly words: RegExp }[] = [
+  { area: 'OFFERS', words: /\b(?:price|offer|menu|service|sell|package|open|delivery)/iu },
+  { area: 'AUDIENCE', words: /\b(?:audience|customers?|founders?|families|students)/iu },
+  { area: 'TONE_OF_VOICE', words: /\b(?:tone|voice|friendly|formal)/iu },
+  { area: 'DO_DONT', words: /\b(?:never|always|avoid|do not|don't)/iu },
+];
+
+function extractDocument(context: readonly string[]): string {
+  const source = context.join('\n').replace(/^.*SOURCE.*$/gmu, '');
+  const facts = source
+    .split(/(?<=[.!?۔])\s+|\n+/u)
+    .map((line) => line.replace(/^\s*(?:[-–—•*·]+|\d{1,3}[.)])\s*/u, '').trim())
+    .filter((line) => line.length >= 20 && line.length <= 400 && !/[<>]{3}/u.test(line))
+    .slice(0, 40)
+    .map((line) => ({
+      area: EXTRACT_AREAS.find((entry) => entry.words.test(line))?.area ?? 'IDENTITY',
+      title: line.split(/\s+/u).slice(0, 6).join(' '),
+      body: line,
+      quote: line,
+      confidence: 0.8,
+    }));
+  return JSON.stringify({ facts });
+}
+
 function copilotDocument(
   prompt: string,
   context: readonly string[],
@@ -710,7 +740,9 @@ export class MockProviderAdapter implements AiProviderAdapter {
         ? askDocument(request.prompt, context, request.maxOutputTokens)
         : request.taskKey === 'copilot.chat' && request.prompt.includes('"steps":[{"toolKey"')
           ? copilotDocument(request.prompt, context, request.maxOutputTokens)
-          : null;
+          : request.taskKey === 'brand.extract'
+            ? extractDocument(context)
+            : null;
 
     return {
       text:

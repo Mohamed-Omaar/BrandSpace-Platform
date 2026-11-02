@@ -900,6 +900,9 @@ export class BrandIngestionService {
         data: {
           stage: 'COMPLETED',
           candidatesCreated: created,
+          // PR B — the `brand.extract` request that read this source; null
+          // when today's keyword extraction did (the screen says which).
+          aiRequestId: (this.#facts as { requestId?: string | null }).requestId ?? null,
           completedAt: this.#clock.now(),
           failureMessage: null,
           failureCode: null,
