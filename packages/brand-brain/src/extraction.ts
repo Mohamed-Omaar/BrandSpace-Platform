@@ -496,10 +496,31 @@ function scoreSentence(
   };
 }
 
+/**
+ * PR B (D-591) — A LIST MARKER IS NOT PART OF THE FACT. "- Open daily from 8"
+ * and "• Open daily from 8" are the same sentence as "Open daily from 8", and
+ * keeping the marker made the same fact arrive twice from two files.
+ */
+export function stripListMarker(sentence: string): string {
+  return sentence.replace(/^\s*(?:[-–—•*·▪●◦‣⁃>]+|\(?\d{1,3}[.)])\s*/u, '').trim();
+}
+
+/**
+ * PR B — the form two facts are compared in: no list marker, one case, no
+ * punctuation, one space. Equal here means the same fact.
+ */
+export function normalizedFact(text: string): string {
+  return stripListMarker(text)
+    .toLocaleLowerCase('en')
+    .replace(/[\p{P}\p{S}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function splitSentences(text: string): string[] {
   return text
     .split(/(?<=[.!?۔])\s+|\n+/)
-    .map((s) => s.trim())
+    .map((s) => stripListMarker(s))
     .filter((s) => s.length >= 25 && s.length <= 600);
 }
 

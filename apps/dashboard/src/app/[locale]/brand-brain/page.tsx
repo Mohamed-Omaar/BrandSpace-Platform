@@ -224,6 +224,7 @@ export default async function BrandBrainPage({
     sourceCount,
     asOf,
     confident,
+    duplicates,
     usedInPosts,
   } = await inBrandBrain(workspace.workspaceId, async ({ knowledge, db, policy }) => {
     /*
@@ -252,6 +253,10 @@ export default async function BrandBrainPage({
        * D4 + C1 — the preview for "Accept the confident ones": the configured
        * threshold, never a conflict. The same rule the action re-applies.
        */
+      // PR B (D-591) — today's duplicates, for the one-time clean-up card.
+      duplicates: can('brand_brain.review')
+        ? await knowledge.duplicateFacts({ brandId: brand.id, brandScope: workspace.brandScope })
+        : null,
       confident: can('brand_brain.review')
         ? await knowledge.confidentCandidates({
             brandId: brand.id,
@@ -958,6 +963,12 @@ export default async function BrandBrainPage({
         candidates={candidateData}
         sources={sourceData}
         drawerStart={drawerStart}
+        duplicateCount={
+          duplicates
+            ? duplicates.groups.reduce((sum, group) => sum + group.repeatIds.length, 0) +
+              duplicates.pendingIds.length
+            : 0
+        }
         permissions={{
           edit: can('brand_brain.edit'),
           upload: can('brand_brain.upload'),

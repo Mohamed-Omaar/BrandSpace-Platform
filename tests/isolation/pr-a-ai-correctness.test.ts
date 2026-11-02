@@ -876,4 +876,82 @@ describe('PR B — the one conversation: memory, New topic, search, Clear', () =
     });
     expect(audit?.after).toEqual({ messagesDeleted: result.deleted });
   });
+
+  /** A turn whose scripted reply proposes `steps`, as `authorization`. */
+  async function ask(
+    request: string,
+    reply: { en: string; ar?: string; steps?: { toolKey: string; arguments: object }[] },
+    authorization?: Awaited<ReturnType<typeof me>>,
+  ) {
+    adapter.script.push({
+      kind: 'text',
+      text: JSON.stringify({
+        summary: { ar: reply.ar ?? reply.en, en: reply.en },
+        steps: reply.steps ?? [],
+        brandBrainQuestion: false,
+        saveFact: null,
+      }),
+    });
+    const session = await open();
+    const result = await CopilotOrchestrator.turnWith((fn) => inA((db) => fn(orchestratorIn(db))), {
+      sessionId: session.id,
+      request,
+      authorization: authorization ?? (await me()),
+      planKey: null,
+      idempotencyKey: `prb-${crypto.randomUUID()}`,
+      expiresAt: null,
+    });
+    return { result, session, prompt: adapter.prompts.at(-1) ?? '' };
+  }
+
+  it('an Arabic greeting is answered in Arabic, and kept in Arabic', async () => {
+    const authorization = await me();
+    const { session } = await ask('مرحبا! كيف حالك؟', { en: 'Hello!', ar: 'أهلًا بك!' });
+    const page = await inA((db) =>
+      orchestratorIn(db).conversation({ authorization, sessionId: session.id }),
+    );
+    const last = page.messages.at(-1);
+    expect(last).toMatchObject({ role: 'ASSISTANT', body: 'أهلًا بك!' });
+  });
+
+  it('"how many credits" and "who is on my team" are answered from tools, never the model', async () => {
+    const credits = await ask('How many credits do we have left?', {
+      en: 'Let me check.',
+      steps: [{ toolKey: 'credits.balance', arguments: {} }],
+    });
+    expect(credits.prompt).toMatch(/^- credits\.balance \(READ_ONLY\)/m);
+    expect(credits.prompt).toContain('Every number in your answer must come from a tool result');
+    expect(credits.result.steps).toEqual([{ toolKey: 'credits.balance', arguments: {} }]);
+    const team = await ask('Who is on my team?', {
+      en: 'Here is the team.',
+      steps: [{ toolKey: 'team.list', arguments: {} }],
+    });
+    expect(team.result.steps.map((step) => step.toolKey)).toEqual(['team.list']);
+    expect(team.result.notice).toBeNull();
+  });
+
+  it('a member asking for billing is refused the way the Billing screen refuses', async () => {
+    const owner = await me();
+    const member = {
+      ...owner,
+      permissionKeys: owner.permissionKeys.filter((key) => key !== 'billing.read'),
+    };
+    const { result, prompt } = await ask(
+      'Show me our billing and plan.',
+      { en: 'Here is your plan.', steps: [{ toolKey: 'plan.summary', arguments: {} }] },
+      member,
+    );
+    // The model is told it may not use the read, and asked to propose it anyway.
+    expect(prompt).toMatch(/TOOLS THIS PERSON MAY NOT USE[^\n]*plan\.summary/);
+    expect(prompt).not.toMatch(/^- plan\.summary /m);
+    expect(result.steps).toEqual([]);
+    expect(result.notice).toBe('permission_denied');
+    expect(result.deniedToolKeys).toEqual(['plan.summary']);
+    const audit = await platform.auditEvent.findFirst({
+      where: { action: 'copilot.tool_refused', workspaceId: fixtures.a.workspaceId },
+      orderBy: { occurredAt: 'desc' },
+      select: { after: true },
+    });
+    expect(audit?.after).toEqual({ rejectedToolKeys: 'plan.summary' });
+  });
 });

@@ -17,6 +17,7 @@ export {
   COPILOT_TOOL_KEYS,
   BRAND_BRAIN_TOOL_KEYS,
   availableTools,
+  WORKSPACE_READ_KEYS,
   findTool,
   highestActionClass,
   isToolKey,

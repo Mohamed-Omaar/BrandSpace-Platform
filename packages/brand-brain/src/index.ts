@@ -116,6 +116,8 @@ export {
   chunkText,
   defaultExtractors,
   extractorRegistryFor,
+  normalizedFact,
+  stripListMarker,
   strictUtf8,
 } from './extraction';
 export type {
@@ -137,6 +139,7 @@ export type { DetectedFormat, SignatureCheck } from './file-signature';
 
 export {
   BrandIngestionService,
+  DUPLICATE_OF_EXISTING,
   extractSourceDocument,
   findStuckIngestionJobs,
   findUnclaimedIngestionJobs,

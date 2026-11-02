@@ -11,7 +11,7 @@ import {
   type UsageRowState,
 } from '@brandspace/brand-brain';
 import { MockProviderAdapter } from '@brandspace/ai-gateway';
-import { availableTools, COPILOT_TOOLS } from '@brandspace/copilot';
+import { availableTools, COPILOT_TOOLS, requiresConfirmation } from '@brandspace/copilot';
 import { CONTENT_TOOLS } from '@brandspace/content';
 import { ATTENTION_ACTIONS, attentionAction } from '../../apps/dashboard/src/server/home';
 import { permissionDenied } from '../../apps/dashboard/src/server/denial';
@@ -286,8 +286,8 @@ describe('the development AI double answers the two conversational shapes', () =
 /* D8 — the Copilot has no knowledge-writing tool                           */
 /* ------------------------------------------------------------------------ */
 
-describe('D8 — the Copilot never writes Brand Brain knowledge', () => {
-  it('no tool in the registry writes knowledge, whatever the permissions', () => {
+describe('D8, PR B (D-591) — the Copilot writes Brand Brain knowledge only through a confirmed card', () => {
+  it('its only knowledge writes are the three fact cards, each confirmed, none approving', () => {
     const everything = [
       'copilot.use',
       'brand_brain.read',
@@ -297,10 +297,29 @@ describe('D8 — the Copilot never writes Brand Brain knowledge', () => {
       'content.read',
     ];
     const keys = availableTools(everything, { brandBound: true }).map((tool) => tool.key);
-    expect(keys.filter((key) => key.startsWith('brand'))).toEqual(['brand.context']);
+    // PR B — a fact typed in the conversation, an edit and a removal are
+    // proposed as cards (owner decision 5); nothing else touches knowledge.
+    expect(keys.filter((key) => key.startsWith('brand'))).toEqual([
+      'brand.context',
+      'brand_brain.add_fact',
+      'brand_brain.edit_fact',
+      'brand_brain.remove_fact',
+    ]);
     expect(COPILOT_TOOLS.find((tool) => tool.key === 'brand.context')?.actionClass).toBe(
       'READ_ONLY',
     );
+    for (const key of [
+      'brand_brain.add_fact',
+      'brand_brain.edit_fact',
+      'brand_brain.remove_fact',
+    ]) {
+      const tool = COPILOT_TOOLS.find((entry) => entry.key === key);
+      expect(tool?.actionClass, key).toBe('INTERNAL_REVERSIBLE');
+      expect(requiresConfirmation(tool!.actionClass), key).toBe(true);
+      expect(tool?.permission, key).toBe('brand_brain.edit');
+    }
+    // The Copilot never approves: no tool reviews, accepts or approves a fact.
+    expect(COPILOT_TOOLS.some((tool) => /review|accept|approve/.test(tool.key))).toBe(false);
   });
 });
 
