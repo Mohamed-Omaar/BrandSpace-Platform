@@ -705,6 +705,12 @@
   --bs-control-border-width: var(--bs-field-border-1);
   --bs-line-body: 1.6;
   --bs-line-relaxed: 1.8;
+  --bs-frame-surface: var(--bs-surface);
+  --bs-frame-rail: #fafafb;
+  --bs-frame-hairline: var(--bs-hairline);
+  --bs-frame-edge: 1px solid var(--bs-frame-hairline);
+  --bs-frame-radius: calc(var(--bsp-px-34) * var(--bs-radius-scale));
+  --bs-frame-shadow: 0 var(--bsp-px-24) var(--bsp-px-70) var(--bs-lit-141023-a1);
   --bs-hero-ground: #f9f7ff;
   --bs-hero-blob-strength: 1;
   --bs-control-border-customer: #e4e4e8;
@@ -721,6 +727,7 @@
   --bs-dur-260: calc(260ms * var(--bs-motion-scale));
   --bs-dur-320: calc(320ms * var(--bs-motion-scale));
   --bs-dur-380: calc(380ms * var(--bs-motion-scale));
+  --bs-dur-800: calc(800ms * var(--bs-motion-scale));
   --bs-dur-440: calc(440ms * var(--bs-motion-scale));
   --bs-dur-600: calc(600ms * var(--bs-motion-scale));
   --bs-ease-02-08-02-1: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -1149,10 +1156,11 @@ h4 {
     inline-size: min(var(--bs-shell-max-width), calc(100% - var(--bs-shell-inset) * 2));
     min-block-size: calc(100vh - var(--bs-shell-inset) * 2);
     margin: var(--bs-shell-inset) auto;
-    border-radius: calc(var(--bs-radius-shell) * var(--bs-radius-scale));
-    background: var(--bs-shell-alpha);
+    /* P1: the one frame both apps draw (`--bs-frame-*`). */
+    border-radius: var(--bs-frame-radius);
+    background: var(--bs-frame-surface);
     /* D-575: no full-window backdrop blur on the Control Center frame either. */
-    box-shadow: var(--bs-shadow-shell);
+    box-shadow: var(--bs-frame-shadow);
   }
 
   /*
@@ -3121,4 +3129,73 @@ select option {
 
 .bs-status-pulse {
   animation: bs-status-pulse var(--bs-motion-loop) var(--bs-ease-out) 1;
+}
+
+/*
+ * P1 — WAITING, MADE VISIBLE (packages/ui/src/progress.tsx). The spinner the
+ * Button primitive has always drawn now turns; the upload bar, the working
+ * line and the waiting submit button are built from the same tokens as the
+ * rest of the product, in both apps and both schemes.
+ */
+@keyframes bs-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+.bs-spinner {
+  flex: none;
+  animation: bs-spin var(--bs-dur-800) var(--bs-ease-linear) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-spinner {
+    animation-duration: calc(var(--bs-dur-800) * 3);
+  }
+}
+.bs-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-sm);
+  inline-size: 100%;
+}
+.bs-progress-bar {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: var(--bsp-px-6);
+  border: 0;
+  border-radius: var(--bs-radius-full);
+  background: var(--bs-control-surface-hover);
+  overflow: hidden;
+  appearance: none;
+}
+.bs-progress-bar::-webkit-progress-bar {
+  background: var(--bs-control-surface-hover);
+  border-radius: var(--bs-radius-full);
+}
+.bs-progress-bar::-webkit-progress-value {
+  background: var(--bs-brand-purple);
+  border-radius: var(--bs-radius-full);
+  transition: inline-size var(--bs-dur-200) var(--bs-ease-linear);
+}
+.bs-progress-bar::-moz-progress-bar {
+  background: var(--bs-brand-purple);
+  border-radius: var(--bs-radius-full);
+}
+.bs-progress-value,
+.bs-working-time {
+  font-size: var(--bsp-fs-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--bs-text-secondary);
+}
+.bs-working {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bs-space-sm);
+  color: var(--bs-text-secondary);
+}
+button[data-pending] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bs-space-sm);
+  cursor: progress;
 }

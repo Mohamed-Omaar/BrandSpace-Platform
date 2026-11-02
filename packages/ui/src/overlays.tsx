@@ -881,8 +881,12 @@ export function SideSheet({
         data-origin="end"
         style={{
           position: 'fixed',
-          insetBlock: layoutTokens.shellInset,
+          // P1: as tall as its content, never taller than the window; past
+          // that it scrolls inside itself. It used to be pinned top AND bottom,
+          // so a short form sat at the top of a window-high sheet.
+          insetBlockStart: layoutTokens.shellInset,
           insetInlineEnd: layoutTokens.shellInset,
+          maxBlockSize: `calc(100dvh - ${layoutTokens.shellInset} * 2)`,
           inlineSize: `min(${layoutTokens.drawerWidth}, calc(100vw - ${layoutTokens.shellInset} * 2))`,
           zIndex: zIndexTokens.overlay,
           overflowY: 'auto',

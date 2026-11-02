@@ -1193,13 +1193,14 @@ button.bsp-xcard:hover {
     block-size: calc(100vh - var(--bsp-px-40));
     min-block-size: 0;
     margin: var(--bsp-px-20) auto;
-    background: var(--bsp-frame-surface);
+    /* P1: the one frame both apps draw (`--bs-frame-*`), solid. */
+    background: var(--bs-frame-surface);
     /* D-575: no full-window backdrop blur (the prototype's blur(30px)). It
        redrew the whole window on every frame over the animated ambient layer
        (7–9 fps scrolling at 4x CPU); blur stays on small floating elements. */
-    border-radius: calc(var(--bsp-px-34) * var(--bs-radius-scale));
+    border-radius: var(--bs-frame-radius);
     overflow: hidden;
-    box-shadow: 0 var(--bsp-px-24) var(--bsp-px-70) var(--bs-lit-141023-a1);
+    box-shadow: var(--bs-frame-shadow);
   }
   [data-sidebar-motion] .bs-shell.bsp-frame {
     transition: grid-template-columns var(--bs-dur-380) var(--bs-ease-out);
@@ -1211,8 +1212,9 @@ button.bsp-xcard:hover {
   .bs-shell.bsp-frame > .bs-sidebar.bsp-sb {
     display: grid !important;
     grid-template-rows: auto minmax(0, 1fr) auto;
-    background: var(--bs-lit-f8f8f9-a7);
-    border-inline-end: 1px solid var(--bs-lit-141023-a05);
+    /* P1: the one rail both apps draw — solid, with the shared hairline. */
+    background: var(--bs-frame-rail);
+    border-inline-end: var(--bs-frame-edge);
     min-block-size: 0;
     block-size: auto;
     position: relative;
@@ -1747,27 +1749,16 @@ a[data-pending] {
 body:has([role='dialog'][aria-modal='true']) .bsp-fab {
   visibility: hidden;
 }
-/* FINAL WALK (owner, review of #83, must-check 1) — THE FLOATING COPILOT
-   NEVER COVERS TEXT, DATA OR A CONTROL, at any width and at every scroll
-   position, not only once the page is scrolled to its end. At 1536x864 the
-   Calendar's last line ("…The time stays the same.") lay under it on the
-   first screen. So while the shell shows the button, the scroll area stops
-   short of it: a lane of the button's 24px offset, its 48px height and 16px
-   is kept clear at the frame's bottom, the button sits in that lane, and the
-   page's end padding returns to the prototype's 40px. Where the Studio's bar
-   carries its own Copilot button the floating one is hidden, and so is the
-   lane. */
+/* P1 (owner, after #93-#111) — THE COPILOT BUTTON FLOATS OVER THE PAGE, WITH NO
+   BAR BEHIND IT. The final walk (#83, must-check 1) had the scroll area stop
+   short of the button, which drew an empty strip of frame under it on every
+   page; the owner does not want the strip. The scroll area now runs to the
+   frame's edge as in the prototype, and the page ends with room for the
+   button — its 24px offset, its 48px height and 16px — so every line can
+   still be scrolled clear of it. The Studio, whose bar carries its own
+   Copilot button, keeps the same end room. */
 @media (min-width: 768px) {
-  .bsp-main[data-fab] > .bsp-scroll {
-    margin-block-end: calc(var(--bsp-px-24) + var(--bsp-px-48) + var(--bsp-px-16));
-  }
   .bsp-main[data-fab] > .bsp-scroll > .bsp-page {
-    padding-block-end: var(--bsp-px-40);
-  }
-  body:has(.bsp-st-cp) .bsp-main[data-fab] > .bsp-scroll {
-    margin-block-end: 0;
-  }
-  body:has(.bsp-st-cp) .bsp-main[data-fab] > .bsp-scroll > .bsp-page {
     padding-block-end: calc(var(--bsp-px-24) + var(--bsp-px-48) + var(--bsp-px-16));
   }
 }
@@ -10797,7 +10788,13 @@ img.bsp-pf-art {
 .bsp-lk-sw-x {
   position: absolute;
   top: calc(-1 * var(--bsp-px-6));
-  inset-inline-end: calc(-1 * var(--bsp-px-6));
+  /* P1: on the TILE's corner, as in the prototype. The column is as wide as
+     the hex field under the tile (64px against the tile's 52px), so the
+     column's own edge put the badge beside the tile, not on it. */
+  inset-inline-end: calc(50% - var(--bsp-px-52) / 2 - var(--bsp-px-6));
+  display: grid;
+  place-items: center;
+  line-height: 1;
   width: var(--bsp-px-18);
   height: var(--bsp-px-18);
   border-radius: 50%;
