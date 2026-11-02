@@ -13850,3 +13850,26 @@ select.bs-select.bsp-chevron {
     translate: none;
   }
 }
+
+/* PR B (D-591) — the one continuous Copilot conversation: a day label above each
+   day's first message, and the "New topic" divider (a rule with its label in the
+   middle). Composed from the log's own tokens; no new colour or size. */
+.bs-cpb-day {
+  justify-self: center;
+  font-size: var(--bsp-fs-12);
+  color: var(--bs-text-muted);
+  padding-block: var(--bsp-px-4);
+}
+.bs-cpb-topic {
+  display: flex;
+  align-items: center;
+  gap: var(--bsp-px-8);
+  font-size: var(--bsp-fs-12);
+  color: var(--bs-text-muted);
+}
+.bs-cpb-topic::before,
+.bs-cpb-topic::after {
+  content: '';
+  flex: 1 1 0;
+  border-block-start: var(--bs-table-rule);
+}

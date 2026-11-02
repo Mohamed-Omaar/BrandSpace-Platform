@@ -612,6 +612,26 @@ export class CopilotOrchestrator {
     return { deleted: count };
   }
 
+  /**
+   * PR B — WHAT SENDING THIS MESSAGE WILL COST, shown next to Send before it is
+   * sent. The same gateway route resolution `turn` reserves through, priced on
+   * the person's own session's brand. Reserves nothing.
+   */
+  async quoteTurn(input: {
+    authorization: LiveAuthorization;
+    sessionId: string;
+    request: string;
+    planKey: string | null;
+  }): Promise<AiQuote> {
+    const session = await this.#ownSession(input.sessionId, input.authorization);
+    return this.quote({
+      request: input.request,
+      brandId: session.brandId,
+      authorization: input.authorization,
+      planKey: input.planKey,
+    });
+  }
+
   /** The person's own session, admitted exactly as a turn admits it, or a 404. */
   async #ownSession(sessionId: string, authorization: LiveAuthorization) {
     const session = await this.#db.copilotSession.findFirst({
@@ -1066,7 +1086,9 @@ export class CopilotOrchestrator {
            * the way it is kept is that only the two sentences a person actually
            * reads are written down.
            */
-          body: `${parsed.summary.en}\n${parsed.summary.ar}`,
+          // PR B: the answer in the language the person wrote in — the one the
+          // conversation shows when it is read back, never both run together.
+          body: /[\u0600-\u06FF]/.test(input.request) ? parsed.summary.ar : parsed.summary.en,
           aiRequestId: result.requestId,
           /*
            * ITS OWN KEY, DERIVED FROM THE TURN'S. The unique index is per

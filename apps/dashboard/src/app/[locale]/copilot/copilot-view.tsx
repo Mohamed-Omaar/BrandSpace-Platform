@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { formatCredits } from '../../../server/composer-editor';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Banner,
   Button,
@@ -23,6 +23,7 @@ import {
 import { messages as catalogue, statusMessage, type MessageKey } from '../../../i18n/messages';
 import { type DateFormatterLike, whenFormatter } from '../../../server/prototype-dates';
 import { aiLimitMessage } from '../../../components/ai-limit';
+import { ConversationFoot, ConversationTools } from './conversation-tools';
 
 /**
  * THE COPILOT, WIRED TO A REAL PROVIDER FOR THE FIRST TIME.
@@ -47,6 +48,16 @@ import { aiLimitMessage } from '../../../components/ai-limit';
  * unsafe undo — is a decision the server made and this component renders. A
  * client that decided would be a client that could be persuaded otherwise.
  */
+
+/** PR B — one stored entry of the conversation, as `/api/copilot/conversation` returns it. */
+interface HistoryRow {
+  readonly id: string;
+  readonly role: 'USER' | 'ASSISTANT';
+  readonly body: string | null;
+  readonly kind: 'message' | 'topic_break';
+  readonly purged: boolean;
+  readonly createdAt: string;
+}
 
 export interface CopilotBrand {
   readonly id: string;
@@ -136,7 +147,13 @@ export function CopilotView({
   initialRequest = '',
   rateMetricKeys = [],
   panel = null,
+  retentionDays = null,
 }: {
+  /**
+   * PR B — how long the conversation's messages are kept (the Copilot policy's
+   * retention), for the line under the composer. Null draws no line.
+   */
+  readonly retentionDays?: number | null;
   readonly locale: string;
   /**
    * The server's `systemClock.now()`, as ISO: what this client view reads
@@ -247,6 +264,17 @@ export function CopilotView({
   const [now, setNow] = useState(() => Date.now());
 
   /*
+   * PR B (D-591) — THE ONE CONVERSATION. It is opened as soon as the Copilot
+   * is (free: no model is called), its history is read back — the whole
+   * conversation, grouped by day, with the "New topic" dividers — and read
+   * again after every reply, so what the person sees is what was stored.
+   */
+  const [history, setHistory] = useState<readonly HistoryRow[]>([]);
+  const [search, setSearch] = useState('');
+  const [found, setFound] = useState<readonly HistoryRow[] | null>(null);
+  const [price, setPrice] = useState<string | null>(null);
+
+  /*
    * THE CONFIRMATION WINDOW IS SHOWN CLOSING, NOT DISCOVERED CLOSED. While a
    * plan waits, the clock ticks so the expiry is stated and, once passed, the
    * confirm button stands down with a sentence rather than failing on click.
@@ -282,6 +310,116 @@ export function CopilotView({
     setSessionId(opened.sessionId);
     return opened.sessionId;
   };
+
+  const load = useCallback(async (id: string): Promise<void> => {
+    const page = (await post('/api/copilot/conversation', { sessionId: id, limit: 200 })) as {
+      messages?: readonly HistoryRow[];
+    };
+    if (page.messages) {
+      setHistory(page.messages);
+      setMessages([]);
+    }
+    // `post` is stable for the life of the view.
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const id = await openSession();
+      if (id) await load(id);
+    })();
+    // Opened once per view: the brand is fixed for the visit (D-190).
+  }, []);
+
+  // Search inside the conversation, after a pause in typing.
+  useEffect(() => {
+    const query = search.trim();
+    if (query === '' || !sessionId) {
+      setFound(null);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const page = (await post('/api/copilot/conversation', {
+          sessionId,
+          search: query,
+          limit: 100,
+        })) as { messages?: readonly HistoryRow[] };
+        setFound(page.messages ?? []);
+      })();
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [search, sessionId]);
+
+  // The price of the message being written, shown before it is sent.
+  useEffect(() => {
+    const text = request.trim();
+    if (text === '' || !sessionId) {
+      setPrice(null);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const quote = (await post('/api/copilot/quote', { sessionId, request: text })) as {
+          estimateMilli?: string;
+        };
+        setPrice(
+          quote.estimateMilli !== undefined
+            ? t('copilot.messagePrice').replace('{credits}', formatCredits(quote.estimateMilli))
+            : null,
+        );
+      })();
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [request, sessionId]);
+
+  const newTopic = async (): Promise<void> => {
+    if (!sessionId || busy) return;
+    await post('/api/copilot/topic', { sessionId });
+    setPlan(null);
+    await load(sessionId);
+  };
+
+  const clearConversation = async (): Promise<void> => {
+    if (!sessionId || busy) return;
+    await post('/api/copilot/clear', { sessionId });
+    setPlan(null);
+    setExecution(null);
+    setSearch('');
+    await load(sessionId);
+  };
+
+  /** "Today", "Yesterday", or the date, as the reader's locale writes it. */
+  const dayOf = (iso: string): string => {
+    const day = new Date(iso);
+    const today = new Date(serverNow);
+    const key = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (key(day) === key(today)) return t('copilot.today');
+    const yesterday = new Date(today.getTime() - 86_400_000);
+    if (key(day) === key(yesterday)) return t('copilot.yesterday');
+    return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
+      dateStyle: 'medium',
+    }).format(day);
+  };
+
+  const shown: CopilotMessage[] = [];
+  let lastDay = '';
+  for (const row of found ?? history) {
+    const day = dayOf(row.createdAt);
+    if (day !== lastDay) {
+      shown.push({ id: `day-${row.id}`, author: 'assistant', text: day, kind: 'day' });
+      lastDay = day;
+    }
+    shown.push(
+      row.kind === 'topic_break'
+        ? { id: row.id, author: 'user', text: t('copilot.topicBreak'), kind: 'topic_break' }
+        : {
+            id: row.id,
+            author: row.role === 'USER' ? 'user' : 'assistant',
+            text: row.purged ? t('copilot.purged') : (row.body ?? ''),
+          },
+    );
+  }
+  const conversation: readonly CopilotMessage[] = found ? shown : [...shown, ...messages];
 
   const propose = async (): Promise<void> => {
     if (request.trim().length === 0 || busy) return;
@@ -337,6 +475,7 @@ export function CopilotView({
         ]);
       }
       setRequest('');
+      await load(active);
     } finally {
       setBusy(false);
     }
@@ -793,13 +932,32 @@ export function CopilotView({
        * component the design showcase renders; the data behind it is real.
        */}
       <Card>
+        <ConversationTools
+          labels={{
+            search: t('copilot.search'),
+            searchPlaceholder: t('copilot.searchPlaceholder'),
+            newTopic: t('copilot.newTopic'),
+            more: t('copilot.more'),
+            clear: t('copilot.clear'),
+            clearTitle: t('copilot.clearTitle'),
+            clearBody: t('copilot.clearBody'),
+            clearConfirm: t('copilot.clearConfirm'),
+            cancel: t('copilot.cancel'),
+            close: t('copilot.close'),
+          }}
+          search={search}
+          onSearch={setSearch}
+          onNewTopic={() => void newTopic()}
+          onClear={() => void clearConversation()}
+          disabled={busy || !sessionId}
+        />
         <CopilotBody
           labels={panel ? { ...labels, promptPlaceholder: panel.placeholder } : labels}
           state={busy ? 'streaming' : proposedAction ? 'approval' : 'idle'}
           messages={
-            panel
-              ? [{ id: 'copilot-hello', author: 'assistant', text: panel.greeting }, ...messages]
-              : messages
+            panel && conversation.length === 0
+              ? [{ id: 'copilot-hello', author: 'assistant', text: panel.greeting }]
+              : conversation
           }
           {...(panel
             ? {
@@ -826,6 +984,12 @@ export function CopilotView({
             inputTestId: 'copilot-request',
             submitTestId: 'copilot-propose',
           }}
+        />
+        <ConversationFoot
+          price={price}
+          retention={
+            retentionDays ? t('copilot.retention').replace('{days}', String(retentionDays)) : null
+          }
         />
       </Card>
     </div>

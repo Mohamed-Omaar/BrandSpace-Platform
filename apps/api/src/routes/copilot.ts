@@ -139,6 +139,12 @@ const conversationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
 });
 
+/** PR B — the price of the message about to be sent. */
+const quoteSchema = z.object({
+  sessionId: z.string().uuid(),
+  request: z.string().min(1).max(4_000),
+});
+
 /** PR B — "New topic" and "Clear conversation" name only the session. */
 const sessionActionSchema = z.object({ sessionId: z.string().uuid() });
 
@@ -483,6 +489,33 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
         });
       } catch (error: unknown) {
         return fail(reply, 'copilot conversation', error);
+      }
+    },
+  );
+
+  route(
+    app,
+    'POST',
+    '/v1/copilot/quote',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'ai.quote' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = quoteSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        const facts = await workspaceFacts(caller.workspaceId);
+        const quote = await conversationRun(caller, (orchestrator, authorization) =>
+          orchestrator.quoteTurn({
+            authorization,
+            sessionId: parsed.data.sessionId,
+            request: parsed.data.request,
+            planKey: facts.planKey,
+          }),
+        );
+        return reply.send({ estimateMilli: quote.estimateMilli.toString() });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot quote', error);
       }
     },
   );

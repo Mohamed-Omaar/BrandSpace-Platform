@@ -40,8 +40,11 @@ export function GlobalCopilot({
   subject,
   labels,
   rateMetricKeys = [],
+  retentionDays = null,
   strings,
 }: {
+  /** PR B — how long the one conversation is kept (the line under the composer). */
+  readonly retentionDays?: number | null;
   readonly locale: string;
   /**
    * The server's `systemClock.now()`, as ISO: what this client view reads
@@ -248,6 +251,7 @@ export function GlobalCopilot({
                 creditsLabel={null}
                 labels={labels}
                 rateMetricKeys={rateMetricKeys}
+                retentionDays={retentionDays}
                 panel={{
                   greeting: strings.greeting,
                   placeholder: strings.placeholder,
