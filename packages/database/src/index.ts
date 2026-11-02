@@ -1,6 +1,7 @@
 export * from './audit';
 export * from './automation-events';
 export * from './client';
+export { createSerialPool, serialiseQueries } from './serial-pool';
 export * from './env-file';
 export * from './platform';
 export * from './schema-readiness';

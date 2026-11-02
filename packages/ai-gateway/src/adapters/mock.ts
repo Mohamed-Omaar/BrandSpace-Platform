@@ -503,6 +503,31 @@ function askDocument(prompt: string, context: readonly string[], maxOutputTokens
  * is flagged for the Brand Brain handoff; a question is flagged as a brand
  * question, so a brand with nothing on it hears what is missing.
  */
+/**
+ * PR A2 — "SUMMARISE APPROVALS" PROPOSES THE APPROVALS TOOL, AS A MODEL WOULD.
+ *
+ * A real model fills every argument the tool list names, including one it has
+ * no way to know: shown `approvals.summary arguments: {brandId: uuid}` and no
+ * brand id, it writes one of its own. That invented id is what made the plan
+ * refuse with "That item no longer exists." on staging. The double does the
+ * same with a fixed, never-real id whenever the prompt still asks for
+ * `brandId`, so the E2E smoke fails for that reason on a prompt that asks.
+ */
+const APPROVALS_WORDS = /\bapprovals?\b|الموافقات|الاعتماد/iu;
+const INVENTED_BRAND_ID = '00000000-0000-4000-8000-00000000b0b0';
+
+function approvalsStep(prompt: string, request: string): unknown[] {
+  if (!APPROVALS_WORDS.test(request)) return [];
+  const line = /^- approvals\.summary [^\n]*arguments: ([^\n]*)$/m.exec(prompt)?.[1];
+  if (line === undefined) return [];
+  return [
+    {
+      toolKey: 'approvals.summary',
+      arguments: /\bbrandId\b/.test(line) ? { brandId: INVENTED_BRAND_ID } : {},
+    },
+  ];
+}
+
 function copilotDocument(
   prompt: string,
   context: readonly string[],
@@ -518,10 +543,12 @@ function copilotDocument(
     .slice(0, 400);
   const save = SAVE_WORDS.test(request);
   const text = material || 'Brand Brain has nothing on this yet.';
+  const steps = approvalsStep(prompt, request);
   return JSON.stringify({
     summary: { ar: text, en: text },
-    steps: [],
-    brandBrainQuestion: !save && !JOB_WORDS.test(request),
+    steps,
+    // A request a tool answers is not a question about the brand itself.
+    brandBrainQuestion: !save && steps.length === 0 && !JOB_WORDS.test(request),
     saveFact: save ? { title: request.slice(0, 120), body: request.slice(0, 2_000) } : null,
   });
 }
