@@ -2,7 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import {
+  createLogger,
+  internalErrorFields,
+  validationFieldOf,
+  toPublicErrorCode,
+} from '@brandspace/shared';
 import type { BrandKnowledgeArea } from '@brandspace/database';
 import {
   MAX_BODY_CHARS,
@@ -52,6 +57,8 @@ export type ChatActionResult<T extends object = object> =
       readonly code: string;
       /** For VALIDATION_FAILED, the first field that is missing or wrong. */
       readonly field?: string;
+      /** PR A2 (item 11) — for a generic failure, the reference the server log carries. */
+      readonly ref?: string;
       /** For CHANGED, the fact as it is now. */
       readonly fresh?: ChatFact;
     };
@@ -76,14 +83,24 @@ function actorOf(session: WorkspaceSession) {
   };
 }
 
-function refused(error: unknown, action: string): { ok: false; code: string } {
+function refused(
+  error: unknown,
+  action: string,
+): { ok: false; code: string; field?: string; ref?: string } {
+  // PR A2 (item 11) — a schema's refusal is a field error, never "Something went wrong".
+  const field = validationFieldOf(error);
+  if (field !== null) return { ok: false, code: 'VALIDATION_FAILED', field };
   const code = actionErrorCode(error);
   if (code === 'INTERNAL') {
+    // The reference is logged WITH the cause and shown to the reader, so the
+    // two can be joined; neither side carries customer content.
+    const ref = randomUUID();
     log.warn('brand brain chat action failed', {
-      correlationId: randomUUID(),
+      correlationId: ref,
       action,
       ...internalErrorFields(error),
     });
+    return { ok: false, code, ref };
   }
   // `CONCURRENT_EDIT` is the public code of a changed-since conflict.
   return { ok: false, code: toPublicErrorCode(error) === 'CONCURRENT_EDIT' ? 'CHANGED' : code };

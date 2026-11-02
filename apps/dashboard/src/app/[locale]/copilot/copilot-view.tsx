@@ -22,6 +22,7 @@ import {
 } from '@brandspace/ui';
 import { messages as catalogue, statusMessage, type MessageKey } from '../../../i18n/messages';
 import { type DateFormatterLike, whenFormatter } from '../../../server/prototype-dates';
+import { aiLimitMessage } from '../../../components/ai-limit';
 
 /**
  * THE COPILOT, WIRED TO A REAL PROVIDER FOR THE FIRST TIME.
@@ -99,7 +100,7 @@ interface PlanResponse {
   readonly rejectedToolKeys?: readonly string[];
   readonly steps?: readonly PlanStep[];
   readonly inspection?: readonly InspectionCall[] | null;
-  readonly error?: { code?: string };
+  readonly error?: { code?: string; details?: Readonly<Record<string, unknown>> };
 }
 
 interface ExecutionResponse {
@@ -114,7 +115,7 @@ interface ExecutionResponse {
   }[];
   readonly undone?: readonly { ordinal: number; toolKey: string }[];
   readonly refused?: readonly { ordinal: number; toolKey: string; reason: string }[];
-  readonly error?: { code?: string };
+  readonly error?: { code?: string; details?: Readonly<Record<string, unknown>> };
 }
 
 /** Preview values that are machine keys, and the message stem that names them. */
@@ -241,6 +242,8 @@ export function CopilotView({
   const [token, setToken] = useState<string | null>(null);
   const [execution, setExecution] = useState<ExecutionResponse | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  // PR A2 — a daily or monthly AI budget names itself and its reset time.
+  const [errorDetails, setErrorDetails] = useState<Readonly<Record<string, unknown>> | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   /*
@@ -284,6 +287,7 @@ export function CopilotView({
     if (request.trim().length === 0 || busy) return;
     setBusy(true);
     setErrorCode(null);
+    setErrorDetails(null);
     setExecution(null);
     try {
       const active = await openSession();
@@ -308,6 +312,7 @@ export function CopilotView({
         // scope narrowed) is dropped, so the next request opens a fresh one.
         if (result.error.code === 'NOT_FOUND') setSessionId(null);
         setErrorCode(result.error.code);
+        setErrorDetails(result.error.details ?? null);
         return;
       }
       setPlan(result);
@@ -341,6 +346,7 @@ export function CopilotView({
     if (!plan?.planId || !plan.planHash || busy) return;
     setBusy(true);
     setErrorCode(null);
+    setErrorDetails(null);
     try {
       const result = (await post('/api/copilot/confirm', {
         planId: plan.planId,
@@ -351,6 +357,7 @@ export function CopilotView({
       })) as ExecutionResponse;
       if (result.error?.code) {
         setErrorCode(result.error.code);
+        setErrorDetails(result.error.details ?? null);
         return;
       }
       setExecution(result);
@@ -386,12 +393,14 @@ export function CopilotView({
     if (!plan?.planId || busy) return;
     setBusy(true);
     setErrorCode(null);
+    setErrorDetails(null);
     try {
       const result = (await post('/api/copilot/undo', {
         planId: plan.planId,
       })) as ExecutionResponse;
       if (result.error?.code) {
         setErrorCode(result.error.code);
+        setErrorDetails(result.error.details ?? null);
         return;
       }
       setExecution((current) => ({ ...current, ...result }));
@@ -464,7 +473,13 @@ export function CopilotView({
        */}
       {errorCode ? (
         <Banner tone="error" testId="copilot-error">
-          {statusMessage(errorCode, locale) ?? t('copilot.failed')}
+          {aiLimitMessage(
+            { error: { code: errorCode, ...(errorDetails ? { details: errorDetails } : {}) } },
+            { 'ai.limit.daily': t('ai.limit.daily'), 'ai.limit.monthly': t('ai.limit.monthly') },
+            locale,
+          ) ??
+            statusMessage(errorCode, locale) ??
+            t('copilot.failed')}
         </Banner>
       ) : null}
 

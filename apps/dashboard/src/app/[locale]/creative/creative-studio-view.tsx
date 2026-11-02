@@ -1,5 +1,6 @@
 'use client';
 
+import { aiLimitMessage, type ApiErrorBody } from '../../../components/ai-limit';
 import Link from 'next/link';
 import { formatCredits as formatCreditDisplay } from '../../../server/composer-editor';
 import { useRouter } from 'next/navigation';
@@ -52,6 +53,9 @@ export interface CreativeStudioLabels {
   readonly qualityLow: string;
   readonly qualityMedium: string;
   readonly qualityHigh: string;
+  /** PR A2 — the AI budget refusals, with `{time}`. */
+  readonly aiLimitDaily: string;
+  readonly aiLimitMonthly: string;
   readonly generate: string;
   readonly generating: string;
   readonly cost: string;
@@ -158,7 +162,13 @@ export function CreativeStudioView({
           typeof (payload['error'] as { code?: unknown } | undefined)?.code === 'string'
             ? ((payload['error'] as { code: string }).code satisfies string)
             : 'INTERNAL';
-        throw new Error(code);
+        // PR A2: a daily/monthly AI budget is named, with its reset time.
+        const limit = aiLimitMessage(
+          payload as ApiErrorBody,
+          { 'ai.limit.daily': labels.aiLimitDaily, 'ai.limit.monthly': labels.aiLimitMonthly },
+          locale,
+        );
+        throw new Error(limit ? `LIMIT:${limit}` : code);
       }
       return payload;
     },
@@ -248,6 +258,10 @@ export function CreativeStudioView({
         attempt.current = null;
       } catch (error: unknown) {
         const code = error instanceof Error ? error.message : 'INTERNAL';
+        if (code.startsWith('LIMIT:')) {
+          setFailure(code.slice('LIMIT:'.length));
+          return;
+        }
         const key = FAILURE_KEYS[code];
         setFailure((key ? labels[key] : undefined) ?? labels.failed);
       } finally {

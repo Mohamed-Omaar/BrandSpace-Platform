@@ -88,6 +88,8 @@ export class ConfigurationAiSource implements AiConfigurationSource {
           outputCostPerUnitMicroMinor: model.outputCostPerUnitMicroMinor,
           costUnit: model.costUnit,
           costCurrency: model.costCurrency,
+          // PR A2 (F-115): per-quality image cost at 1024×1024.
+          imageCostByQualityMicroMinor: model.imageCostByQualityMicroMinor,
         })),
       routingRules: routing.rules.map((rule) => ({
         taskKey: rule.taskKey,
@@ -132,6 +134,8 @@ export class ConfigurationAiSource implements AiConfigurationSource {
       // allow-list of provider hosts beyond each adapter's official ones.
       platformBudget: budgets.platform,
       allowedHosts: providers.allowedHosts,
+      // PR A2 (item 12, F-107) — the owner's overrun margin; null is off.
+      reservationOverrunAlertPercent: budgets.reservationOverrunAlertPercent,
     };
   }
 }

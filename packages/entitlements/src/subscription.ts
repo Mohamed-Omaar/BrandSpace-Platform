@@ -286,11 +286,26 @@ export class SubscriptionService {
     db: SubscriptionTx,
     workspaceId: string,
     nextTerms: PlanTerms | null,
+    options: { readonly onlyIfDue?: boolean } = {},
   ): Promise<SubscriptionView> {
     const existing = await db.workspaceSubscription.findUnique({
       where: { workspaceId },
     });
     if (!existing) throw new AppError('NOT_FOUND', 'This workspace has no subscription.');
+    /*
+     * A SWEEP ADVANCES ONLY A PERIOD THAT IS STILL DUE (PR A2).
+     *
+     * `dueForCycle` chose this row while its period had ended; a second
+     * scheduler instance whose transaction reads it AFTER the first one
+     * committed sees the NEW period, which has not ended — and used to cross
+     * it too, giving the customer two periods for one boundary. The
+     * conditional update below cannot catch that: it matches the period end
+     * this call read, which is the new one. A sweep therefore re-checks "due"
+     * on the row it actually read. A direct call keeps its old meaning.
+     */
+    if (options.onlyIfDue && existing.currentPeriodEnd.getTime() > this.#clock.now().getTime()) {
+      return toView(existing);
+    }
 
     const start = existing.currentPeriodEnd;
     const end =

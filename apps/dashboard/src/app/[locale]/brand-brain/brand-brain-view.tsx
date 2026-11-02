@@ -1051,6 +1051,8 @@ export function BrandBrainView({
               expired: t('bb.chatExpired'),
               error: t('bb.chatError'),
               paused: t('ai.paused'),
+              limitDaily: t('ai.limit.daily'),
+              limitMonthly: t('ai.limit.monthly'),
               close: t('bb.chatClose'),
               contextAll: t('bb.chatContextAll'),
               areaDetails: t('bb.chatAreaDetails'),

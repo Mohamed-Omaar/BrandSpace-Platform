@@ -59,9 +59,16 @@ function backTo(
 function failure(locale: string, category: string, providerKey: string, error: unknown): string {
   const correlationId = randomUUID();
   log.error('integration action failed', { correlationId, ...internalErrorFields(error) });
+  // PR A2 (item 8): a validation refusal names its fields (configuration
+  // paths, never values), so the screen can say which one to fix.
+  const fields =
+    error instanceof AppError && typeof error.publicDetails['fields'] === 'string'
+      ? error.publicDetails['fields']
+      : null;
   return backTo(locale, category, providerKey, {
     error: toPublicErrorCode(error),
     ref: correlationId,
+    ...(fields ? { fields } : {}),
   });
 }
 
@@ -235,7 +242,16 @@ export async function setIntegrationStateAction(formData: FormData): Promise<voi
         'integration.provider': providerKey,
         'integration.enable': enable,
       },
-      async () => applyState({ actor, category, providerKey, environment, enable, reason }),
+      async () =>
+        applyState({
+          actor,
+          category,
+          providerKey,
+          environment,
+          enable,
+          reason,
+          privacy: category === 'ai' && enable ? d13Answers(formData) : null,
+        }),
     );
 
     destination = backTo(locale, category, providerKey, {
@@ -263,6 +279,8 @@ async function applyState(input: {
   environment: IntegrationEnvironment;
   enable: boolean;
   reason: string;
+  /** PR A2 (item 8) — the D-13 answers, saved onto an AI provider being switched on. */
+  privacy: D13Answers | null;
 }): Promise<void> {
   const configuration = getConfigService();
   const categoryDefinition = findIntegrationCategory(input.category);
@@ -299,6 +317,11 @@ async function applyState(input: {
       );
     }
     existing['status'] = status;
+    if (input.privacy) {
+      existing['noTrainingGuarantee'] = input.privacy.noTrainingGuarantee;
+      existing['dataRetentionPolicy'] = input.privacy.dataRetentionPolicy;
+      existing['privacyReviewRef'] = input.privacy.privacyReviewRef;
+    }
   } else if (domain === 'integrations.social-apps') {
     const applications = (next['applications'] ?? []) as Record<string, unknown>[];
     const existing = applications.find((a) => a['providerKey'] === input.providerKey);
@@ -336,12 +359,60 @@ async function applyState(input: {
     next['activeProviderKey'] = input.enable ? input.providerKey : null;
   }
 
+  /*
+   * M-11 / PR A2 (item 8) — VALIDATE, AND NEVER LEAVE A STRAY DRAFT. This went
+   * straight from draft to activate: validation was skipped, and a refused
+   * activation left its draft open, so every later Simple change on the domain
+   * was refused as "draft open". Now: draft, validate, and on any refusal the
+   * draft is discarded and the refusal names its fields.
+   */
+  const service = serviceActor(input.actor);
   const draft = await configuration.createDraft(
-    serviceActor(input.actor),
+    service,
     domain,
     input.environment,
     input.reason,
     next,
   );
-  await configuration.activate(serviceActor(input.actor), draft.id);
+  try {
+    const report = await configuration.validateDraft(service, draft.id);
+    if (!report.valid) {
+      const errors = report.issues.filter((issue) => issue.severity === 'error');
+      throw new AppError('VALIDATION_FAILED', errors.map((issue) => issue.message).join(' '), {
+        fields: errors.map((issue) => issue.path).join(','),
+      });
+    }
+    await configuration.activate(service, draft.id);
+  } catch (error: unknown) {
+    await configuration
+      .discardDraft(
+        service,
+        draft.id,
+        'Refused before activation; discarded by the Integrations Hub.',
+      )
+      .catch(() => undefined);
+    throw error;
+  }
+}
+
+/** PR A2 (item 8) — the D-13 answers from the activation form. */
+interface D13Answers {
+  readonly noTrainingGuarantee: boolean;
+  readonly dataRetentionPolicy: string;
+  readonly privacyReviewRef: string | null;
+}
+
+function d13Answers(formData: FormData): D13Answers {
+  const retention = String(formData.get('d13.dataRetentionPolicy') ?? '');
+  return {
+    noTrainingGuarantee: String(formData.get('d13.noTrainingGuarantee') ?? '') === 'true',
+    // Only the closed values; anything else is the honest "unverified".
+    dataRetentionPolicy: ['zero_retention', 'limited_retention', 'retains_data'].includes(retention)
+      ? retention
+      : 'unverified',
+    privacyReviewRef:
+      String(formData.get('d13.privacyReviewRef') ?? '')
+        .trim()
+        .slice(0, 200) || null,
+  };
 }

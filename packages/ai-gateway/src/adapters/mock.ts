@@ -235,6 +235,8 @@ const STRUCTURED_TASKS = new Set([
   'analytics.explain',
   // Phase 2B-3 PR 6 — DRAFT_IDEAS asks for exactly three titles, as JSON.
   'ideas.generate',
+  // PR A2 (item 10) — a Studio translation is its own task now.
+  'content.translate',
 ]);
 
 /** The platform keys a caption request named, read from the prompt's own line. */
@@ -399,11 +401,46 @@ function ideasDocument(prompt: string): string {
   return JSON.stringify({ ideas: titles.map((title) => ({ title })) });
 }
 
+/**
+ * PR A2 (item 10) — AN AI EDIT OF A CAPTION, answered as a model that FOLLOWS
+ * the measurable instruction would: "at most N characters" cuts the caption to
+ * N at a word, "at least N" adds a fixed sentence until it reaches N, a tone
+ * change or rewrite opens differently, a translation is a fixed sample line in
+ * the language asked for, and the hashtag tool proposes one fixed tag. Fixed
+ * text only: nothing here may read as something a model wrote about the brand.
+ */
+function editDocument(prompt: string): string {
+  const caption = prompt.slice(prompt.indexOf('\nCaption to edit:\n') + 18);
+  const atMost = /Return at most (\d+) characters/.exec(prompt);
+  const atLeast = /Return at least (\d+) characters/.exec(prompt);
+  const arabic = /^Language: Arabic\./m.test(prompt);
+  let body: string;
+  if (/Translate the caption/.test(prompt)) {
+    body = arabic ? 'نص مترجم تجريبي من المحاكاة.' : 'A sample translation from the mock.';
+  } else if (/Propose hashtags/.test(prompt)) {
+    return JSON.stringify({ body: caption, hashtags: ['mocktag'] });
+  } else if (atMost) {
+    const limit = Number(atMost[1]);
+    const cut = [...caption].slice(0, limit).join('');
+    const space = cut.lastIndexOf(' ');
+    body = (space > limit / 2 ? cut.slice(0, space) : cut).trim();
+  } else if (atLeast) {
+    const target = Number(atLeast[1]);
+    body = caption;
+    const more = arabic ? ' المزيد من هذه العلامة قريبًا.' : ' More from this brand soon.';
+    while ([...body].length < target) body += more;
+  } else {
+    body = `${arabic ? 'مرحبًا بكم! ' : 'Hello, friends! '}${caption}`;
+  }
+  return JSON.stringify({ body, hashtags: [] });
+}
+
 function captionDocument(
   prompt: string,
   context: readonly string[],
   maxOutputTokens: number,
 ): string {
+  if (prompt.includes('\nCaption to edit:\n')) return editDocument(prompt);
   const material = answerFrom(context, maxOutputTokens).replace(/\s+/g, ' ').trim();
   const body = material === '' ? 'A short note from this brand.' : material.slice(0, 180);
   return JSON.stringify({
@@ -466,6 +503,31 @@ function askDocument(prompt: string, context: readonly string[], maxOutputTokens
  * is flagged for the Brand Brain handoff; a question is flagged as a brand
  * question, so a brand with nothing on it hears what is missing.
  */
+/**
+ * PR A2 — "SUMMARISE APPROVALS" PROPOSES THE APPROVALS TOOL, AS A MODEL WOULD.
+ *
+ * A real model fills every argument the tool list names, including one it has
+ * no way to know: shown `approvals.summary arguments: {brandId: uuid}` and no
+ * brand id, it writes one of its own. That invented id is what made the plan
+ * refuse with "That item no longer exists." on staging. The double does the
+ * same with a fixed, never-real id whenever the prompt still asks for
+ * `brandId`, so the E2E smoke fails for that reason on a prompt that asks.
+ */
+const APPROVALS_WORDS = /\bapprovals?\b|الموافقات|الاعتماد/iu;
+const INVENTED_BRAND_ID = '00000000-0000-4000-8000-00000000b0b0';
+
+function approvalsStep(prompt: string, request: string): unknown[] {
+  if (!APPROVALS_WORDS.test(request)) return [];
+  const line = /^- approvals\.summary [^\n]*arguments: ([^\n]*)$/m.exec(prompt)?.[1];
+  if (line === undefined) return [];
+  return [
+    {
+      toolKey: 'approvals.summary',
+      arguments: /\bbrandId\b/.test(line) ? { brandId: INVENTED_BRAND_ID } : {},
+    },
+  ];
+}
+
 function copilotDocument(
   prompt: string,
   context: readonly string[],
@@ -481,10 +543,12 @@ function copilotDocument(
     .slice(0, 400);
   const save = SAVE_WORDS.test(request);
   const text = material || 'Brand Brain has nothing on this yet.';
+  const steps = approvalsStep(prompt, request);
   return JSON.stringify({
     summary: { ar: text, en: text },
-    steps: [],
-    brandBrainQuestion: !save && !JOB_WORDS.test(request),
+    steps,
+    // A request a tool answers is not a question about the brand itself.
+    brandBrainQuestion: !save && steps.length === 0 && !JOB_WORDS.test(request),
     saveFact: save ? { title: request.slice(0, 120), body: request.slice(0, 2_000) } : null,
   });
 }
@@ -593,7 +657,7 @@ export class MockProviderAdapter implements AiProviderAdapter {
     const structured = request.taskKey !== undefined && STRUCTURED_TASKS.has(request.taskKey);
 
     const document = structured
-      ? request.taskKey === 'caption.generate'
+      ? request.taskKey === 'caption.generate' || request.taskKey === 'content.translate'
         ? captionDocument(request.prompt, context, request.maxOutputTokens)
         : request.taskKey === 'ideas.generate'
           ? ideasDocument(request.prompt)

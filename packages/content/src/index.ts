@@ -11,7 +11,22 @@ export {
   CONTENT_TOOLS,
   carouselOutlineInstruction,
   rejectUnusable,
+  taskKeyForTool,
+  editRefused,
 } from './studio';
+export {
+  checkEdit,
+  checkHashtags,
+  editTarget,
+  measurableDirective,
+  refuseBeforeCall,
+  similarity,
+  charCount,
+  SHORTER_MAX_RATIO,
+  LONGER_MIN_RATIO,
+  NEAR_IDENTICAL_SIMILARITY,
+} from './edit-checks';
+export type { EditRejection } from './edit-checks';
 export type {
   ApplyToolInput,
   ApplyToolResult,

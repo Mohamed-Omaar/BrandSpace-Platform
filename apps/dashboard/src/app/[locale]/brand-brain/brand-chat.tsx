@@ -16,6 +16,7 @@ import {
   type ChatFact,
 } from './chat-actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
+import { aiLimitMessage, type ApiErrorBody } from '../../../components/ai-limit';
 
 /**
  * Brand Brain chat — the approved demo's panel, with a real backend behind it.
@@ -97,6 +98,9 @@ export interface ChatLabels {
   readonly error: string;
   /** D-573 — the platform AI ceiling is reached. */
   readonly paused?: string;
+  /** PR A2 — "Today's AI limit is reached. It resets at {time}." and the monthly one. */
+  readonly limitDaily?: string;
+  readonly limitMonthly?: string;
   readonly close: string;
   readonly contextAll: string;
   readonly areaDetails: string;
@@ -281,7 +285,7 @@ export function BrandChat({
   };
 
   const failureText = useCallback(
-    (code: string, field?: string): string => {
+    (code: string, field?: string, ref?: string): string => {
       if (code === 'VALIDATION_FAILED') {
         if (field === 'area') return t('bb.chatMode.missingArea');
         if (field === 'title') return t('bb.chatMode.missingTitle');
@@ -292,7 +296,10 @@ export function BrandChat({
       if (code === 'CHANGED') return t('bb.chatMode.changedSince');
       if (code.startsWith('FORBIDDEN')) return t('bb.chatMode.forbidden');
       if (code === 'NOT_FOUND') return t('bb.chatMode.notFound');
-      return labels.error;
+      // PR A2 (item 11) — the generic failure carries the reference the server logged.
+      return ref && /^[0-9a-f-]{36}$/i.test(ref)
+        ? `${labels.error} (${t('bb.chatMode.reference')}: ${ref})`
+        : labels.error;
     },
     [labels.error, t],
   );
@@ -344,12 +351,18 @@ export function BrandChat({
           // The server answers with a stable code and never an internal message.
           // The screen shows its own copy rather than echoing anything back.
           // D-573: a paused platform says so, in the owner's words.
-          const code = (
-            (await response.json().catch(() => null)) as {
-              error?: { code?: string };
-            } | null
-          )?.error?.code;
-          setError(code === 'AI_PAUSED' && labels.paused ? labels.paused : labels.error);
+          const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
+          const code = body?.error?.code;
+          // PR A2 — a daily or monthly AI budget names itself and its reset time.
+          const limit =
+            labels.limitDaily && labels.limitMonthly
+              ? aiLimitMessage(
+                  body,
+                  { 'ai.limit.daily': labels.limitDaily, 'ai.limit.monthly': labels.limitMonthly },
+                  locale,
+                )
+              : null;
+          setError(limit ?? (code === 'AI_PAUSED' && labels.paused ? labels.paused : labels.error));
           return;
         }
 
@@ -415,7 +428,7 @@ export function BrandChat({
         ...(addKey ? { itemKey: addKey } : {}),
       });
       if (!result.ok) {
-        setOutcome({ tone: 'error', text: failureText(result.code, result.field) });
+        setOutcome({ tone: 'error', text: failureText(result.code, result.field, result.ref) });
         return;
       }
       setOutcome({
@@ -449,7 +462,7 @@ export function BrandChat({
     try {
       const result = await chatFindFactsAction({ locale, brandId, query });
       if (!result.ok) {
-        setOutcome({ tone: 'error', text: failureText(result.code, result.field) });
+        setOutcome({ tone: 'error', text: failureText(result.code, result.field, result.ref) });
         setMatches(null);
         return;
       }
@@ -488,7 +501,7 @@ export function BrandChat({
           // CHANGED SINCE: nothing was written; show what it says now.
           choose(result.fresh);
         }
-        setOutcome({ tone: 'error', text: failureText(result.code, result.field) });
+        setOutcome({ tone: 'error', text: failureText(result.code, result.field, result.ref) });
         return;
       }
       if (result.fact) setChosen(result.fact);

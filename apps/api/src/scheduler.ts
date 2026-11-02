@@ -2176,7 +2176,9 @@ export class MaintenanceScheduler {
          */
         const outcome = await platform.$transaction(
           async (tx) => {
-            const after = await subscriptions.advanceCycleWithin(tx, row.workspaceId, nextTerms);
+            const after = await subscriptions.advanceCycleWithin(tx, row.workspaceId, nextTerms, {
+              onlyIfDue: true,
+            });
             const moved =
               after.currentPeriodStart.getTime() !== before.currentPeriodStart.getTime() ||
               after.status !== before.status;

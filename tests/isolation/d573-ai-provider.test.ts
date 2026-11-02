@@ -13,6 +13,7 @@ import {
   type AiProviderAdapter,
   type PlatformBudgetLimits,
   type PlatformThresholdCrossing,
+  type ReservationOverrun,
 } from '@brandspace/ai-gateway';
 import { OpenAiAdapter } from '@brandspace/ai-gateway/adapters';
 import { pinnedHttpsTransport, pinnedLookup } from '@brandspace/ai-gateway/egress';
@@ -83,6 +84,9 @@ const WORKSPACES: string[] = [];
 let startedAt: Date;
 
 let platformBudget: PlatformBudgetLimits | undefined;
+/** PR A2 (item 12) — the owner's overrun margin, and what the gateway reported. */
+let overrunAlertPercent: number | null = null;
+const overruns: ReservationOverrun[] = [];
 let providerStatus: 'active' | 'validated' = 'active';
 let chain: { primary: string; fallbacks: string[]; timeoutMs: number } = {
   primary: PROVIDER_MODEL,
@@ -176,6 +180,7 @@ function configuration(): AiConfiguration {
     },
     ...(platformBudget ? { platformBudget } : {}),
     allowedHosts: [],
+    reservationOverrunAlertPercent: overrunAlertPercent,
   };
 }
 
@@ -208,6 +213,9 @@ function makeGateway(): AiGateway {
     random: () => 0.5,
     onPlatformThreshold: (found) => {
       crossings.push(...found);
+    },
+    onReservationOverrun: (overrun) => {
+      overruns.push(overrun);
     },
   });
 }
@@ -423,6 +431,50 @@ describe('D-573 · a provider counting more tokens than estimated', () => {
     expect(after.reserved).toBe(0n);
     // 50,000 input at 250,000 and 300 output at 1,000,000 per 1k.
     expect(result.providerCostMicroMinor).toBe(12_800_000n);
+  });
+
+  it('PR A2 (item 12) — the owner is told when usage outruns the reservation by more than their margin', async () => {
+    platformBudget = undefined;
+    chain = { primary: PROVIDER_MODEL, fallbacks: [], timeoutMs: 5_000 };
+    const reply: Reply = {
+      status: 200,
+      body: {
+        model: PROVIDER_MODEL,
+        choices: [{ message: { content: CAPTION }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 50_000, completion_tokens: 300 },
+      },
+    };
+    try {
+      // Off (no margin set): nothing is reported.
+      overrunAlertPercent = null;
+      overruns.length = 0;
+      script = [reply];
+      await run(request(await freshWorkspace()));
+      expect(overruns).toEqual([]);
+
+      // A margin of 25%: this request outran its reservation far beyond it.
+      overrunAlertPercent = 25;
+      script = [reply];
+      const result = await run(request(await freshWorkspace()));
+      expect(result.status).toBe('SUCCEEDED');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const row = await platform.aiRequest.findUniqueOrThrow({ where: { id: result.requestId } });
+      expect(overruns).toHaveLength(1);
+      expect(overruns[0]).toMatchObject({
+        requestId: result.requestId,
+        taskKey: TASK,
+        modelKey: PROVIDER_MODEL,
+        reservedMilli: row.creditsReservedMilli,
+        thresholdPercent: 25,
+      });
+      expect(overruns[0]?.meteredMilli ?? 0n).toBeGreaterThan(row.creditsReservedMilli);
+      expect(overruns[0]?.overrunPercent ?? 0).toBeGreaterThan(25);
+      // The customer still paid no more than the reservation (D-573).
+      expect(result.creditsChargedMilli).toBe(row.creditsReservedMilli);
+    } finally {
+      overrunAlertPercent = null;
+      chain = { primary: PROVIDER_MODEL, fallbacks: [MOCK_MODEL], timeoutMs: 5_000 };
+    }
   });
 });
 

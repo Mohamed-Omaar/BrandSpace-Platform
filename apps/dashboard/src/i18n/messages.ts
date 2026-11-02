@@ -1495,6 +1495,7 @@ export const messages = {
     'bb.chatMode.changedSince': 'تغيّرت هذه المعلومة منذ فتحتها. لم يُستبدل شيء — هذه أحدث نسخة.',
     'bb.chatMode.forbidden': 'دورك لا يسمح بهذا الإجراء.',
     'bb.chatMode.notFound': 'هذه المعلومة لم تعد موجودة.',
+    'bb.chatMode.reference': 'المرجع',
     'bb.chatMode.missing': 'لا يملك عقل العلامة «{question}» بعد ({area}).',
     'bb.chatMode.addIt': 'أضفها الآن',
     'bb.chatMode.jobTitle': 'هذه مهمة للمساعد',
@@ -2042,6 +2043,21 @@ export const messages = {
       'تستهلك تعديلات الذكاء الاصطناعي رصيدًا وتغيّر نسخة هذه المنصة فقط. يمكنك تعديل النتيجة.',
     'editor.ai.saveFirst':
       'احفظ تغييراتك أولًا — تبدأ تعديلات الذكاء الاصطناعي من النسخة المحفوظة.',
+    'editor.ai.compare.label': 'ما غيّره تعديل الذكاء الاصطناعي',
+    'editor.ai.compare.before': 'قبل',
+    'editor.ai.compare.after': 'بعد',
+    'editor.ai.compare.undo': 'تراجع',
+    'editor.ai.compare.keep': 'إبقاء',
+    'editor.ai.refused.EDIT_NOT_SHORTER':
+      'لم يقصّر الذكاء الاصطناعي النص بنسبة 30% على الأقل، لذا لم يُخصم أي رصيد. حاول مرة أخرى.',
+    'editor.ai.refused.EDIT_NOT_LONGER':
+      'لم يُطِل الذكاء الاصطناعي النص بنسبة 30% على الأقل، لذا لم يُخصم أي رصيد. حاول مرة أخرى.',
+    'editor.ai.refused.EDIT_NO_CHANGE':
+      'أعاد الذكاء الاصطناعي النص نفسه تقريبًا، لذا لم يُخصم أي رصيد. حاول مرة أخرى.',
+    'editor.ai.refused.EDIT_CANNOT_GROW':
+      'لا يتسع حد هذه المنصة لنص أطول بنسبة 30%. لم يُخصم أي رصيد.',
+    'editor.ai.refused.EDIT_STALE':
+      'تغيّر النص منذ آخر حفظ. احفظ ثم حاول مرة أخرى، ولم يُخصم أي رصيد.',
     'editor.saveBeforeReview': 'احفظ تغييراتك قبل الإرسال للمراجعة.',
     'editor.preview.title': 'معاينة مباشرة',
     'editor.preview.compare': 'قارن المعاينات',
@@ -2197,6 +2213,8 @@ export const messages = {
     'content.type.THREAD': 'سلسلة',
     'content.error.generic': 'تعذّر إتمام الطلب. حاول مرة أخرى.',
     'content.error.quota': 'لا يوجد رصيد كافٍ من أرصدة الذكاء الاصطناعي.',
+    'ai.limit.daily': 'وصلت إلى حد الذكاء الاصطناعي لهذا اليوم. يُعاد ضبطه عند {time}.',
+    'ai.limit.monthly': 'وصلت إلى حد الذكاء الاصطناعي لهذا الشهر. يُعاد ضبطه في {time}.',
     // D-573 — the platform AI ceiling, in the owner's words.
     'ai.paused': 'الذكاء الاصطناعي متوقف مؤقتًا. حاول مرة أخرى لاحقًا.',
     'content.error.invalid': 'راجع ما أدخلته ثم حاول مرة أخرى.',
@@ -5805,6 +5823,7 @@ export const messages = {
       'This fact changed since you opened it. Nothing was overwritten — here is the latest version.',
     'bb.chatMode.forbidden': 'Your role does not allow this.',
     'bb.chatMode.notFound': 'That fact is no longer here.',
+    'bb.chatMode.reference': 'reference',
     'bb.chatMode.missing': 'Brand Brain doesn’t have “{question}” yet ({area}).',
     'bb.chatMode.addIt': 'Add it now',
     'bb.chatMode.jobTitle': 'This is a job for Copilot',
@@ -6368,6 +6387,21 @@ export const messages = {
     'editor.ai.hint':
       'AI edits use credits and change only this platform version. You can edit the result.',
     'editor.ai.saveFirst': 'Save your changes first — AI edits start from the saved version.',
+    'editor.ai.compare.label': 'What the AI edit changed',
+    'editor.ai.compare.before': 'Before',
+    'editor.ai.compare.after': 'After',
+    'editor.ai.compare.undo': 'Undo',
+    'editor.ai.compare.keep': 'Keep',
+    'editor.ai.refused.EDIT_NOT_SHORTER':
+      'The AI did not make it at least 30% shorter, so nothing was charged. Please try again.',
+    'editor.ai.refused.EDIT_NOT_LONGER':
+      'The AI did not make it at least 30% longer, so nothing was charged. Please try again.',
+    'editor.ai.refused.EDIT_NO_CHANGE':
+      'The AI returned almost the same text, so nothing was charged. Please try again.',
+    'editor.ai.refused.EDIT_CANNOT_GROW':
+      'This channel’s limit has no room for a 30% longer caption. Nothing was charged.',
+    'editor.ai.refused.EDIT_STALE':
+      'The caption changed since it was saved. Save and try again; nothing was charged.',
     'editor.saveBeforeReview': 'Save your changes before sending for review.',
     'editor.preview.title': 'Live preview',
     'editor.preview.compare': 'Compare previews',
@@ -6530,6 +6564,8 @@ export const messages = {
     'content.type.THREAD': 'Thread',
     'content.error.generic': 'That could not be completed. Please try again.',
     'content.error.quota': 'Not enough AI credits.',
+    'ai.limit.daily': "Today's AI limit is reached. It resets at {time}.",
+    'ai.limit.monthly': "This month's AI limit is reached. It resets on {time}.",
     // D-573 — the platform AI ceiling, in the owner's words.
     'ai.paused': 'AI is paused right now. Please try again later.',
     'content.error.invalid': 'Check what you entered and try again.',
@@ -9011,6 +9047,19 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   RATE_LIMITED: {
     en: 'Too many attempts. Wait a moment and try again.',
     ar: 'محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.',
+  },
+  // PR A2 (item 11) — a Brand Brain form missing a field names it.
+  'VALIDATION_FAILED:area': {
+    en: 'Choose the area this fact belongs to.',
+    ar: 'اختر المجال الذي تنتمي إليه هذه المعلومة.',
+  },
+  'VALIDATION_FAILED:title': {
+    en: 'Give this fact a title.',
+    ar: 'أضف عنوانًا لهذه المعلومة.',
+  },
+  'VALIDATION_FAILED:body': {
+    en: 'Write the fact itself before saving it.',
+    ar: 'اكتب نص المعلومة قبل حفظها.',
   },
   INTERNAL: {
     en: 'Something went wrong and nothing was changed.',

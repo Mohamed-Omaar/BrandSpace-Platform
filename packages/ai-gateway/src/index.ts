@@ -119,6 +119,8 @@ export {
 export type { AiBillingUnit, CreditRule, MarginAssessment, ModelCostBasis } from './pricing';
 
 export {
+  estimatePromptTokens,
+  reservationOverrun,
   measurePlatformSpend,
   operatorFailureDetail,
   operatorFailureReason,
@@ -139,6 +141,7 @@ export type {
   AiProviderConfig,
   AiTextInput,
   ProviderCredentialSource,
+  ReservationOverrun,
 } from './gateway';
 
 export {
