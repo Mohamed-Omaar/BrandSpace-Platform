@@ -95,6 +95,8 @@ const REASONING_TASK_KEYS = ['strategy.generate', 'plan.monthly', 'analytics.exp
 const CONTENT_TASK_KEY = 'caption.generate';
 /** PR A2 (item 10) — a translation is routed and priced as its own task. */
 const TRANSLATE_TASK_KEY = 'content.translate';
+/** PR B (D-591) — whole-source fact extraction, on the same development double. */
+const EXTRACT_TASK_KEY = 'brand.extract';
 /**
  * PHASE 2B-3 PR 6 — DRAFT_IDEAS's task. Development and E2E only: production's
  * routing and credit rules for it are the owner's, set in Control Center
@@ -305,6 +307,28 @@ const PAYLOADS = {
         moderationModelKey: null,
       },
       {
+        taskKey: EXTRACT_TASK_KEY,
+        scope: 'global',
+        planKey: null,
+        workspaceId: null,
+        primaryModelKey: MODEL_KEY,
+        fallbackModelKeys: [],
+        timeoutMs: 10_000,
+        maxCostPerRequestMinor: null,
+        priority: 0,
+        parameters: {
+          temperature: 0.2,
+          maxOutputTokens: 4000,
+          promptTemplateVersion: 1,
+          // Candidates are Brand Brain's own rows; the gateway keeps no copy.
+          persistOutput: false,
+          outputRetentionDays: null,
+        },
+        retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
+        moderateInput: false,
+        moderationModelKey: null,
+      },
+      {
         taskKey: TRANSLATE_TASK_KEY,
         scope: 'global',
         planKey: null,
@@ -480,6 +504,13 @@ const PAYLOADS = {
         baseMilliCredits: 250,
         perUnitMilliCredits: 90,
         unit: '1k_tokens',
+      },
+      {
+        taskKey: EXTRACT_TASK_KEY,
+        modelKey: MODEL_KEY,
+        baseMilliCredits: 2000,
+        perUnitMilliCredits: 0,
+        unit: 'request',
       },
       {
         taskKey: TRANSLATE_TASK_KEY,
