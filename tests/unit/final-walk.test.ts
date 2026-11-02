@@ -88,9 +88,9 @@ describe('nothing AI-only is drawn while no AI task can run (must-check 3, Q9)',
 
   it('Brand Brain offers no chat (tab, Ask the brand, the orb centre) while it cannot run', () => {
     const view = read('apps/dashboard/src/app/[locale]/brand-brain/brand-brain-view.tsx');
-    expect(view).toContain(
-      "...(chatOff ? [] : [{ id: 'chat' as const, label: t('bb.tab.chat') }]),",
-    );
+    // PR B (D-591) — no chat tab at all; asking is the Copilot's.
+    expect(view).not.toContain("id: 'chat'");
+    expect(view).toContain('const chatOff = !permissions.chat;');
     expect(view).toContain('onOpenChat={chatOff ? null : () => openChat(null)}');
     expect(view).toMatch(
       /\{chatOff \? null : \(\s*<button[\s\S]*?data-testid="brand-brain-ask-brand"/,

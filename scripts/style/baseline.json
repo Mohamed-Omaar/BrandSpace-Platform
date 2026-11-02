@@ -243,9 +243,6 @@
     "apps/dashboard/src/app/[locale]/brand-brain/brand-brain-view.tsx": {
       "inline-style": 1
     },
-    "apps/dashboard/src/app/[locale]/brand-brain/brand-chat.tsx": {
-      "inline-style": 2
-    },
     "apps/dashboard/src/app/[locale]/brand-brain/brand-orb.tsx": {
       "colour": 1
     },

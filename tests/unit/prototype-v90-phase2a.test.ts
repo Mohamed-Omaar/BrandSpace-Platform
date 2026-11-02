@@ -379,7 +379,8 @@ describe('E3 + Q18 · spending credits needs copilot.use as well as the feature 
       ],
       [
         'brand-brain/page.tsx',
-        /chat: maySpendCredits\(workspace\.permissionKeys, 'brand_brain\.chat'\)/,
+        // PR B (D-591) — Brand Brain's "Ask" is the Copilot.
+        /chat: maySpendCredits\(workspace\.permissionKeys, 'copilot\.use'\) && aiChat/,
       ],
       [
         'creative/page.tsx',
