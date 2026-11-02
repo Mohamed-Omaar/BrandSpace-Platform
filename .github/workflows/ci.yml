@@ -16,6 +16,39 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # D-593 (owner, CI speed): what changed. A pull request that changes only
+  # Markdown files directly under docs/ skips the end-to-end shards; every other
+  # change, and every push to main, runs them. The summary check below still
+  # reports, so a required check is never left waiting.
+  # ---------------------------------------------------------------------------
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Only docs/*.md, or code too
+        id: diff
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}")
+          echo "$files"
+          if [ -z "$files" ] || echo "$files" | grep -qvE '^docs/[^/]+\.md$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Only docs/*.md changed: the end-to-end shards are skipped."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
   # Fast feedback: formatting, lint (incl. module boundaries), types.
   # ---------------------------------------------------------------------------
   static:
@@ -266,32 +299,36 @@ jobs:
   # credential is used anywhere.
   # ---------------------------------------------------------------------------
   e2e:
-    # TWO SHARDS, BY PROJECT (D-455). Each shard is a whole job: its own
-    # PostgreSQL and Redis, its own fresh database and seed, its own servers.
-    # The aggregate job below keeps the original check name and passes only
-    # when both shards pass. Shard 1 carries the desktop project and the
-    # Control Center, asset and Brand Brain visual projects; shard 2 the mobile
-    # project, `brand-brain` and every other serial project. A project stays in
-    # the shard of the project it depends on: `owner-simple-mode` with
-    # `admin-console`, `production-email` with `phase10-platform`, and
-    # `phase8-flow` with `brand-brain` (D-457). The coverage step fails the shard if the two
-    # lists ever stop covering the whole suite exactly once.
-    name: Playwright E2E shard ${{ matrix.shard }} of 2
+    # FOUR SHARDS (D-593; two before it, D-455). Each shard is a whole job: its
+    # own PostgreSQL and Redis, its own fresh database and seed, its own
+    # servers. The aggregate job below keeps the original check name and passes
+    # only when every shard passes. `chromium-desktop` is most of the suite, so
+    # it is split in half by Playwright's own `--shard` (it runs fully parallel,
+    # so the halves are even); the other projects are grouped by time. A
+    # project stays in the shard of the project it depends on:
+    # `owner-simple-mode` with `admin-console`, `production-email` with
+    # `phase10-platform`, and `phase8-flow` with `brand-brain` (D-457). The
+    # coverage step fails the shard if the four lists ever stop covering the
+    # whole suite exactly once.
+    name: Playwright E2E shard ${{ matrix.shard }} of 4
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     env:
-      E2E_SHARD_1: >-
-        --project=chromium-desktop --project=admin-console --project=owner-simple-mode
-        --project=assets --project=brand-brain-visual
-      E2E_SHARD_2: >-
-        --project=chromium-mobile --project=brand-brain --project=design-system --project=customer-app
-        --project=content-calendar --project=brand-context --project=approvals
-        --project=analytics-copilot --project=social-publishing --project=phase8-journey
-        --project=phase8-flow --project=content-studio --project=phase10-platform
-        --project=production-email --project=phase4-security
+      E2E_SHARD_1: --project=chromium-desktop --shard=1/2
+      E2E_SHARD_2: --project=chromium-desktop --shard=2/2
+      E2E_SHARD_3: >-
+        --project=chromium-mobile --project=admin-console --project=owner-simple-mode
+      E2E_SHARD_4: >-
+        --project=assets --project=brand-brain-visual --project=brand-brain --project=design-system
+        --project=customer-app --project=content-calendar --project=brand-context
+        --project=approvals --project=analytics-copilot --project=social-publishing
+        --project=phase8-journey --project=phase8-flow --project=content-studio
+        --project=phase10-platform --project=production-email --project=phase4-security
     # A CEILING, so a hang fails with an uploaded report instead of inheriting
     # GitHub's six-hour default.
     #
@@ -432,28 +469,62 @@ jobs:
 
       # D-455: nothing may fall between the shards or run in both. The two
       # shards' test lists, together, must equal the whole suite's list.
-      - name: The two shards cover the whole suite exactly once
+      - name: The four shards cover the whole suite exactly once
         run: |
           list() { pnpm exec playwright test --list --reporter=list "$@" | grep -E '^\s+\[' | sed -E 's/^\s+//' | sort; }
           list > all.txt
           list $E2E_SHARD_1 > s1.txt
           list $E2E_SHARD_2 > s2.txt
-          sort s1.txt s2.txt > both.txt
-          echo "suite $(wc -l < all.txt) · shard 1 $(wc -l < s1.txt) · shard 2 $(wc -l < s2.txt)"
-          if ! diff -q all.txt both.txt > /dev/null; then
+          list $E2E_SHARD_3 > s3.txt
+          list $E2E_SHARD_4 > s4.txt
+          sort s1.txt s2.txt s3.txt s4.txt > every.txt
+          echo "suite $(wc -l < all.txt) · shards $(wc -l < s1.txt) + $(wc -l < s2.txt) + $(wc -l < s3.txt) + $(wc -l < s4.txt)"
+          if ! diff -q all.txt every.txt > /dev/null; then
             echo "::error::The E2E shards do not cover the suite exactly once."
-            diff all.txt both.txt | head -40
+            diff all.txt every.txt | head -40
             exit 1
           fi
-          rm -f all.txt s1.txt s2.txt both.txt
+          rm -f all.txt s1.txt s2.txt s3.txt s4.txt every.txt
 
       - name: Apply migrations to the end-to-end database
         env:
           NODE_ENV: test
         run: pnpm db:migrate:deploy
 
+      # D-593: the browser is cached by Playwright's own version; the system
+      # libraries it needs are installed every time (they live outside the cache).
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the Playwright browser
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
       - name: Install Chromium and its system dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Chromium's system dependencies (browser from the cache)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+
+      # D-593: Next.js keeps its incremental build cache in .next/cache; a run
+      # reuses the last one for the same lockfile, so an unchanged page is not
+      # compiled again. The build output itself is always produced fresh.
+      - name: Cache the Next.js build caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/web/.next/cache
+            apps/dashboard/.next/cache
+            apps/admin/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/**/*.ts', 'apps/**/*.tsx', 'apps/**/*.css', 'packages/**/*.ts', 'packages/**/*.tsx', 'packages/**/*.css') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - name: Build the three applications
         env:
@@ -476,7 +547,12 @@ jobs:
         env:
           BRANDSPACE_VISUAL_BASELINE: '0'
         run: |
-          if [ "${{ matrix.shard }}" = 1 ]; then PROJECTS=$E2E_SHARD_1; else PROJECTS=$E2E_SHARD_2; fi
+          case "${{ matrix.shard }}" in
+            1) PROJECTS=$E2E_SHARD_1 ;;
+            2) PROJECTS=$E2E_SHARD_2 ;;
+            3) PROJECTS=$E2E_SHARD_3 ;;
+            *) PROJECTS=$E2E_SHARD_4 ;;
+          esac
           pnpm e2e:seed
           pnpm exec playwright test $PROJECTS
 
@@ -540,14 +616,20 @@ jobs:
   # ---------------------------------------------------------------------------
   e2e-result:
     name: Playwright E2E (RTL/LTR + accessibility)
-    needs: e2e
+    needs: [changes, e2e]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Both shards passed
+      - name: Every shard passed, or the change is docs/*.md only
         run: |
+          echo "What changed: ${{ needs.changes.result }}, code: ${{ needs.changes.outputs.code }}"
           echo "E2E shards: ${{ needs.e2e.result }}"
+          test "${{ needs.changes.result }}" = success
+          if [ "${{ needs.changes.outputs.code }}" != "true" ]; then
+            echo "Only docs/*.md changed; the end-to-end shards were not needed."
+            exit 0
+          fi
           test "${{ needs.e2e.result }}" = success
 
   # ---------------------------------------------------------------------------
@@ -648,6 +730,20 @@ jobs:
 
       - name: Generate Prisma client (no database environment required)
         run: pnpm --filter @brandspace/database exec prisma generate
+
+      # D-593: Next.js keeps its incremental build cache in .next/cache; a run
+      # reuses the last one for the same lockfile, so an unchanged page is not
+      # compiled again. The build output itself is always produced fresh.
+      - name: Cache the Next.js build caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/web/.next/cache
+            apps/dashboard/.next/cache
+            apps/admin/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/**/*.ts', 'apps/**/*.tsx', 'apps/**/*.css', 'packages/**/*.ts', 'packages/**/*.tsx', 'packages/**/*.css') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - name: Build Next.js applications
         env:

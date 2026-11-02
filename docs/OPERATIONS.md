@@ -927,18 +927,30 @@ workers, sharding, reporter and test selection did not change.
 - **Test names in the CI log.** The CI reporters are `dot`, `list`, `html` and `json`; `list` was
   added so a run cancelled before its summary still names each test, its status and its duration.
 
-- **Two E2E shards (D-455).** The Playwright job runs as two shards by project, each with its own
-  database and seed; the check named "Playwright E2E (RTL/LTR + accessibility)" is now an aggregate
-  that passes only when both shards pass. A coverage step fails a shard if the two lists stop covering
-  the whole suite exactly once — a new project must be added to one of them. A project that depends on
-  another runs in that project's shard (`phase8-flow` after `brand-brain`, D-457).
+- **Two E2E shards (D-455), then four (D-593).** The Playwright job runs as four shards, each with
+  its own database and seed; the check named "Playwright E2E (RTL/LTR + accessibility)" is an
+  aggregate that passes only when every shard passes. `chromium-desktop` is split in half with
+  Playwright's own `--shard` (shards 1 and 2); shard 3 is `chromium-mobile`, `admin-console` and
+  `owner-simple-mode`; shard 4 every other project. A coverage step fails a shard if the four lists
+  stop covering the whole suite exactly once — a new project must be added to one of them. A project
+  that depends on another runs in that project's shard (`phase8-flow` after `brand-brain`, D-457).
+
+- **Caches (D-593).** The pnpm store (`actions/setup-node`, as before), the Playwright browser (by
+  Playwright's version; its system libraries are installed every run) and each app's `.next/cache`
+  (by lockfile and source, falling back to the last cache for the same lockfile). The repository has
+  no Turborepo, so there is no turbo cache to keep.
+
+- **Docs-only pull requests skip the E2E shards (D-593).** A job named "What changed" compares the
+  pull request with its base; when every changed file is a Markdown file directly under `docs/`, the
+  shards are skipped and the aggregate check passes saying so. Every other change, and every push to
+  `main`, runs them.
 
 - **Per-test timeout: 30 → 45 seconds (D-456).** The tests that timed out ran 31–36 s on the slower
   runners. Retries, the `expect` timeout and assertions are unchanged.
 
 **Tracked for the final review:**
 
-- The type-checking cost of the `tests` package, and whether two E2E shards stay enough as the suite
+- The type-checking cost of the `tests` package, and whether four E2E shards stay enough as the suite
   grows. Raising a ceiling again is not the answer to a suite that keeps growing.
 - **`phase8-flow` step 14 should create its own learning candidate.** It now passes only after the
   `brand-brain` project has written knowledge into the shared workspace (declared as a dependency,
