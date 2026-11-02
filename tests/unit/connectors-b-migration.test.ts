@@ -150,6 +150,7 @@ describe('connectors B · B2 and B3 — one concurrent index each, nothing else'
 describe('connectors B · order', () => {
   it('the three come directly after connectors A, in order, and only the AI apps migrations and the D-573 ceiling follow', () => {
     expect(EXPECTED_MIGRATIONS.slice(-13)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-8)).toEqual([
       '20261021090000_connectors_a_handles_and_subjects',
       B1,
       B2,
@@ -170,6 +171,8 @@ describe('connectors B · order', () => {
       '20261103090000_calendar_slot_workspace_status_index',
       '20261103090100_audit_event_workspace_action_index',
       '20261103090200_audit_event_workspace_actor_action_index',
+      // PR B: one Copilot conversation per person per brand (D-591).
+      '20261103120000_one_assistant',
     ]);
   });
 });

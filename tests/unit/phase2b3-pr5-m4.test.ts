@@ -84,6 +84,8 @@ describe('M4 — the asks-first expiry index', () => {
       '20261103090000_calendar_slot_workspace_status_index',
       '20261103090100_audit_event_workspace_action_index',
       '20261103090200_audit_event_workspace_actor_action_index',
+      // PR B: one Copilot conversation per person per brand (D-591).
+      '20261103120000_one_assistant',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261013090000_brand_scope_not_null');
   });

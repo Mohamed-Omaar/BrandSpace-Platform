@@ -92,6 +92,8 @@ describe('PR E — the Group B fields', () => {
       '20261103090000_calendar_slot_workspace_status_index',
       '20261103090100_audit_event_workspace_action_index',
       '20261103090200_audit_event_workspace_actor_action_index',
+      // PR B: one Copilot conversation per person per brand (D-591).
+      '20261103120000_one_assistant',
     ]);
   });
 });
