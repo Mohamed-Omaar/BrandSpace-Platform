@@ -2561,3 +2561,16 @@ draft alike.
     the owner set them.
 - **The Look & feel page** in the Control Center is a design-system extension built from the
   shared components (`docs/DESIGN-SYSTEM.md`).
+
+### 6.3.79 Style polish P1 (D-590)
+
+- **Copilot button:** the empty lane under it is gone; the prototype's scroll area runs to the
+  frame's edge again. The page's end padding keeps room for the button (24 + 48 + 16px).
+- **Frame and rail surfaces are solid** in both apps (an owner-authorised deviation from the
+  prototype's `rgba(255,255,255,.93)` frame and `rgba(248,248,249,.7)` rail). Radius, shadow and
+  hairline are the prototype's, through shared `--bs-frame-*` tokens.
+- **Brand > Colours:** the remove badge is back on the tile's corner (a fidelity fix).
+- **Side sheets** size to their content (an approved design-system extension of the Copilot
+  drawer's geometry); the media drawer's Estimate and Generate buttons are one size.
+- **Waiting states** (spinner, progress bar, elapsed time, waiting buttons) are design-system
+  extensions (§4.2), built from existing tokens; the prototype draws none.

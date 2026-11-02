@@ -31,7 +31,7 @@ import {
   type EditorIssue,
 } from '../../../../server/composer-editor';
 import { useRouter } from 'next/navigation';
-import { ChipListbox, SegmentPill, type MediaSeed } from '@brandspace/ui';
+import { ChipListbox, SegmentPill, WorkingStatus, type MediaSeed } from '@brandspace/ui';
 import { ChannelMark, PostArt } from '../../calendar/prototype-calendar';
 import type { MediaOptionView } from './media-picker';
 import { MediaSlides } from './media-slides';
@@ -53,6 +53,7 @@ import type {
   ComposerVariant,
   VariantKnowledgeView,
 } from './composer-view';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 /**
  * THE DRAFT EDITOR — the prototype's Studio (`Main.dc.html` lines 329–537,
@@ -921,6 +922,8 @@ export function DraftEditor({
     variantId: string;
     assetId: string;
     tries: number;
+    /** P1: when the image was asked for, for the elapsed time. */
+    since: number;
   } | null>(null);
   useEffect(() => {
     if (!pending) return;
@@ -1571,9 +1574,9 @@ export function DraftEditor({
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="itemId" value={draft.id} />
             <input type="hidden" name="token" value={duplicateToken} />
-            <button type="submit" className="bsp-btn bsp-sm bsp-pur" data-testid="editor-duplicate">
+            <SubmitButton className="bsp-btn bsp-sm bsp-pur" data-testid="editor-duplicate">
               {t['content.action.duplicate']}
-            </button>
+            </SubmitButton>
           </form>
         ) : null}
         {/* PR D (S2) — "Unschedule" on a scheduled post (`EPV` sched buttons). */}
@@ -1586,9 +1589,9 @@ export function DraftEditor({
             <input type="hidden" name="slotId" value={publishTime.slotId} />
             <input type="hidden" name="returnTo" value="/content/compose" />
             <input type="hidden" name="item" value={draft.id} />
-            <button type="submit" className="bsp-btn bsp-sm" data-testid="editor-unschedule">
+            <SubmitButton className="bsp-btn bsp-sm" data-testid="editor-unschedule">
               {t['editor.unschedule']}
-            </button>
+            </SubmitButton>
           </form>
         ) : null}
         {/* PR D (S3) — "Results" on a published post: its Performance. */}
@@ -1606,9 +1609,9 @@ export function DraftEditor({
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="itemId" value={draft.id} />
             <input type="hidden" name="approvalId" value={draft.openApprovalId} />
-            <button type="submit" className="bsp-btn bsp-sm" data-testid="withdraw-review">
+            <SubmitButton className="bsp-btn bsp-sm" data-testid="withdraw-review">
               {t['content.composer.withdraw']}
-            </button>
+            </SubmitButton>
           </form>
         ) : null}
 
@@ -1642,13 +1645,12 @@ export function DraftEditor({
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="itemId" value={draft.id} />
                   <input type="hidden" name="token" value={duplicateToken} />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className="bsp-btn bsp-sm bsp-sec"
                     data-testid="editor-failed-duplicate"
                   >
                     {t['content.action.duplicate']}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
             </div>
@@ -1696,15 +1698,14 @@ export function DraftEditor({
                 />
                 <div className="bsp-st-ep-acts">
                   {reviewerPicker('resubmit')}
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className="bsp-btn bsp-sm bsp-pur"
                     disabled={anyDirty && !autosaves}
                     title={anyDirty && !autosaves ? t['editor.saveBeforeReview'] : undefined}
                     data-testid="resubmit-submit"
                   >
                     {t['editor.changes.resubmit']}
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
             ) : null}
@@ -2584,10 +2585,16 @@ export function DraftEditor({
                       }
                     />
                     {pending?.variantId === variant.id ? (
-                      <p className="bsp-st-hint" role="status" data-testid="media-generating">
-                        {pending.tries >= 40
-                          ? t['editor.media.generateSlow']
-                          : t['editor.media.generating']}
+                      <p className="bsp-st-hint">
+                        <WorkingStatus
+                          testId="media-generating"
+                          since={pending.since}
+                          label={
+                            (pending.tries >= 40
+                              ? t['editor.media.generateSlow']
+                              : t['editor.media.generating']) ?? ''
+                          }
+                        />
                       </p>
                     ) : null}
                   </div>
@@ -2644,13 +2651,12 @@ export function DraftEditor({
                               value={entry.knowledgeItemId}
                             />
                             <input type="hidden" name="signature" value={entry.signature} />
-                            <button
-                              type="submit"
+                            <SubmitButton
                               className="bsp-btn bsp-sm bsp-ghost"
                               data-testid={`fact-keep-${entry.knowledgeItemId}`}
                             >
                               {t['editor.facts.keep']}
-                            </button>
+                            </SubmitButton>
                           </form>
                         ) : null}
                       </div>
@@ -3173,9 +3179,9 @@ export function DraftEditor({
                 <input type="hidden" name="locale" value={locale} />
                 <input type="hidden" name="itemId" value={draft.id} />
                 <input type="hidden" name="to" value="DRAFT" />
-                <button type="submit" className="bsp-btn bsp-sm bsp-sec">
+                <SubmitButton className="bsp-btn bsp-sm bsp-sec">
                   {t['content.composer.restore']}
-                </button>
+                </SubmitButton>
               </form>
             ) : null}
             {can.manageTemplates && actions.saveAsTemplate ? (
@@ -3202,13 +3208,12 @@ export function DraftEditor({
                     data-testid="save-as-template-name"
                   />
                   <span className="bsp-st-hint">{t['editor.template.hint']}</span>
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className="bsp-btn bsp-sm bsp-pur bsp-st-end"
                     data-testid="save-as-template-submit"
                   >
                     {t['editor.template.confirm']}
-                  </button>
+                  </SubmitButton>
                 </form>
               </details>
             ) : null}
@@ -3228,13 +3233,9 @@ export function DraftEditor({
                   <input type="hidden" name="to" value="ARCHIVED" />
                   <input type="hidden" name="intent" value="ARCHIVE" />
                   <span className="bsp-st-hint">{t['content.archive.confirmBody']}</span>
-                  <button
-                    type="submit"
-                    className="bsp-btn bsp-sm bsp-st-end"
-                    data-testid="archive-confirm"
-                  >
+                  <SubmitButton className="bsp-btn bsp-sm bsp-st-end" data-testid="archive-confirm">
                     {t['content.archive.confirm']}
-                  </button>
+                  </SubmitButton>
                 </form>
               </details>
             ) : null}
@@ -3306,7 +3307,7 @@ export function DraftEditor({
             setDrawer(null);
           }}
           onGenerated={(assetId) => {
-            setPending({ variantId: drawerVariant.id, assetId, tries: 0 });
+            setPending({ variantId: drawerVariant.id, assetId, tries: 0, since: Date.now() });
             setDrawer(null);
             router.refresh();
           }}

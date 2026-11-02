@@ -8,6 +8,7 @@ import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { revokeAiAppAction } from './actions';
 import { appLogoSrc } from './app-icon';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -168,13 +169,12 @@ export default async function ConnectedAiAppsPage({
                       <input type="hidden" name="connectionId" value={row.id} />
                       <input type="hidden" name="intent" value="REVOKE" />
                       <span className="bsp-acc-sub">{t('aiApps.revokeBody')}</span>
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="bsp-btn bsp-sm bsp-acc-danger"
                         data-testid={`ai-app-revoke-confirm-${row.id}`}
                       >
                         {t('aiApps.revokeConfirm')}
-                      </button>
+                      </SubmitButton>
                     </form>
                   </details>
                 </div>

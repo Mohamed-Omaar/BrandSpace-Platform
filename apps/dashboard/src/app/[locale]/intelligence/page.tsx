@@ -37,6 +37,7 @@ import {
 
 import { EmptyAction } from '../../../components/empty-action';
 import { dayFormatter } from '../../../server/prototype-dates';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -320,9 +321,9 @@ export default async function IntelligencePage({
                   <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
                     {t('intelligence.basisNotice')}
                   </p>
-                  <button type="submit" className={buttonClass('brand', 'sm')}>
+                  <SubmitButton className={buttonClass('brand', 'sm')}>
                     {t('intelligence.analyse')}
-                  </button>
+                  </SubmitButton>
                 </form>
               </Card>
             ) : null}
@@ -476,17 +477,17 @@ export default async function IntelligencePage({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="insightId" value={insight.id} />
                           <input type="hidden" name="decision" value="accept" />
-                          <button type="submit" className={buttonClass('brand', 'sm')}>
+                          <SubmitButton className={buttonClass('brand', 'sm')}>
                             {t('insights.accept')}
-                          </button>
+                          </SubmitButton>
                         </form>
                         <form action={reviewIntelligenceAction}>
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="insightId" value={insight.id} />
                           <input type="hidden" name="decision" value="dismiss" />
-                          <button type="submit" className={buttonClass('ghost', 'sm')}>
+                          <SubmitButton className={buttonClass('ghost', 'sm')}>
                             {t('insights.dismiss')}
-                          </button>
+                          </SubmitButton>
                         </form>
                       </div>
                     ) : null}
@@ -517,13 +518,12 @@ export default async function IntelligencePage({
                         <form action={proposeLearningsAction}>
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="insightId" value={insight.id} />
-                          <button
-                            type="submit"
+                          <SubmitButton
                             className={buttonClass('neutral', 'sm')}
                             data-testid="propose-learnings"
                           >
                             {t('insights.proposeLearnings')}
-                          </button>
+                          </SubmitButton>
                         </form>
                         <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
                           {t('insights.proposeLearningsHint')}

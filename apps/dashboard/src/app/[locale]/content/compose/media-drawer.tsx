@@ -7,6 +7,7 @@ import {
   UploadForm,
   UploadRulesLine,
   UploadStatus,
+  UploadSubmitButton,
 } from '../../../../components/upload-field';
 import {
   AssetThumb,
@@ -16,6 +17,8 @@ import {
   colorTokens,
   radiusTokens,
   showToast,
+  Spinner,
+  WorkingStatus,
 } from '@brandspace/ui';
 import {
   aspectLabel,
@@ -109,6 +112,8 @@ export function MediaDrawer({
   const [formatKey, setFormatKey] = useState(defaultFormat);
   const [estimate, setEstimate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // P1: when the image request was sent, while it is on its way.
+  const [generatingSince, setGeneratingSince] = useState<number | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   // One key per ask: a retry of the same prompt and format never bills twice.
   const [attempt] = useState(() => crypto.randomUUID());
@@ -247,6 +252,7 @@ export function MediaDrawer({
         rules ? (
           <UploadForm
             action={uploadAction}
+            relay={{ kind: 'composer-media' }}
             rules={rules}
             locale={locale}
             texts={{
@@ -255,6 +261,7 @@ export function MediaDrawer({
               refusedSize: t['upload.refusedSize'] ?? '',
               refusedEmpty: t['upload.refusedEmpty'] ?? '',
               uploading: t['upload.uploading'] ?? '',
+              uploaded: t['upload.uploaded'] ?? '',
               connection: t['upload.connection'] ?? '',
               notScanned: t['upload.notScanned'] ?? '',
               notScannedLink: t['upload.notScannedLink'] ?? '',
@@ -277,13 +284,12 @@ export function MediaDrawer({
               testId="composer-upload-status"
               result={uploadResult ? { tone: 'error', message: uploadResult } : null}
             />
-            <button
-              type="submit"
+            <UploadSubmitButton
               className={buttonClass('primary', 'md')}
               data-testid="composer-upload-submit"
             >
               {t['content.media.uploadSubmit']}
-            </button>
+            </UploadSubmitButton>
           </UploadForm>
         ) : null
       ) : null}
@@ -333,14 +339,20 @@ export function MediaDrawer({
           <div className="cs-form-actions">
             <button
               type="button"
-              className={buttonClass('neutral', 'sm')}
+              className={buttonClass('neutral', 'md')}
               disabled={busy}
+              aria-busy={(busy && generatingSince === null) || undefined}
               data-testid="media-generate-quote"
               onClick={async () => {
                 setBusy(true);
-                const payload = await post('quote', { formatKey });
-                if (payload) setEstimate(String(payload['estimateMilli'] ?? '0'));
-                setBusy(false);
+                try {
+                  const payload = await post('quote', { formatKey });
+                  if (payload) setEstimate(String(payload['estimateMilli'] ?? '0'));
+                } catch {
+                  setFailure(t['editor.media.generateFailed'] ?? '');
+                } finally {
+                  setBusy(false);
+                }
               }}
             >
               {t['content.composer.estimate']}
@@ -349,16 +361,27 @@ export function MediaDrawer({
               type="button"
               className={buttonClass('primary', 'md')}
               disabled={busy || prompt.trim() === ''}
+              aria-busy={generatingSince !== null || undefined}
               data-testid="media-generate-submit"
               onClick={async () => {
                 setBusy(true);
-                const payload = await post('generate', {
-                  brandId,
-                  brief: prompt.trim(),
-                  formatKey,
-                  idempotencyKey: `composer:${itemId}:${attempt}:${formatKey}:${fingerprint(prompt.trim())}`,
-                });
-                setBusy(false);
+                setGeneratingSince(Date.now());
+                let payload: Record<string, unknown> | null = null;
+                try {
+                  payload = await post('generate', {
+                    brandId,
+                    brief: prompt.trim(),
+                    formatKey,
+                    idempotencyKey: `composer:${itemId}:${attempt}:${formatKey}:${fingerprint(prompt.trim())}`,
+                  });
+                } catch {
+                  // The request never arrived: the same words as a refusal,
+                  // which say nothing was charged.
+                  setFailure(t['editor.media.generateFailed'] ?? '');
+                } finally {
+                  setBusy(false);
+                  setGeneratingSince(null);
+                }
                 if (payload && typeof payload['assetId'] === 'string') {
                   onGenerated(payload['assetId']);
                   // S6 (final review) — the image names what it cost, as every
@@ -370,9 +393,17 @@ export function MediaDrawer({
                 }
               }}
             >
-              {busy ? t['content.composer.generating'] : t['editor.media.generate']}
+              {generatingSince !== null ? <Spinner /> : null}
+              {t['editor.media.generate']}
             </button>
           </div>
+          {generatingSince !== null ? (
+            <WorkingStatus
+              testId="media-generate-progress"
+              since={generatingSince}
+              label={t['editor.media.working'] ?? ''}
+            />
+          ) : null}
           <p className="cs-hint">{t['editor.media.generateHint']}</p>
         </div>
       ) : null}

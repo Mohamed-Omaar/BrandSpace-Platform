@@ -63,6 +63,7 @@ import {
   updateAutomationAction,
 } from './actions';
 import { whenLabel } from '../../../server/prototype-dates';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -809,19 +810,17 @@ export default async function AutomationsPage({
                     <form action={skipAutomationRunAction}>
                       <input type="hidden" name="locale" value={locale} />
                       <input type="hidden" name="runId" value={run.id} />
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="bsp-btn bsp-sm bsp-sec"
                         data-testid="automation-skip"
                       >
                         {t('automations.skipRun')}
-                      </button>
+                      </SubmitButton>
                     </form>
                     <form action={confirmAutomationRunAction}>
                       <input type="hidden" name="locale" value={locale} />
                       <input type="hidden" name="runId" value={run.id} />
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="bsp-btn bsp-sm bsp-pur"
                         data-testid="automation-confirm"
                       >
@@ -829,7 +828,7 @@ export default async function AutomationsPage({
                         {run.actionType === 'PROPOSE_PUBLISH'
                           ? t('automations.confirmRun')
                           : t('automations.approveRun')}
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 ))}
@@ -967,9 +966,9 @@ export default async function AutomationsPage({
                                   <input type="hidden" name="locale" value={locale} />
                                   <input type="hidden" name="ruleId" value={rule.id} />
                                   <span>{t('automations.deleteConfirmBody')}</span>
-                                  <button type="submit" className="bsp-btn bsp-sm bsp-danger">
+                                  <SubmitButton className="bsp-btn bsp-sm bsp-danger">
                                     {t('automations.deleteConfirmSubmit')}
-                                  </button>
+                                  </SubmitButton>
                                 </form>
                               </details>
                             </div>

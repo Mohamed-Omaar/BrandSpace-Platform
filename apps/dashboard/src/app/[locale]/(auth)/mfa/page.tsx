@@ -9,6 +9,7 @@ import { translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { signInReturnPath } from '../../../../server/return-path';
 import { verifyMfaAction } from '../actions';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,9 +72,9 @@ export default async function MfaChallengePage({
             style={authInputStyle()}
           />
         </Field>
-        <button type="submit" data-testid="mfa-submit" style={authButtonStyle()}>
+        <SubmitButton data-testid="mfa-submit" style={authButtonStyle()}>
           {t('mfa.confirm')}
-        </button>
+        </SubmitButton>
       </form>
     </AuthCard>
   );

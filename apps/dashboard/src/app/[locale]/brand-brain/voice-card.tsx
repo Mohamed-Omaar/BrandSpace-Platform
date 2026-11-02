@@ -7,6 +7,7 @@ import { translator } from '../../../i18n/messages';
 import type { AreaItemData, VoiceData } from './brand-brain-view';
 import { archiveKnowledgeAction, createKnowledgeAction, updateKnowledgeAction } from './actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * C4 + D1 (Phase 2C) — THE ONE VOICE CARD on the Look & voice tab.
@@ -110,8 +111,7 @@ export function VoiceCard({
                         )
                       }
                     >
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="bsp-vc-word-x"
                         aria-label={`${t('bb.voice.wordRemove')} ${word}`}
                         data-testid={`voice-words-remove-${index}`}
@@ -143,13 +143,9 @@ export function VoiceCard({
                 data-testid={`voice-words-${language}`}
                 required
               />
-              <button
-                type="submit"
-                className="bsp-btn bsp-sm bsp-sec"
-                data-testid="voice-words-save"
-              >
+              <SubmitButton className="bsp-btn bsp-sm bsp-sec" data-testid="voice-words-save">
                 {t('studio.tagAdd')}
-              </button>
+              </SubmitButton>
             </form>
           ) : null}
         </section>
@@ -292,15 +288,14 @@ function RuleList({
                 <form action={archiveKnowledgeAction} style={{ display: 'inline' }}>
                   <Hidden locale={locale} brandId={brandId} area={area} />
                   <input type="hidden" name="itemId" value={item.id} />{' '}
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className={buttonClass('ghost', 'sm')}
 
                     data-testid={`voice-remove-${item.id}`}
                     aria-label={`${t('bb.archive')}: ${item.body || item.title}`}
                   >
                     {t('bb.archive')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
             </li>

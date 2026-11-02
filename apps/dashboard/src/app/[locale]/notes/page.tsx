@@ -29,6 +29,7 @@ import { relativeTime } from '../../../server/home';
 import { noteThreadHref } from '../../../server/note-links';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -273,13 +274,12 @@ export default async function NotesPage({
                     }
                   >
                     {hidden}
-                    <button
-                      type="submit"
+                    <SubmitButton
                       className="bsp-btn bsp-sm"
                       data-testid={`note-${thread.status === 'RESOLVED' ? 'reopen' : 'resolve'}-${thread.id}`}
                     >
                       {t(thread.status === 'RESOLVED' ? 'notes.reopen' : 'notes.resolve')}
-                    </button>
+                    </SubmitButton>
                   </form>
                 ) : null}
                 {/* The product's other thread controls, behind the pane's "⋯". */}
@@ -310,9 +310,9 @@ export default async function NotesPage({
                               </option>
                             ))}
                           </select>
-                          <button type="submit" className="bsp-btn bsp-sm bsp-sec">
+                          <SubmitButton className="bsp-btn bsp-sm bsp-sec">
                             {t('notes.save')}
-                          </button>
+                          </SubmitButton>
                         </form>
                         <form action={setNoteDueAction} className="bsp-nts-opt">
                           {hidden}
@@ -329,9 +329,9 @@ export default async function NotesPage({
                             className="bs-control"
                             data-testid={`note-due-input-${thread.id}`}
                           />
-                          <button type="submit" className="bsp-btn bsp-sm bsp-sec">
+                          <SubmitButton className="bsp-btn bsp-sm bsp-sec">
                             {t('notes.save')}
-                          </button>
+                          </SubmitButton>
                         </form>
                       </>
                     ) : null}
@@ -341,13 +341,12 @@ export default async function NotesPage({
                     */}
                     <form action={markNoteMentionsReadAction}>
                       {hidden}
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="bsp-btn bsp-sm bsp-ghost"
                         data-testid={`note-mark-read-${thread.id}`}
                       >
                         {t('notes.markRead')}
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </MoreDisclosure>
@@ -432,8 +431,7 @@ export default async function NotesPage({
                           name="importance"
                           value={thread.importance === 'IMPORTANT' ? 'NORMAL' : 'IMPORTANT'}
                         />
-                        <button
-                          type="submit"
+                        <SubmitButton
                           className="bsp-btn bsp-sm bsp-ghost"
                           data-testid={`note-importance-${thread.id}`}
                         >
@@ -442,7 +440,7 @@ export default async function NotesPage({
                               ? 'notes.markNormal'
                               : 'notes.important',
                           )}
-                        </button>
+                        </SubmitButton>
                       </form>
                     ) : null}
                     <span className="bsp-nts-hint">{t('notes.mentionHint')}</span>

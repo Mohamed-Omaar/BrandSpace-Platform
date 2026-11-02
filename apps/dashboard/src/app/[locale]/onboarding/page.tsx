@@ -50,6 +50,7 @@ import { UploadForm, type UploadTexts } from '../../../components/upload-field';
 import { RefreshWhile } from '../../../components/refresh-while';
 import { IndustryField } from '../../../components/industry-field';
 import { SetupBrandLanguages } from '../../../components/setup-brand-languages';
+import { SubmitButton } from '../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,6 +97,7 @@ export default async function OnboardingPage({
     refusedSize: t('upload.refusedSize'),
     refusedEmpty: t('upload.refusedEmpty'),
     uploading: t('upload.uploading'),
+    uploaded: t('upload.uploaded'),
     connection: t('upload.connection'),
     notScanned: t('upload.notScanned'),
     notScannedLink: t('upload.notScannedLink'),
@@ -951,13 +953,12 @@ export default async function OnboardingPage({
                       value={candidate.id}
                     />
                   ))}
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className="bsp-wz-btn bsp-wz-pur bsp-wz-all"
                     data-testid="setup-accept-all"
                   >
                     {t('setup.wz.teach.acceptAll')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
             </div>
@@ -1003,23 +1004,21 @@ export default async function OnboardingPage({
                     <>
                       <form action={reviewSetupCandidateAction}>
                         {hidden('accept')}
-                        <button
-                          type="submit"
+                        <SubmitButton
                           className="bsp-wz-btn bsp-wz-sec bsp-wz-xs"
                           data-testid={`setup-accept-${candidate.id}`}
                         >
                           {t('setup.wz.teach.accept')}
-                        </button>
+                        </SubmitButton>
                       </form>
                       <form action={reviewSetupCandidateAction}>
                         {hidden('reject')}
-                        <button
-                          type="submit"
+                        <SubmitButton
                           className="bsp-wz-btn bsp-wz-ghost bsp-wz-xs"
                           data-testid={`setup-reject-${candidate.id}`}
                         >
                           {t('setup.wz.teach.reject')}
-                        </button>
+                        </SubmitButton>
                       </form>
                     </>
                   )}
@@ -1109,14 +1108,13 @@ export default async function OnboardingPage({
                       <input type="hidden" name="provider" value={provider} />
                       <input type="hidden" name="brandId" value={brand.id} />
                       <input type="hidden" name="returnTo" value="/onboarding" />
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="bsp-wz-btn bsp-wz-ink bsp-wz-sm"
                         data-testid={`setup-connect-${provider.toLowerCase()}`}
                         aria-label={t('setup.connect.provider').replace('{provider}', name)}
                       >
                         {t('setup.wz.connect.connect')}
-                      </button>
+                      </SubmitButton>
                     </form>
                   ) : null}
                 </div>

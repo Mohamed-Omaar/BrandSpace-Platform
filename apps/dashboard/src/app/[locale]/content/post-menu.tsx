@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Dialog, Field, spacingTokens, visuallyHiddenStyle, buttonClass } from '@brandspace/ui';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * THE POSTS "…" MENU — PORTED FROM `prototype-2026-09-27` (D-468 batch 2,
@@ -206,15 +207,14 @@ export function PostMenu(props: PostMenuProps) {
                   {hidden}
                   <input type="hidden" name="itemId" value={itemId} />
                   <input type="hidden" name="campaignId" value="" />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     role="menuitem"
                     className="bsp-post-menu-item"
                     data-testid={`post-campaign-none-${itemId}`}
                   >
                     {campaignId === null ? '✓ ' : ''}
                     {l('content.campaign.none')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
               {campaigns.map((campaign) => (
@@ -222,8 +222,7 @@ export function PostMenu(props: PostMenuProps) {
                   {hidden}
                   <input type="hidden" name="itemId" value={itemId} />
                   <input type="hidden" name="campaignId" value={campaign.id} />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     role="menuitem"
                     className="bsp-post-menu-item"
                     style={
@@ -233,7 +232,7 @@ export function PostMenu(props: PostMenuProps) {
                   >
                     {campaign.id === campaignId ? '✓ ' : ''}
                     {campaign.name}
-                  </button>
+                  </SubmitButton>
                 </form>
               ))}
             </>
@@ -252,28 +251,26 @@ export function PostMenu(props: PostMenuProps) {
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="itemId" value={itemId} />
                   <input type="hidden" name="token" value={`${props.duplicateToken}:${itemId}`} />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     role="menuitem"
                     className="bsp-post-menu-item"
                     data-testid={`content-duplicate-${itemId}`}
                   >
                     {l('content.menu.duplicate')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
               {maySubmit ? (
                 <form action={actions.submit}>
                   {hidden}
                   <input type="hidden" name="itemId" value={itemId} />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     role="menuitem"
                     className="bsp-post-menu-item"
                     data-testid={`content-request-approval-${itemId}`}
                   >
                     {l('content.action.requestApproval')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
               {maySchedule ? (
@@ -317,14 +314,13 @@ export function PostMenu(props: PostMenuProps) {
                 <form action={actions.cancel}>
                   {hidden}
                   <input type="hidden" name="slotId" value={slot.id} />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     role="menuitem"
                     className="bsp-post-menu-item"
                     data-testid={`post-menu-unschedule-${itemId}`}
                   >
                     {l('content.menu.unschedule')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
               {channelLinks.map((link) => (
@@ -345,14 +341,13 @@ export function PostMenu(props: PostMenuProps) {
                   {hidden}
                   <input type="hidden" name="itemId" value={itemId} />
                   <input type="hidden" name="to" value="DRAFT" />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     role="menuitem"
                     className="bsp-post-menu-item"
                     data-testid={`post-menu-restore-${itemId}`}
                   >
                     {l('content.menu.restore')}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
               {mayArchive ? (
@@ -363,15 +358,14 @@ export function PostMenu(props: PostMenuProps) {
                     <input type="hidden" name="itemId" value={itemId} />
                     <input type="hidden" name="to" value="ARCHIVED" />
                     <input type="hidden" name="intent" value="ARCHIVE" />
-                    <button
-                      type="submit"
+                    <SubmitButton
                       role="menuitem"
                       className="bsp-post-menu-item"
                       data-danger=""
                       data-testid={`post-menu-archive-confirm-${itemId}`}
                     >
                       {l('content.menu.archiveSure')}
-                    </button>
+                    </SubmitButton>
                   </form>
                 ) : (
                   <button
@@ -428,14 +422,13 @@ export function PostMenu(props: PostMenuProps) {
               </Field>
             </div>
             <div>
-              <button
-                type="submit"
+              <SubmitButton
                 className={buttonClass('primary')}
 
                 data-testid={`post-move-submit-${itemId}`}
               >
                 {l('content.move.submit')}
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </Dialog>

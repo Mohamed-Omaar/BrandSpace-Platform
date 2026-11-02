@@ -3,6 +3,7 @@ import { spacingTokens, typographyTokens } from '@brandspace/ui';
 import { translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { requestPasswordResetAction } from '../actions';
+import { SubmitButton } from '../../../../components/pending-submit';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,13 +47,12 @@ export default async function ResetRequestPage({
           required
           style={authInputStyle()}
         />
-        <button
-          type="submit"
+        <SubmitButton
           data-testid="reset-request-submit"
           style={{ ...authButtonStyle(), marginBlockStart: spacingTokens.lg }}
         >
           {t('reset.request')}
-        </button>
+        </SubmitButton>
       </form>
     </AuthCard>
   );

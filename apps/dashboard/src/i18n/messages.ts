@@ -1840,6 +1840,7 @@ export const messages = {
     'editor.media.generateHint': 'تُحفظ الصورة في مكتبة الوسائط وتُضاف إلى هذا المنشور بعد فحصها.',
     'editor.media.generateFailed': 'تعذّر إنشاء الصورة. لم يُخصم أي رصيد.',
     'editor.media.generating': 'جارٍ إنشاء صورتك… ستُضاف هنا بعد فحصها.',
+    'editor.media.working': 'جارٍ إنشاء الصورة…',
     'editor.media.generateSlow':
       'تستغرق صورتك وقتًا أطول من المعتاد. ستظهر في مكتبة الوسائط عندما تكون جاهزة.',
     'editor.preview.slide': 'الشريحة {index} من {count}',
@@ -1971,6 +1972,7 @@ export const messages = {
     'upload.refusedSize': 'حجم هذا الملف {size}، والحد المسموح {max}.',
     'upload.refusedEmpty': 'هذا الملف فارغ.',
     'upload.uploading': 'جارٍ رفع {name}…',
+    'upload.uploaded': 'تم الرفع.',
     'assets.uploadedSome': 'رُفع {count}. لم يُرفع: {files}',
     'upload.connection': 'لم يصلنا الملف. تحقّق من اتصالك وحاول مرة أخرى.',
     'upload.notScanned':
@@ -6163,6 +6165,7 @@ export const messages = {
     'editor.media.generateFailed': 'The image could not be generated. Nothing was charged.',
     'editor.media.generating':
       'Generating your image… it will be added here once it has been checked.',
+    'editor.media.working': 'Generating the image…',
     'editor.media.generateSlow':
       'Your image is taking longer than usual. It will appear in the Asset Library when it is ready.',
     'editor.preview.slide': 'Slide {index} of {count}',
@@ -6298,6 +6301,7 @@ export const messages = {
     'upload.refusedSize': 'This file is {size}. The limit is {max}.',
     'upload.refusedEmpty': 'This file is empty.',
     'upload.uploading': 'Uploading {name}…',
+    'upload.uploaded': 'Uploaded.',
     'assets.uploadedSome': '{count} uploaded. Not uploaded: {files}',
     'upload.connection': 'The upload didn’t reach us. Check your connection and try again.',
     'upload.notScanned':

@@ -25,6 +25,7 @@ import {
 } from '../../../components/upload-field';
 import { CopilotLink } from '../../../components/copilot-link';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * The Brand Brain client island — PORTED from the approved prototype (D-468):
@@ -934,6 +935,7 @@ export function BrandBrainView({
               <UploadForm
                 formRef={uploadRef}
                 action={uploadFormAction}
+                relay={{ kind: 'brand-source' }}
                 rules={sourceRules}
                 locale={locale}
                 texts={uploadTexts(t)}
@@ -1118,13 +1120,9 @@ function ConfidentCard({
             ))}
           </ul>
           <span className="bsp-bb-bulk-acts">
-            <button
-              type="submit"
-              className="bsp-btn bsp-sm bsp-pur"
-              data-testid="accept-confident-confirm"
-            >
+            <SubmitButton className="bsp-btn bsp-sm bsp-pur" data-testid="accept-confident-confirm">
               {t('bb.bulkOk')}
-            </button>
+            </SubmitButton>
             <button
               type="button"
               className="bsp-btn bsp-sm bsp-ghost"

@@ -7,6 +7,7 @@ import {
   UploadForm,
   UploadRulesLine,
   UploadStatus,
+  UploadSubmitButton,
   uploadTexts,
 } from '../../../components/upload-field';
 import { Button, CONTROL_CLASS, Dialog, colorValues, visuallyHiddenStyle } from '@brandspace/ui';
@@ -26,6 +27,7 @@ import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { MoreDisclosure } from '../../../components/more-disclosure';
 import { RefreshWhile } from '../../../components/refresh-while';
 import { LogoAttach } from '../onboarding/logo-attach';
+import { SubmitButton } from '../../../components/pending-submit';
 
 /**
  * LOOK & VOICE: COLOURS, LOGO AND FONTS — as the prototype draws them
@@ -358,13 +360,12 @@ function Colours({
             </li>
           ) : null}
         </ul>
-        <button
-          type="submit"
+        <SubmitButton
           className="bsp-btn bsp-sm bsp-pur bsp-lk-start"
           data-testid="look-colours-save"
         >
           {t('common.save')}
-        </button>
+        </SubmitButton>
       </form>
     </section>
   );
@@ -429,13 +430,12 @@ function Logo({
                   </option>
                 ))}
               </select>
-              <button
-                type="submit"
+              <SubmitButton
                 className="bsp-btn bsp-sm bsp-pur bsp-lk-start"
                 data-testid="look-logo-choose-save"
               >
                 {t('common.save')}
-              </button>
+              </SubmitButton>
             </form>
           </MoreDisclosure>
         ) : null}
@@ -498,13 +498,9 @@ function Logo({
           {picked ? (
             <span className="bsp-lk-picked">
               <span className="bsp-ltr bsp-lk-meta">{picked}</span>
-              <button
-                type="submit"
-                className="bsp-btn bsp-sm bsp-pur"
-                data-testid="look-logo-submit"
-              >
+              <UploadSubmitButton className="bsp-btn bsp-sm bsp-pur" data-testid="look-logo-submit">
                 {t('bb.look.logoReplace')}
-              </button>
+              </UploadSubmitButton>
             </span>
           ) : null}
           <UploadRulesLine className="bsp-lk-meta" />
@@ -773,13 +769,12 @@ function LanguageFonts({
                   placeholder={picked}
                   data-testid={`look-font-name-${language}`}
                 />
-                <button
-                  type="submit"
+                <UploadSubmitButton
                   className="bsp-btn bsp-sm bsp-pur"
                   data-testid={`look-font-add-submit-${language}`}
                 >
                   {t('bb.look.fontAdd')}
-                </button>
+                </UploadSubmitButton>
               </span>
             ) : null}
             <UploadRulesLine className="bsp-lk-meta" />
@@ -851,13 +846,12 @@ function FontRow({
           required
           data-testid={`look-font-rename-input-${font.id}`}
         />
-        <button
-          type="submit"
+        <SubmitButton
           className="bsp-btn bsp-sm bsp-ghost"
           data-testid={`look-font-rename-${font.id}`}
         >
           {t('bb.look.fontRename')}
-        </button>
+        </SubmitButton>
         <span
           className={`bsp-pill ${FONT_PILL[font.status]}`}
           data-testid={`look-font-status-${font.id}`}
@@ -885,13 +879,12 @@ function FontRow({
             {picked ? (
               <>
                 <span className="bsp-ltr bsp-lk-meta">{picked}</span>
-                <button
-                  type="submit"
+                <UploadSubmitButton
                   className="bsp-btn bsp-sm bsp-pur"
                   data-testid={`look-font-replace-${font.id}`}
                 >
                   {t('bb.look.fontReplaceSend')}
-                </button>
+                </UploadSubmitButton>
               </>
             ) : null}
             <UploadStatus testId={`look-font-replace-status-${font.id}`} />

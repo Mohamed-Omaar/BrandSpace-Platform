@@ -663,6 +663,22 @@ component's look: the shared classes keep drawing, and a theme moves their token
 - **A preview box** (`scope`) re-declares every root alias, because an alias resolves where it is
   declared.
 
+### 10.1c Waiting states and the one frame (P1, D-590)
+
+- **`ProgressBar`** (`packages/ui/src/progress.tsx`): a native `<progress>` with its percentage,
+  for work whose share is known (uploads). **`WorkingStatus`**: spinner, label and elapsed
+  `m:ss`, a polite live region, for work whose length is not (image generation).
+- **Waiting buttons** (dashboard, they need `react-dom`'s form status): `SubmitButton` and
+  `FormButton` for server-action forms, `UploadSubmitButton` and `UploadButton` inside an
+  `UploadForm`. At rest each is exactly the button it replaces; while waiting it is disabled,
+  `aria-busy`, and draws the spinner.
+- **`.bs-spinner`** turns (`--bs-dur-800`, slower under reduced motion).
+- **The frame:** both apps draw `--bs-frame-surface`, `--bs-frame-rail`, `--bs-frame-edge`,
+  `--bs-frame-radius` and `--bs-frame-shadow`. Sizes come from `--bsp-px-*`, so each app keeps
+  its own scale (D-484).
+- **Colour scheme:** the server writes `data-color-scheme` on `<html>` (`currentColourScheme()`);
+  `/theme.css` keys the dark palette on it. Nothing on the client chooses a scheme.
+
 ### 10.2 One token source, and the switches the Look & feel page will set (S2–S4)
 
 - **`tokens.ts` is the source.** tokens.css's `:root` block is generated from `cssRootTokens`
