@@ -64,7 +64,10 @@ describe('elapsed time on work whose length is unknown', () => {
 });
 
 describe('one frame for both apps', () => {
-  const token = (name: string) => cssRootTokens.find((entry) => entry.name === name)?.value;
+  const token = (name: string) => {
+    const entry = cssRootTokens.find((one) => 'name' in one && one.name === name);
+    return entry && 'value' in entry ? entry.value : undefined;
+  };
   it('both surfaces are solid', () => {
     expect(token('--bs-frame-surface')).toBe('var(--bs-surface)');
     expect(token('--bs-frame-rail')).toBe('#fafafb');
