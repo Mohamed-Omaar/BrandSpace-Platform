@@ -816,18 +816,21 @@ test.describe('the shell reproduces the demo geometry', () => {
     // D-468, prototype-2026-09-27 (measured from Main.dc.html at 1440×900):
     // the frame is 1400px wide, `border-radius: 34px; background:
     // rgba(255,255,255,.93); backdrop-filter: blur(30px)` — D-575 removed the
-    // blur (owner, S4); the translucent white stays.
+    // blur (owner, S4). D-590 (owner, P1): the frame's surface is solid, one
+    // frame for both apps (`--bs-frame-surface`).
     // D-484: every length below is the prototype's at 0.88 (`scale.ts`).
     await expect(shell).toHaveCSS('border-radius', `${scaled(34)}px`);
-    await expect(shell).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.93)');
+    await expect(shell).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await expect(shell).toHaveCSS('backdrop-filter', 'none');
     // D-484: the frame fills the window less its two margins.
     expect((await shell.boundingBox())?.width).toBe(1440 - 2 * scaled(20));
 
-    // The rail: `sbW = '250px'`, `background: rgba(248,248,249,.7)`.
+    // The rail: `sbW = '250px'`; D-590: its surface is solid too
+    // (`--bs-frame-rail`, #fafafb), with the shared hairline edge.
     const sidebar = page.locator('.bs-sidebar');
     expect((await sidebar.boundingBox())?.width).toBe(scaled(250));
-    await expect(sidebar).toHaveCSS('background-color', 'rgba(248, 248, 249, 0.7)');
+    await expect(sidebar).toHaveCSS('background-color', 'rgb(250, 250, 251)');
+    await expect(sidebar).toHaveCSS('border-inline-end-color', 'rgb(240, 240, 242)');
 
     // `html { background: #f2f2f2 }`, `.ambient { background: #f3f3f3 }`,
     // `body { font-size: 15px }` — at 0.88 (D-484).
