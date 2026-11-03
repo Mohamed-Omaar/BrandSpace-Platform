@@ -1108,7 +1108,7 @@ h4 {
   position: absolute;
   border-radius: 50%;
   filter: blur(var(--bs-ambient-blur));
-  /* PERF A (owner, D-594): THE ORBS ARE STILL. The prototype drifted them
+  /* PERF A (owner, D-595): THE ORBS ARE STILL. The prototype drifted them
      (`@keyframes float`, 16 s, alternate), which repainted three 100px-blurred
      layers behind the frame on every frame. They now rest where the drift
      began; reduced motion is unchanged (it was still before as well). */
