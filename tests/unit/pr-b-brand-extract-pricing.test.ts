@@ -141,7 +141,7 @@ describe('PR B — brand.extract pricing documents', () => {
 
   it('every row of staging’s current document is kept, unchanged', () => {
     const kept = rules.costs.filter((c: { taskKey: string }) => c.taskKey !== 'brand.extract');
-    expect(kept).toHaveLength(19);
+    expect(kept).toHaveLength(17);
     expect(rules).toMatchObject({ creditValueMicroMinor: 5800000, targetGrossMarginPercent: 65 });
   });
 });

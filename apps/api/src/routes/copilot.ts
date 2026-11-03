@@ -147,6 +147,10 @@ const quoteSchema = z.object({
 
 /** PR B — "New topic" and "Clear conversation" name only the session. */
 const sessionActionSchema = z.object({ sessionId: z.string().uuid() });
+const stopSchema = z.object({
+  sessionId: z.string().uuid(),
+  idempotencyKey: z.string().min(8).max(200),
+});
 
 /** The automations domain as the Copilot may reach it — see copilot-automation.ts. */
 async function automationPort(db: TenantScopedClient, workspaceId: string) {
@@ -558,6 +562,32 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
         return reply.send({ deleted: result.deleted });
       } catch (error: unknown) {
         return fail(reply, 'copilot clear', error);
+      }
+    },
+  );
+
+  /**
+   * PR B (D-591) — STOP the turn under way. Its message is marked stopped and
+   * the turn ends without an answer; the gateway refuses to settle a stopped
+   * turn, so nothing is charged. The caller's own session only.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/copilot/stop',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'workspace.write' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = stopSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        const result = await conversationRun(caller, (orchestrator, authorization) =>
+          orchestrator.stopTurn({ authorization, ...parsed.data }),
+        );
+        return reply.send({ stopped: result.stopped });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot stop', error);
       }
     },
   );

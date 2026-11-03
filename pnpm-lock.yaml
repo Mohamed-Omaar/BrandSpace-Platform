@@ -345,9 +345,6 @@ importers:
 
   apps/worker:
     dependencies:
-      '@brandspace/ai-gateway':
-        specifier: workspace:*
-        version: link:../../packages/ai-gateway
       '@brandspace/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
@@ -378,9 +375,6 @@ importers:
       '@brandspace/notifications':
         specifier: workspace:*
         version: link:../../packages/notifications
-      '@brandspace/secrets':
-        specifier: workspace:*
-        version: link:../../packages/secrets
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared

@@ -954,4 +954,69 @@ describe('PR B — the one conversation: memory, New topic, search, Clear', () =
     });
     expect(audit?.after).toEqual({ rejectedToolKeys: 'plan.summary' });
   });
+
+  it('Stop mid-turn: no answer is stored and nothing is charged, even though the model answered', async () => {
+    const session = await open();
+    const authorization = await me();
+    const before = await money(fixtures.a.workspaceId);
+    const idempotencyKey = `prb-stop-${crypto.randomUUID()}`;
+    // The model takes a moment to answer; Stop is pressed while it does.
+    adapter.script.push({
+      kind: 'text',
+      text: answer('An answer nobody waited for.'),
+      delayMs: 400,
+    });
+    const turn = CopilotOrchestrator.turnWith((fn) => inA((db) => fn(orchestratorIn(db))), {
+      sessionId: session.id,
+      request: 'Write a long essay about our brand.',
+      authorization,
+      planKey: null,
+      idempotencyKey,
+      expiresAt: null,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const stopped = await inA((db) =>
+      orchestratorIn(db).stopTurn({ authorization, sessionId: session.id, idempotencyKey }),
+    );
+    expect(stopped).toEqual({ stopped: true });
+    await expect(turn).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    const after = await money(fixtures.a.workspaceId);
+    expect(after.charges).toBe(before.charges);
+    expect(after.balance).toBe(before.balance);
+    expect(after.reserved).toBe(before.reserved);
+    const rows = await platform.copilotMessage.findMany({
+      where: { sessionId: session.id, idempotencyKey: { startsWith: idempotencyKey } },
+      select: { role: true, status: true },
+    });
+    expect(rows).toEqual([{ role: 'USER', status: 'stopped' }]);
+    const audit = await platform.auditEvent.count({
+      where: { action: 'copilot.turn_stopped', resourceId: session.id },
+    });
+    expect(audit).toBeGreaterThan(0);
+    // Stop on a turn that already finished changes nothing.
+    await say('Hello again.');
+    const late = await inA((db) =>
+      orchestratorIn(db).stopTurn({
+        authorization,
+        sessionId: session.id,
+        idempotencyKey: 'no-such-turn-key',
+      }),
+    );
+    expect(late).toEqual({ stopped: false });
+  });
+
+  it('a stopped turn of another person, or another workspace, cannot be stopped from here', async () => {
+    const session = await open();
+    const authorization = await me();
+    await expect(
+      inWs(fixtures.b.workspaceId, (db) =>
+        orchestratorIn(db, fixtures.b.workspaceId).stopTurn({
+          authorization,
+          sessionId: session.id,
+          idempotencyKey: 'any-key-at-all',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
 });

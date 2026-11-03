@@ -23,6 +23,7 @@ import {
   normalizedFact,
   type ExtractedText,
   type ExtractionFailureReason,
+  type CandidateFact,
   type FactExtractor,
 } from './extraction';
 import { buildStorageKey, checksumOf, type ObjectStore } from './storage';
@@ -789,111 +790,7 @@ export class BrandIngestionService {
         minimumConfidenceMilli: this.#policy.minimumCandidateConfidenceMilli,
       });
 
-      // Only PENDING candidates are cleared. A reviewed one is a decision.
-      await this.#db.brandKnowledgeCandidate.deleteMany({
-        where: { sourceDocumentId: started.documentId, status: 'PENDING' },
-      });
-
-      const storedChunks = await this.#db.brandSourceChunk.findMany({
-        where: { sourceDocumentId: started.documentId },
-        select: { id: true, chunkIndex: true },
-      });
-      const chunkIdByIndex = new Map(storedChunks.map((c) => [c.chunkIndex, c.id]));
-
-      /*
-       * PR B (D-591) — A FACT THE BRAND ALREADY HAS IS LINKED, NOT ADDED.
-       * Compared after normalising (no list marker, case, punctuation or extra
-       * space). The new file is recorded as another place the fact was found:
-       * a candidate already SUPERSEDED, pointing at the fact, so Sources still
-       * counts it for this file and nothing new waits in the review queue.
-       */
-      const known = await this.#db.brandKnowledgeItem.findMany({
-        where: { brandId: started.brandId, status: { in: ['ACTIVE', 'STALE'] } },
-        select: { id: true, body: true },
-      });
-      const knownByText = new Map<string, string>();
-      for (const item of known) {
-        for (const text of Object.values((item.body ?? {}) as Record<string, unknown>)) {
-          if (typeof text === 'string' && text.trim())
-            knownByText.set(normalizedFact(text), item.id);
-        }
-      }
-      const seen = new Set<string>();
-
-      let created = 0;
-      let linked = 0;
-      for (const fact of facts) {
-        const texts = Object.values(fact.body as Record<string, unknown>).filter(
-          (text): text is string => typeof text === 'string' && text.trim().length > 0,
-        );
-        const normal = texts.map(normalizedFact);
-        // The same sentence twice in one file is one fact.
-        if (normal.some((text) => seen.has(text))) continue;
-        for (const text of normal) seen.add(text);
-        const duplicateOf = normal.map((text) => knownByText.get(text)).find(Boolean);
-        // A candidate whose key already has a REVIEWED candidate would
-        // re-propose something a human settled. Skipped rather than re-raised.
-        // This is also why Read again never duplicates approved knowledge: a
-        // key this document already had ACCEPTED is not proposed again.
-        const settled = await this.#db.brandKnowledgeCandidate.findFirst({
-          where: {
-            brandId: started.brandId,
-            sourceDocumentId: started.documentId,
-            itemKey: fact.itemKey,
-            status: { in: ['ACCEPTED', 'EDITED_ACCEPTED', 'REJECTED'] },
-          },
-        });
-        if (settled) continue;
-
-        if (duplicateOf) {
-          await this.#db.brandKnowledgeCandidate.create({
-            data: {
-              workspaceId: this.#workspaceId,
-              brandId: started.brandId,
-              sourceDocumentId: started.documentId,
-              targetItemId: duplicateOf,
-              area: fact.area,
-              itemKey: fact.itemKey,
-              extractedTitle: fact.title as Prisma.InputJsonValue,
-              extractedBody: fact.body as Prisma.InputJsonValue,
-              confidenceMilli: fact.confidenceMilli,
-              evidence: [] as Prisma.InputJsonValue,
-              status: 'SUPERSEDED',
-              reviewReason: DUPLICATE_OF_EXISTING,
-            },
-          });
-          linked += 1;
-          continue;
-        }
-
-        const existing = await this.#db.brandKnowledgeItem.findFirst({
-          where: { brandId: started.brandId, area: fact.area, itemKey: fact.itemKey },
-        });
-
-        await this.#db.brandKnowledgeCandidate.create({
-          data: {
-            workspaceId: this.#workspaceId,
-            brandId: started.brandId,
-            sourceDocumentId: started.documentId,
-            ...(existing ? { targetItemId: existing.id } : {}),
-            area: fact.area,
-            itemKey: fact.itemKey,
-            extractedTitle: fact.title as Prisma.InputJsonValue,
-            extractedBody: fact.body as Prisma.InputJsonValue,
-            confidenceMilli: fact.confidenceMilli,
-            evidence: fact.evidence.map((e) => ({
-              chunkId: chunkIdByIndex.get(e.chunkIndex) ?? null,
-              locator: e.locator,
-              quote: e.quote,
-              // D4 (Phase 2C): why the confidence is what it is, for the inbox.
-              ...(e.method ? { method: e.method } : {}),
-              ...(e.keywordHits !== undefined ? { keywordHits: e.keywordHits } : {}),
-              ...(e.aimedArea !== undefined ? { aimedArea: e.aimedArea } : {}),
-            })) as Prisma.InputJsonValue,
-          },
-        });
-        created += 1;
-      }
+      const { created, linked } = await this.#storeCandidates(started, facts);
 
       await this.#db.brandIngestionJob.update({
         where: { id: started.jobId },
@@ -948,6 +845,186 @@ export class BrandIngestionService {
         started.attempt >= started.maxAttempts,
       );
     }
+  }
+
+  /**
+   * The PENDING candidates of one source, replaced by `facts`: a reviewed
+   * candidate is a decision and stays; a fact the brand already has is linked
+   * (PR B, D-591). Shared by the worker's read and `reExtract`.
+   */
+  async #storeCandidates(
+    target: { readonly documentId: string; readonly brandId: string },
+    facts: readonly CandidateFact[],
+  ): Promise<{ readonly created: number; readonly linked: number }> {
+    // Only PENDING candidates are cleared. A reviewed one is a decision.
+    await this.#db.brandKnowledgeCandidate.deleteMany({
+      where: { sourceDocumentId: target.documentId, status: 'PENDING' },
+    });
+
+    const storedChunks = await this.#db.brandSourceChunk.findMany({
+      where: { sourceDocumentId: target.documentId },
+      select: { id: true, chunkIndex: true },
+    });
+    const chunkIdByIndex = new Map(storedChunks.map((c) => [c.chunkIndex, c.id]));
+
+    /*
+     * PR B (D-591) — A FACT THE BRAND ALREADY HAS IS LINKED, NOT ADDED.
+     * Compared after normalising (no list marker, case, punctuation or extra
+     * space). The new file is recorded as another place the fact was found:
+     * a candidate already SUPERSEDED, pointing at the fact, so Sources still
+     * counts it for this file and nothing new waits in the review queue.
+     */
+    const known = await this.#db.brandKnowledgeItem.findMany({
+      where: { brandId: target.brandId, status: { in: ['ACTIVE', 'STALE'] } },
+      select: { id: true, body: true },
+    });
+    const knownByText = new Map<string, string>();
+    for (const item of known) {
+      for (const text of Object.values((item.body ?? {}) as Record<string, unknown>)) {
+        if (typeof text === 'string' && text.trim()) knownByText.set(normalizedFact(text), item.id);
+      }
+    }
+    const seen = new Set<string>();
+
+    let created = 0;
+    let linked = 0;
+    for (const fact of facts) {
+      const texts = Object.values(fact.body as Record<string, unknown>).filter(
+        (text): text is string => typeof text === 'string' && text.trim().length > 0,
+      );
+      const normal = texts.map(normalizedFact);
+      // The same sentence twice in one file is one fact.
+      if (normal.some((text) => seen.has(text))) continue;
+      for (const text of normal) seen.add(text);
+      const duplicateOf = normal.map((text) => knownByText.get(text)).find(Boolean);
+      // A candidate whose key already has a REVIEWED candidate would
+      // re-propose something a human settled. Skipped rather than re-raised.
+      // This is also why Read again never duplicates approved knowledge: a
+      // key this document already had ACCEPTED is not proposed again.
+      const settled = await this.#db.brandKnowledgeCandidate.findFirst({
+        where: {
+          brandId: target.brandId,
+          sourceDocumentId: target.documentId,
+          itemKey: fact.itemKey,
+          status: { in: ['ACCEPTED', 'EDITED_ACCEPTED', 'REJECTED'] },
+        },
+      });
+      if (settled) continue;
+
+      if (duplicateOf) {
+        await this.#db.brandKnowledgeCandidate.create({
+          data: {
+            workspaceId: this.#workspaceId,
+            brandId: target.brandId,
+            sourceDocumentId: target.documentId,
+            targetItemId: duplicateOf,
+            area: fact.area,
+            itemKey: fact.itemKey,
+            extractedTitle: fact.title as Prisma.InputJsonValue,
+            extractedBody: fact.body as Prisma.InputJsonValue,
+            confidenceMilli: fact.confidenceMilli,
+            evidence: [] as Prisma.InputJsonValue,
+            status: 'SUPERSEDED',
+            reviewReason: DUPLICATE_OF_EXISTING,
+          },
+        });
+        linked += 1;
+        continue;
+      }
+
+      const existing = await this.#db.brandKnowledgeItem.findFirst({
+        where: { brandId: target.brandId, area: fact.area, itemKey: fact.itemKey },
+      });
+
+      await this.#db.brandKnowledgeCandidate.create({
+        data: {
+          workspaceId: this.#workspaceId,
+          brandId: target.brandId,
+          sourceDocumentId: target.documentId,
+          ...(existing ? { targetItemId: existing.id } : {}),
+          area: fact.area,
+          itemKey: fact.itemKey,
+          extractedTitle: fact.title as Prisma.InputJsonValue,
+          extractedBody: fact.body as Prisma.InputJsonValue,
+          confidenceMilli: fact.confidenceMilli,
+          evidence: fact.evidence.map((e) => ({
+            chunkId: chunkIdByIndex.get(e.chunkIndex) ?? null,
+            locator: e.locator,
+            quote: e.quote,
+            // D4 (Phase 2C): why the confidence is what it is, for the inbox.
+            ...(e.method ? { method: e.method } : {}),
+            ...(e.keywordHits !== undefined ? { keywordHits: e.keywordHits } : {}),
+            ...(e.aimedArea !== undefined ? { aimedArea: e.aimedArea } : {}),
+          })) as Prisma.InputJsonValue,
+        },
+      });
+      created += 1;
+    }
+    return { created, linked };
+  }
+
+  /**
+   * PR B (D-591) — READ A SOURCE WHOLE WITH `brand.extract`, AFTER the worker's
+   * read: the API, which holds the AI gateway (F-07: a worker may not), calls
+   * `ModelFactExtractor.prepare` outside any transaction and then this, which
+   * replaces the source's PENDING keyword candidates with the model's and
+   * records the AI request on its job. Nothing prepared (unavailable, failed),
+   * nothing changes. A source already read by the model is not read again.
+   */
+  async reExtract(input: {
+    readonly documentId: string;
+    readonly actorBrandScope: readonly string[];
+    readonly extractor: FactExtractor & { readonly requestId: string | null };
+  }): Promise<{ readonly created: number; readonly linked: number } | null> {
+    if (!input.extractor.requestId) return null;
+    const document = await this.#db.brandSourceDocument.findFirst({
+      where: {
+        id: input.documentId,
+        status: 'READY',
+        deletedAt: null,
+        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+      },
+      select: { id: true, brandId: true, targetArea: true },
+    });
+    if (!document) return null;
+    const rows = await this.#db.brandSourceChunk.findMany({
+      where: { sourceDocumentId: document.id },
+      orderBy: { chunkIndex: 'asc' },
+      select: { chunkIndex: true, text: true, locator: true },
+    });
+    const facts = await input.extractor.extract({
+      chunks: rows.map((row) => ({
+        index: row.chunkIndex,
+        text: row.text,
+        locator: String(row.locator ?? ''),
+      })) as never,
+      targetArea: document.targetArea,
+      minimumConfidenceMilli: this.#policy.minimumCandidateConfidenceMilli,
+    });
+    const stored = await this.#storeCandidates(
+      { documentId: document.id, brandId: document.brandId },
+      facts,
+    );
+    const job = await this.#db.brandIngestionJob.findFirst({
+      where: { sourceDocumentId: document.id },
+      orderBy: { queuedAt: 'desc' },
+      select: { id: true },
+    });
+    if (job) {
+      await this.#db.brandIngestionJob.update({
+        where: { id: job.id },
+        data: { aiRequestId: input.extractor.requestId, candidatesCreated: stored.created },
+      });
+    }
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'brand_brain.source.read_whole',
+      actorType: 'SYSTEM',
+      resourceType: 'BrandSourceDocument',
+      resourceId: document.id,
+      brandId: document.brandId,
+      after: { candidates: stored.created, linkedToExisting: stored.linked },
+    });
+    return stored;
   }
 
   /**
