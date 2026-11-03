@@ -69,8 +69,19 @@ export function getSecretService(): SecretService {
   return new SecretService({ prisma: getPlatformPrisma() });
 }
 
+/*
+ * PERF A (#4) — ONE CONFIGURATION SERVICE PER CONTROL CENTER PROCESS, so its
+ * own 30 s cache of ACTIVE documents (`ConfigurationService.get`) lasts beyond
+ * one call. It held a fresh, empty cache on every call before. An activation
+ * or rollback through it clears that document at once in this process; another
+ * Control Center process sees it within 30 s. Drafts, versions and history are
+ * never cached, and no session, role or permission is held here.
+ */
+let configService: ConfigurationService | null = null;
+
 export function getConfigService(): ConfigurationService {
-  return new ConfigurationService({ prisma: getPlatformPrisma() });
+  configService ??= new ConfigurationService({ prisma: getPlatformPrisma() });
+  return configService;
 }
 
 /**

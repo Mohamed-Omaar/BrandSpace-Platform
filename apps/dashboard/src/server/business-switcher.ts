@@ -1,4 +1,5 @@
 import 'server-only';
+import { catalogueCache } from './config-cache';
 import { cache } from 'react';
 import {
   TenantCatalogueSource,
@@ -57,23 +58,34 @@ export const businessSwitcherModel = cache(
     const t = translator(requestMessageLocale(locale));
     const plans: readonly PlanDetail[] = await inWorkspace(currentWorkspaceId, async ({ db }) =>
       readPlanCatalogue(
-        await new TenantCatalogueSource(db as unknown as PrismaClient, currentEnvironment()).load(
-          'plans',
-        ),
+        await new TenantCatalogueSource(
+          db as unknown as PrismaClient,
+          currentEnvironment(),
+          catalogueCache,
+        ).load('plans'),
       ),
     ).catch(() => []);
 
-    const subscriptions = new Map<string, string | null>();
-    for (const business of businesses) {
-      const status = await inWorkspace(business.workspaceId, async ({ db }) => {
-        const row = await db.workspaceSubscription.findUnique({
-          where: { workspaceId: business.workspaceId },
-          select: { status: true },
-        });
-        return row?.status ?? null;
-      }).catch(() => null);
-      subscriptions.set(business.workspaceId, status);
-    }
+    // PERF A — each business's subscription is read in that business's own
+    // workspace context (RLS), so they cannot share one query; they no longer
+    // wait for each other.
+    const subscriptions = new Map<string, string | null>(
+      await Promise.all(
+        businesses.map(
+          async (business) =>
+            [
+              business.workspaceId,
+              await inWorkspace(business.workspaceId, async ({ db }) => {
+                const row = await db.workspaceSubscription.findUnique({
+                  where: { workspaceId: business.workspaceId },
+                  select: { status: true },
+                });
+                return row?.status ?? null;
+              }).catch(() => null),
+            ] as const,
+        ),
+      ),
+    );
 
     const planCaption = (planKey: string | null, workspaceId: string): string => {
       const status = subscriptions.get(workspaceId) ?? null;

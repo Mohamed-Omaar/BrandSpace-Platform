@@ -183,13 +183,14 @@ export class ActivityLogService {
       brandScope: input.viewer.brandScope,
     });
     if (scope.kind === 'none') return [];
-    const rows = await this.#db.auditEvent.findMany({
+    const rows = await this.#db.auditEvent.groupBy({
       // The SAME scope predicate the page uses. A filter's options must not be
       // drawn from a wider set than the rows the reader may actually see, or
       // the dropdown becomes a way to enumerate what happened elsewhere.
       where: { workspaceId: this.#workspaceId, AND: [scopeWhere(scope)] },
-      distinct: ['action'],
-      select: { action: true },
+      // PERF A — GROUP BY in the database. Prisma's `distinct` fetched every
+      // matching audit row and de-duplicated them in memory.
+      by: ['action'],
       orderBy: { action: 'asc' },
       take: 200,
     });

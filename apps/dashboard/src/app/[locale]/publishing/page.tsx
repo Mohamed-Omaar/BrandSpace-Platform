@@ -217,9 +217,10 @@ export default async function PublishingPage({
     const approvalRequired = new Map<string, boolean>();
     if (tab === 'failed' && failedJobs.length > 0) {
       const pipeline = await services.pipeline();
-      for (const id of new Set(failedJobs.map((job) => job.brandId))) {
-        approvalRequired.set(id, await pipeline.approvalRequiredFor(id));
-      }
+      // PERF A — each brand's approval policy, read together rather than in turn.
+      const brandIds = [...new Set(failedJobs.map((job) => job.brandId))];
+      const required = await Promise.all(brandIds.map((id) => pipeline.approvalRequiredFor(id)));
+      brandIds.forEach((id, index) => approvalRequired.set(id, required[index] ?? false));
     }
     const latestReview = new Map<string, string>();
     for (const review of reviews) {

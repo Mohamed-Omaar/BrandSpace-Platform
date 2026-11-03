@@ -2574,3 +2574,9 @@ draft alike.
   drawer's geometry); the media drawer's Estimate and Generate buttons are one size.
 - **Waiting states** (spinner, progress bar, elapsed time, waiting buttons) are design-system
   extensions (§4.2), built from existing tokens; the prototype draws none.
+
+### 6.3.80 The still background (D-594)
+
+- **The ambient orbs no longer drift** (the prototype's `@keyframes float`, 16 s, alternate): an
+  owner-authorised deviation for performance. They rest where the drift began, so the first frame
+  is unchanged; reduced motion was already still.

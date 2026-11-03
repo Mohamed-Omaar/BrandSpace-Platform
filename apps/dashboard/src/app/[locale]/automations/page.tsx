@@ -334,57 +334,86 @@ export default async function AutomationsPage({
         select: { id: true, name: true },
       });
       const ruleNames = new Map(ruleRows.map((row) => [row.id, row.name]));
-      for (const run of awaiting) {
-        let contentItemId: string | null = null;
-        if (run.resourceId && run.resourceType === 'ContentItem') contentItemId = run.resourceId;
-        if (run.resourceId && run.resourceType === 'CalendarSlot') {
-          const slot = await db.calendarSlot.findFirst({
-            where: { id: run.resourceId, workspaceId: workspace.workspaceId, ...scoped },
-            select: { contentItemId: true },
-          });
-          contentItemId = slot?.contentItemId ?? null;
-        }
-        if (run.resourceId && run.resourceType === 'PublishJob') {
-          const job = await db.publishJob.findFirst({
-            where: { id: run.resourceId, workspaceId: workspace.workspaceId, ...scoped },
-            select: { contentItemId: true },
-          });
-          contentItemId = job?.contentItemId ?? null;
-        }
+      /*
+       * PERF A — ONE QUERY PER KIND OF RESOURCE, not one or two per run. The
+       * same rows under the same predicates as before (the workspace, and the
+       * member's brand scope wherever it applied), read once for every run.
+       */
+      const idsOf = (type: string) => [
+        ...new Set(
+          awaiting
+            .filter((run) => run.resourceId && run.resourceType === type)
+            .map((run) => run.resourceId as string),
+        ),
+      ];
+      const [slots, jobs, attempts, campaigns] = await Promise.all([
+        db.calendarSlot.findMany({
+          where: {
+            id: { in: idsOf('CalendarSlot') },
+            workspaceId: workspace.workspaceId,
+            ...scoped,
+          },
+          select: { id: true, contentItemId: true },
+        }),
+        db.publishJob.findMany({
+          where: { id: { in: idsOf('PublishJob') }, workspaceId: workspace.workspaceId, ...scoped },
+          select: { id: true, contentItemId: true },
+        }),
         // Phase 2B-3 PR 5 — a retry request names the failed attempt; its post
         // is read through the attempt's job, under the same scope.
-        if (run.resourceId && run.resourceType === 'PublishAttempt') {
-          const attempt = await db.publishAttempt.findFirst({
-            where: { id: run.resourceId, workspaceId: workspace.workspaceId },
-            select: { publishJobId: true },
-          });
-          const job = attempt
-            ? await db.publishJob.findFirst({
-                where: { id: attempt.publishJobId, workspaceId: workspace.workspaceId, ...scoped },
-                select: { contentItemId: true },
-              })
-            : null;
-          contentItemId = job?.contentItemId ?? null;
-        }
+        db.publishAttempt.findMany({
+          where: { id: { in: idsOf('PublishAttempt') }, workspaceId: workspace.workspaceId },
+          select: { id: true, publishJobId: true },
+        }),
         // …and a pause request names its campaign.
+        db.campaign.findMany({
+          where: {
+            id: { in: idsOf('Campaign') },
+            workspaceId: workspace.workspaceId,
+            deletedAt: null,
+            ...scoped,
+          },
+          select: { id: true, name: true },
+        }),
+      ]);
+      const attemptJobs = await db.publishJob.findMany({
+        where: {
+          id: { in: [...new Set(attempts.map((attempt) => attempt.publishJobId))] },
+          workspaceId: workspace.workspaceId,
+          ...scoped,
+        },
+        select: { id: true, contentItemId: true },
+      });
+      const slotItem = new Map(slots.map((row) => [row.id, row.contentItemId]));
+      const jobItem = new Map(
+        [...jobs, ...attemptJobs].map((row) => [row.id, row.contentItemId] as const),
+      );
+      const attemptJob = new Map(attempts.map((row) => [row.id, row.publishJobId]));
+      const campaignName = new Map(campaigns.map((row) => [row.id, row.name]));
+      const itemOf = (run: (typeof awaiting)[number]): string | null => {
+        if (!run.resourceId) return null;
+        if (run.resourceType === 'ContentItem') return run.resourceId;
+        if (run.resourceType === 'CalendarSlot') return slotItem.get(run.resourceId) ?? null;
+        if (run.resourceType === 'PublishJob') return jobItem.get(run.resourceId) ?? null;
+        if (run.resourceType === 'PublishAttempt') {
+          const jobId = attemptJob.get(run.resourceId);
+          return jobId ? (jobItem.get(jobId) ?? null) : null;
+        }
+        return null;
+      };
+      const itemIds = [...new Set(awaiting.map(itemOf).filter((id): id is string => id !== null))];
+      const items = await db.contentItem.findMany({
+        where: { id: { in: itemIds }, workspaceId: workspace.workspaceId, ...scoped },
+        select: { id: true, title: true },
+      });
+      const itemTitle = new Map(items.map((row) => [row.id, row.title]));
+      for (const run of awaiting) {
+        const contentItemId = itemOf(run);
         const campaign =
           run.resourceId && run.resourceType === 'Campaign'
-            ? await db.campaign.findFirst({
-                where: {
-                  id: run.resourceId,
-                  workspaceId: workspace.workspaceId,
-                  deletedAt: null,
-                  ...scoped,
-                },
-                select: { name: true },
-              })
+            ? { name: campaignName.get(run.resourceId) ?? null }
             : null;
-        const item = contentItemId
-          ? await db.contentItem.findFirst({
-              where: { id: contentItemId, workspaceId: workspace.workspaceId, ...scoped },
-              select: { title: true },
-            })
-          : null;
+        const item = contentItemId ? { title: itemTitle.get(contentItemId) ?? null } : null;
         proposals.set(run.id, {
           rule: ruleNames.get(run.ruleId) ?? null,
           content: item?.title ?? null,

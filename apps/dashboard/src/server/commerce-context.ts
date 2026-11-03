@@ -1,4 +1,5 @@
 import 'server-only';
+import { catalogueCache } from './config-cache';
 import {
   InvoiceService,
   SubscriptionLifecycleService,
@@ -74,7 +75,11 @@ export async function commerceSnapshotFor(workspaceId: string): Promise<Commerce
     ]);
 
     const policy = await new TenantCommercePolicySource(db, currentEnvironment()).load();
-    const catalogue = await new TenantCatalogueSource(scoped, currentEnvironment()).load('plans');
+    const catalogue = await new TenantCatalogueSource(
+      scoped,
+      currentEnvironment(),
+      catalogueCache,
+    ).load('plans');
     const plans = readPlanCatalogue(catalogue);
 
     // The BILLING country decides the market and the tax rule; the workspace
