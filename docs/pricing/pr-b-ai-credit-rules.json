@@ -1,0 +1,128 @@
+{
+  "unit": "milli-credits",
+  "costs": [
+    {
+      "taskKey": "caption.generate",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "caption.generate",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "ideas.generate",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "ideas.generate",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "analytics.explain",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "analytics.explain",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "content.translate",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 1000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "content.translate",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 1000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "copilot.chat",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 1000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "copilot.chat",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 1000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "strategy.generate",
+      "modelKey": "gpt-6.1-sol",
+      "baseMilliCredits": 12000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "strategy.generate",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 12000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "plan.monthly",
+      "modelKey": "gpt-6.1-sol",
+      "baseMilliCredits": 12000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "plan.monthly",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 12000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "image.generate",
+      "modelKey": "gpt-image-2",
+      "baseMilliCredits": 60000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "brand.extract",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 3000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    },
+    {
+      "taskKey": "brand.extract",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 3000,
+      "perUnitMilliCredits": 0,
+      "unit": "request"
+    }
+  ],
+  "targetGrossMarginPercent": 65,
+  "minimumGrossMarginPercent": 0,
+  "creditValueMicroMinor": 1000000,
+  "referenceCurrency": "USD"
+}

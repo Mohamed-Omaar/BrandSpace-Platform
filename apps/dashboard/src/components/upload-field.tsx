@@ -120,7 +120,7 @@ function useUpload(): UploadState {
  * JSON (`{ location }` or `{ ok, reason }`); rejects when the request never
  * completed, which the form shows as the connection message.
  */
-function sendWithProgress(
+export function sendWithProgress(
   kind: UploadRelayKind,
   data: FormData,
   onProgress: (percent: number) => void,

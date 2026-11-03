@@ -196,7 +196,7 @@ describe('D-566 · the AI apps migration', () => {
   });
 
   it('comes directly after connectors B; only its D-112 fix (D-568) and the D-573 ceiling follow', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-10)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-11)).toEqual([
       '20261022092000_publish_job_handle_lookup_index',
       NAME,
       '20261023091000_ai_app_token_replaced_scoped',
@@ -212,6 +212,8 @@ describe('D-566 · the AI apps migration', () => {
       '20261103090000_calendar_slot_workspace_status_index',
       '20261103090100_audit_event_workspace_action_index',
       '20261103090200_audit_event_workspace_actor_action_index',
+      // PR B: one Copilot conversation per person per brand (D-594).
+      '20261103120000_one_assistant',
     ]);
   });
 });

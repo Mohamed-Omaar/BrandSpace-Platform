@@ -103,6 +103,11 @@ export function copilotGenerationFailed(customerMessage: string | null): AppErro
   );
 }
 
+/** PR B — the person pressed Stop: no answer, and nothing was charged. */
+export function copilotTurnStopped(): AppError {
+  return new AppError('CONFLICT', 'Stopped. Nothing was charged.', { reason: 'stopped' });
+}
+
 /** The request is longer than the activated ceiling. */
 export function requestTooLong(maxChars: number): AppError {
   return new AppError('VALIDATION_FAILED', 'That message is too long.', { maxChars });

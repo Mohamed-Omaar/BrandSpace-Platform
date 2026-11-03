@@ -252,120 +252,137 @@ test.describe('the open area replaces the grid, keyboard first', () => {
   });
 });
 
-test.describe('Brand Brain chat', () => {
-  test('the panel has a FIXED height and does not grow when a message is sent', async ({
+/*
+ * PR B (D-594) — ONE ASSISTANT. Brand Brain's chat is retired: the orb's
+ * centre, "Ask the brand" and an area's "Ask Copilot" open the Copilot's side
+ * panel on this page. The guarantees the chat's tests held — a fixed panel, a
+ * conversation that scrolls inside itself, a composer that stays reachable,
+ * no internals on screen, the retention line before anything is typed — are
+ * held here, on the Copilot.
+ */
+async function openCopilotFromOrb(page: Page) {
+  await page.getByTestId('orb-center').click();
+  const drawer = page.getByTestId('copilot-drawer');
+  await expect(drawer).toBeVisible();
+  return drawer;
+}
+
+async function askFromBrandBrain(page: Page, question: string) {
+  const drawer = await openCopilotFromOrb(page);
+  await drawer.getByTestId('copilot-request').fill(question);
+  await drawer.getByTestId('copilot-propose').click();
+  await expect
+    .poll(
+      async () =>
+        (await drawer.getByTestId('copilot-answered').count()) +
+        (await drawer.getByTestId('copilot-message-assistant').count()) +
+        (await drawer.getByTestId('copilot-error').count()),
+      { timeout: 30_000 },
+    )
+    .toBeGreaterThan(0);
+  return drawer;
+}
+
+test.describe('Brand Brain asks the Copilot (PR B)', () => {
+  test('there is no chat tab; the orb centre opens the Copilot on Brand Brain, with its three chips', async ({
     page,
   }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
+    await expect(page.getByTestId('tab-chat')).toHaveCount(0);
+    await expect(page.getByTestId('brand-chat')).toHaveCount(0);
+    const drawer = await openCopilotFromOrb(page);
+    await expect(drawer.getByTestId('copilot-context')).toContainText('Brand Brain');
+    for (const id of ['positioning', 'gaps', 'voice']) {
+      await expect(drawer.getByTestId(`copilot-suggestion-${id}`)).toBeVisible();
+    }
+    await expect(drawer.getByTestId('copilot-open-full')).toBeVisible();
+  });
 
-    // The demo's only chat entry point is the orb's centre, and the port keeps
-    // it that way (D-85). There is no separate floating "open chat" button.
-    const opener = page.getByTestId('orb-center');
-    if (!(await opener.isVisible().catch(() => false))) test.skip();
-    await opener.click();
-
-    const panel = page.getByTestId('brand-chat');
-    await expect(panel).toBeVisible();
-    const before = await panel.boundingBox();
-
-    await page.fill('[data-testid="chat-input"]', 'What is our tone of voice?');
-    await page.getByTestId('chat-send').click();
-    // Whatever the answer is — a real one, an insufficient-knowledge refusal or
-    // an error — the panel must be the same size afterwards. This is the
-    // failure the brief names by name.
-    await page.waitForTimeout(1500);
-
-    const after = await panel.boundingBox();
-    expect(Math.abs((after?.height ?? 0) - (before?.height ?? 0))).toBeLessThan(2);
+  test('the panel stays inside the window when a message is sent, its composer reachable (D-592)', async ({
+    page,
+  }) => {
+    // The retired chat card had a fixed height. The Copilot side panel is as
+    // tall as its content, capped at the window (D-592, #112): whatever is
+    // sent, it never runs past the window and Send stays on screen.
+    await openBrandBrain(page);
+    await ensureBrand(page);
+    const drawer = await openCopilotFromOrb(page);
+    for (const question of [
+      `What is our tone of voice? (${Date.now()})`,
+      `And our positioning? (${Date.now()})`,
+    ]) {
+      const answered = await drawer.getByTestId('copilot-message-assistant').count();
+      await expect
+        .poll(
+          async () => {
+            await drawer.getByTestId('copilot-request').fill(question);
+            return drawer.getByTestId('copilot-propose').isEnabled();
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(true);
+      await drawer.getByTestId('copilot-propose').click();
+      await expect
+        .poll(async () => drawer.getByTestId('copilot-message-assistant').count(), {
+          timeout: 30_000,
+        })
+        .toBeGreaterThan(answered);
+    }
+    const viewport = page.viewportSize();
+    const panel = await drawer.boundingBox();
+    expect((panel?.y ?? 0) + (panel?.height ?? 0)).toBeLessThanOrEqual((viewport?.height ?? 0) + 1);
+    await expect(drawer.getByTestId('copilot-propose')).toBeInViewport();
   });
 
   test('messages scroll INSIDE the conversation area', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
-
-    // The demo's only chat entry point is the orb's centre, and the port keeps
-    // it that way (D-85). There is no separate floating "open chat" button.
-    const opener = page.getByTestId('orb-center');
-    if (!(await opener.isVisible().catch(() => false))) test.skip();
-    await opener.click();
-    await expect(page.getByTestId('brand-chat')).toBeVisible();
-
-    // The list is its own scroller: it clips its content rather than pushing
-    // the composer down.
-    const overflow = await page
-      .getByTestId('chat-messages')
-      .evaluate((el) => getComputedStyle(el).overflowY);
-    expect(['auto', 'scroll']).toContain(overflow);
+    const drawer = await openCopilotFromOrb(page);
+    // The conversation scrolls inside the panel: the list itself or the
+    // panel body around it is the scroller, never the page.
+    const scrolls = await drawer.getByTestId('copilot-conversation').evaluate((el) => {
+      for (let node: Element | null = el; node; node = node.parentElement) {
+        if (['auto', 'scroll'].includes(getComputedStyle(node).overflowY)) {
+          return node.closest('[data-testid="copilot-drawer"]') !== null;
+        }
+      }
+      return false;
+    });
+    expect(scrolls).toBe(true);
   });
 
   test('the composer stays visible and reachable', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
-
-    // The demo's only chat entry point is the orb's centre, and the port keeps
-    // it that way (D-85). There is no separate floating "open chat" button.
-    const opener = page.getByTestId('orb-center');
-    if (!(await opener.isVisible().catch(() => false))) test.skip();
-    await opener.click();
-
-    const composer = page.getByTestId('chat-input');
+    const drawer = await openCopilotFromOrb(page);
+    const composer = drawer.getByTestId('copilot-request');
     await expect(composer).toBeVisible();
     await composer.focus();
     await expect(composer).toBeFocused();
-
-    // The demo's composer is a SINGLE-LINE input inside a fixed pill, so a long
-    // draft scrolls the field rather than growing the panel and pushing the send
-    // button out of it.
     await composer.fill('line '.repeat(60));
     const height = await composer.evaluate((el) => el.getBoundingClientRect().height);
     expect(height).toBeLessThanOrEqual(130);
-    await expect(page.getByTestId('chat-send')).toBeVisible();
+    await expect(drawer.getByTestId('copilot-propose')).toBeVisible();
   });
 
   test('an answer is grounded or honestly refused — never fabricated', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
-
-    // The demo's only chat entry point is the orb's centre, and the port keeps
-    // it that way (D-85). There is no separate floating "open chat" button.
-    const opener = page.getByTestId('orb-center');
-    if (!(await opener.isVisible().catch(() => false))) test.skip();
-    await opener.click();
-
-    await page.fill('[data-testid="chat-input"]', 'What is our refund policy?');
-    await page.getByTestId('chat-send').click();
-    await page.waitForTimeout(2000);
-
-    const panel = page.getByTestId('brand-chat');
-    const text = await panel.innerText();
-
-    /*
-     * NO INTERNALS ON A CUSTOMER SCREEN, whatever the outcome.
-     * docs/SECURITY.md and CLAUDE.md §10: never a provider, a model key, a
-     * prompt or an infrastructure detail.
-     */
-    expect(text.toLowerCase()).not.toContain('mock');
-    expect(text.toLowerCase()).not.toContain('provider');
-    expect(text.toLowerCase()).not.toContain('api key');
-    expect(text.toLowerCase()).not.toContain('system prompt');
-    expect(text).not.toMatch(/sk-[A-Za-z0-9]/);
+    const drawer = await askFromBrandBrain(page, 'What is our refund policy?');
+    const text = (await drawer.innerText()).toLowerCase();
+    expect(text).not.toContain('mock');
+    expect(text).not.toContain('provider');
+    expect(text).not.toContain('api key');
+    expect(text).not.toContain('system prompt');
+    expect(text).not.toMatch(/sk-[a-z0-9]/);
   });
 
   test('the retention notice is shown BEFORE anything is persisted', async ({ page }) => {
-    // D-78 / F-63: the customer-facing notice belongs with the first feature
-    // that turns persistence on, and it has to be visible before they type.
     await openBrandBrain(page);
     await ensureBrand(page);
-
-    // The demo's only chat entry point is the orb's centre, and the port keeps
-    // it that way (D-85). There is no separate floating "open chat" button.
-    const opener = page.getByTestId('orb-center');
-    if (!(await opener.isVisible().catch(() => false))) test.skip();
-    await opener.click();
-
-    const panel = page.getByTestId('brand-chat');
-    await expect(panel).toContainText(/kept for \d+ days|تُحفظ/);
+    const drawer = await openCopilotFromOrb(page);
+    await expect(drawer.getByTestId('copilot-retention')).toContainText(/Kept for \d+ days/);
   });
 });
 
@@ -522,118 +539,46 @@ test.describe('accessibility', () => {
   });
 });
 
-test.describe('chat answers, in development, without a real provider', () => {
+test.describe('Copilot answers about the brand, in development, without a real provider', () => {
   /*
-   * WHAT THESE EXIST FOR. Until now Brand Brain chat had never been observed to
-   * produce an answer outside a unit test. The gateway is configuration-driven
-   * — no active routing rule for `copilot.chat` means `RoutingError`, a 500,
-   * and the generic red failure on the panel — and nothing had ever activated
-   * one outside the isolation suite's in-memory configuration.
-   *
-   * `pnpm e2e:seed` now activates a MOCK routing rule through the real
-   * Configuration Service, with no validation relaxed and no real provider
-   * chosen (tests/e2e/seed-ai.ts explains what it is and is not). So both
-   * outcomes the product promises are now reachable here, and both are asserted:
-   * an honest refusal when there is nothing to ground on, and a grounded answer
-   * with citations when there is.
+   * PR B — the retired chat's two promised outcomes, on the Copilot: an
+   * honest "Brand Brain doesn't have that yet" when nothing grounds the
+   * question, and a grounded answer naming the areas its facts came from
+   * (`copilot-brand-areas`, from retrieval, never from the model's text).
    */
-
   test('an empty Brand Brain refuses honestly rather than failing', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
-
-    await page.getByTestId('orb-center').click();
-    const panel = page.getByTestId('brand-chat');
-    await expect(panel).toBeVisible();
-
-    await page.fill('[data-testid="chat-input"]', 'What is our refund policy?');
-    await page.getByTestId('chat-send').click();
-
-    // Either outcome is correct here — it depends on what previous tests in
-    // this file have already added to the workspace — but the generic failure
-    // is not one of them, and neither is a silent empty panel.
-    await expect(
-      /*
-       * `.first()` IS LOAD-BEARING. The insufficient-evidence notice renders as a
-       * <span> INSIDE the assistant <article>, so when the brain answers with a
-       * refusal both test ids match and Playwright's strict mode fails the run
-       * on ambiguity rather than on the assertion. Either match satisfies this
-       * test, so take the first.
-       */
-      panel
-        .getByTestId('chat-insufficient')
-        .or(panel.getByTestId('chat-message-assistant'))
-        .first(),
-    ).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId('chat-error')).toBeHidden();
+    const drawer = await askFromBrandBrain(page, 'What is our refund policy?');
+    await expect(drawer.getByTestId('copilot-error')).toHaveCount(0);
+    await expect(drawer.getByTestId('copilot-message-assistant').last()).not.toHaveText('');
   });
 
-  test('an answer is grounded in approved knowledge and cites it', async ({ page }) => {
+  test('an answer is grounded in approved knowledge and names its areas', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
-
-    /*
-     * A UNIQUE KEY PER RUN, not `positioning`.
-     *
-     * `itemKey` is unique per area, so reusing one leaves the item from an
-     * earlier run in place and the assertion below would pass on THAT run's
-     * marker — a test that verifies its own history rather than this run's
-     * answer.
-     */
-    const marker = `Kestrel Provisioning ${Date.now()}`;
+    // One word no earlier run used, asked on its own, so retrieval ranks this
+    // run's fact first whatever earlier runs left behind.
+    const marker = `Kestrel${Date.now().toString(36)}`;
     await addKnowledge(
       page,
       'IDENTITY',
       `positioning-${Date.now()}`,
       `Our positioning is ${marker}. We help independent retailers compete with national chains.`,
     );
-
-    await page.getByTestId('orb-center').click();
-    const panel = page.getByTestId('brand-chat');
-    await expect(panel).toBeVisible();
-
-    /*
-     * ASK ABOUT THE MARKER, not about "positioning" in general.
-     *
-     * Earlier runs leave their own positioning items behind, and retrieval
-     * ranks by overlap with the question — so a generic question can fill its
-     * context with three identical older facts and never reach this run's.
-     * Asking about the marker makes the assertion about THIS run.
-     */
-    await page.fill('[data-testid="chat-input"]', `What does ${marker} mean for our brand?`);
-    await page.getByTestId('chat-send').click();
-
-    const answer = panel.getByTestId('chat-message-assistant').last();
-    await expect(answer).toBeVisible({ timeout: 20_000 });
-
-    // GROUNDED: the answer contains the fact the workspace approved seconds
-    // ago, which no fixture and no placeholder vocabulary could produce.
-    await expect(answer).toContainText(marker, { timeout: 20_000 });
-    // CITED: the citation list is built from retrieval, never parsed out of
-    // the model's text, so its presence is evidence the retrieval ran.
-    await expect(panel.getByTestId('chat-citations').last()).toBeVisible();
-    await expect(page.getByTestId('chat-error')).toBeHidden();
+    const drawer = await askFromBrandBrain(page, `${marker}?`);
+    await expect(drawer.getByTestId('copilot-message-assistant').last()).toContainText(marker, {
+      timeout: 20_000,
+    });
+    await expect(drawer.getByTestId('copilot-brand-areas')).toBeVisible();
+    await expect(drawer.getByTestId('copilot-error')).toHaveCount(0);
   });
 
   test('the answer carries no trace of how it was produced', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
-
-    await page.getByTestId('orb-center').click();
-    await expect(page.getByTestId('brand-chat')).toBeVisible();
-    await page.fill('[data-testid="chat-input"]', 'What do we sell?');
-    await page.getByTestId('chat-send').click();
-    await expect(
-      page.getByTestId('chat-insufficient').or(page.getByTestId('chat-message-assistant')).first(),
-    ).toBeVisible({ timeout: 20_000 });
-
-    /*
-     * NO INTERNALS ON A CUSTOMER SCREEN. This is the assertion the mock's
-     * placeholder output would fail — "[mock:mock-fast] placeholder sample" —
-     * which is exactly why the development answer is composed from the
-     * workspace's own approved knowledge instead.
-     */
-    const text = (await page.getByTestId('brand-chat').innerText()).toLowerCase();
+    const drawer = await askFromBrandBrain(page, 'What do we sell?');
+    const text = (await drawer.innerText()).toLowerCase();
     expect(text).not.toContain('mock');
     expect(text).not.toContain('provider');
     expect(text).not.toContain('api key');

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { formatCredits } from '../../../server/composer-editor';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Banner,
   Button,
@@ -10,8 +10,8 @@ import {
   Card,
   CopilotBody,
   SectionHeader,
-  StateMessage,
   StatusBadge,
+  WorkingStatus,
   colorTokens,
   spacingTokens,
   typographyTokens,
@@ -23,6 +23,8 @@ import {
 import { messages as catalogue, statusMessage, type MessageKey } from '../../../i18n/messages';
 import { type DateFormatterLike, whenFormatter } from '../../../server/prototype-dates';
 import { aiLimitMessage } from '../../../components/ai-limit';
+import { ConversationFoot, ConversationTools } from './conversation-tools';
+import { SourceCard, type SourceCardLabels } from './source-card';
 
 /**
  * THE COPILOT, WIRED TO A REAL PROVIDER FOR THE FIRST TIME.
@@ -47,6 +49,16 @@ import { aiLimitMessage } from '../../../components/ai-limit';
  * unsafe undo — is a decision the server made and this component renders. A
  * client that decided would be a client that could be persuaded otherwise.
  */
+
+/** PR B — one stored entry of the conversation, as `/api/copilot/conversation` returns it. */
+interface HistoryRow {
+  readonly id: string;
+  readonly role: 'USER' | 'ASSISTANT';
+  readonly body: string | null;
+  readonly kind: 'message' | 'topic_break';
+  readonly purged: boolean;
+  readonly createdAt: string;
+}
 
 export interface CopilotBrand {
   readonly id: string;
@@ -75,7 +87,9 @@ interface PlanResponse {
   readonly summary?: { ar: string; en: string };
   /** Phase 2C D9: a brand question while the brand's "Use Brand Brain" is off. */
   /** Phase 2C-3 D8: `brand_brain_missing` — a brand question nothing usable answers. */
-  readonly notice?: 'brand_brain_off' | 'brand_brain_missing' | null;
+  readonly notice?: 'brand_brain_off' | 'brand_brain_missing' | 'permission_denied' | null;
+  /** PR B — the permissions a refused workspace read asked for. */
+  readonly deniedPermissions?: readonly string[];
   /** D8 — the knowledge areas this turn's brand facts came from (retrieval, not the model). */
   readonly brandFactAreas?: readonly string[];
   /** D8 — the key question that would answer it, when one matches. */
@@ -132,11 +146,20 @@ export function CopilotView({
   surface,
   labels,
   creditsLabel,
+  denials = {},
+  sources = null,
+  factsEditable = false,
   subject = null,
   initialRequest = '',
   rateMetricKeys = [],
   panel = null,
+  retentionDays = null,
 }: {
+  /**
+   * PR B — how long the conversation's messages are kept (the Copilot policy's
+   * retention), for the line under the composer. Null draws no line.
+   */
+  readonly retentionDays?: number | null;
   readonly locale: string;
   /**
    * The server's `systemClock.now()`, as ISO: what this client view reads
@@ -157,7 +180,16 @@ export function CopilotView({
     readonly greeting: string;
     /** The field's short placeholder ("Ask or request something…"). */
     readonly placeholder: string;
-    readonly suggestions: readonly { readonly id: string; readonly label: string }[];
+    /**
+     * PR B — a chip may carry the request it puts in the box (`prompt`) when
+     * that differs from what it reads (Brand Brain's three chips, the page's
+     * own question); otherwise its label is the request.
+     */
+    readonly suggestions: readonly {
+      readonly id: string;
+      readonly label: string;
+      readonly prompt?: string;
+    }[];
   } | null;
   /**
    * The metrics stored in parts per mille, from the analytics catalogue on the
@@ -188,6 +220,18 @@ export function CopilotView({
   readonly labels: CopilotLabels;
   /** Omitted where no real balance can be read. Nothing is invented (§2.2). */
   readonly creditsLabel: string | null;
+  /**
+   * PR B (D-594) — the screen's own refusal (E6) per permission this member
+   * lacks, so "show me our billing" is refused in the words Billing uses.
+   */
+  readonly denials?: Readonly<Record<string, string>>;
+  /**
+   * PR B — "+" attaches a file to Brand Brain (the retired chat's attach),
+   * for a member who may upload sources; `review` offers Approve all.
+   */
+  readonly sources?: { readonly review: boolean } | null;
+  /** PR B — the member may edit Brand Brain facts ("Add it now"). */
+  readonly factsEditable?: boolean;
 }) {
   /*
    * THE DICTIONARY IS RESOLVED HERE, FROM THE LOCALE — never handed in as a
@@ -247,6 +291,27 @@ export function CopilotView({
   const [now, setNow] = useState(() => Date.now());
 
   /*
+   * PR B (D-594) — THE ONE CONVERSATION. It is opened as soon as the Copilot
+   * is (free: no model is called), its history is read back — the whole
+   * conversation, grouped by day, with the "New topic" dividers — and read
+   * again after every reply, so what the person sees is what was stored.
+   */
+  const [history, setHistory] = useState<readonly HistoryRow[]>([]);
+  const [search, setSearch] = useState('');
+  const [attached, setAttached] = useState<File | null>(null);
+  const [fileAdded, setFileAdded] = useState(false);
+  // PR B — the turn under way, for Stop; and how many were stopped.
+  const [turn, setTurn] = useState<{ sessionId: string; idempotencyKey: string } | null>(null);
+  const [stops, setStops] = useState(0);
+  const [turnStartedAt, setTurnStartedAt] = useState(0);
+  // PR B — ONE KEY PER PAGE LOAD: a double click replays the turn, while the
+  // same words asked again after a reload or a Clear are a new request (the
+  // gateway's own replay outlives the cleared messages).
+  const [pageNonce] = useState(() => Math.floor(Math.random() * 0x7fffffff).toString(36));
+  const [found, setFound] = useState<readonly HistoryRow[] | null>(null);
+  const [price, setPrice] = useState<string | null>(null);
+
+  /*
    * THE CONFIRMATION WINDOW IS SHOWN CLOSING, NOT DISCOVERED CLOSED. While a
    * plan waits, the clock ticks so the expiry is stated and, once passed, the
    * confirm button stands down with a sentence rather than failing on click.
@@ -283,9 +348,131 @@ export function CopilotView({
     return opened.sessionId;
   };
 
+  const load = useCallback(async (id: string): Promise<void> => {
+    const page = (await post('/api/copilot/conversation', { sessionId: id, limit: 200 })) as {
+      messages?: readonly HistoryRow[];
+    };
+    if (page.messages) {
+      setHistory(page.messages);
+      setMessages([]);
+    }
+    // `post` is stable for the life of the view.
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const id = await openSession();
+      if (id) await load(id);
+    })();
+    // Opened once per view: the brand is fixed for the visit (D-190).
+  }, []);
+
+  // Search inside the conversation, after a pause in typing.
+  useEffect(() => {
+    const query = search.trim();
+    if (query === '' || !sessionId) {
+      setFound(null);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const page = (await post('/api/copilot/conversation', {
+          sessionId,
+          search: query,
+          limit: 100,
+        })) as { messages?: readonly HistoryRow[] };
+        setFound(page.messages ?? []);
+      })();
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [search, sessionId]);
+
+  /*
+   * The price of the message being written, shown beside Send before it is
+   * sent — and, PR B, of the file waiting on its Add card (its reading). No
+   * number is shown while it is being worked out, and none when it cannot be
+   * (a reading priced by the file's size): never a wrong one.
+   */
+  const filePending = attached !== null && !fileAdded;
+  useEffect(() => {
+    const text = request.trim();
+    setPrice(null);
+    if ((text === '' && !filePending) || !sessionId) return undefined;
+    let current = true;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const quote = (await post('/api/copilot/quote', {
+          sessionId,
+          request: text,
+          ...(filePending ? { attachment: 'file' } : {}),
+        })) as { estimateMilli?: string };
+        if (!current) return;
+        setPrice(
+          typeof quote.estimateMilli === 'string'
+            ? t('copilot.messagePrice').replace('{credits}', formatCredits(quote.estimateMilli))
+            : null,
+        );
+      })();
+    }, 600);
+    return () => {
+      current = false;
+      window.clearTimeout(timer);
+    };
+  }, [request, sessionId, filePending]);
+
+  const newTopic = async (): Promise<void> => {
+    if (!sessionId || busy) return;
+    await post('/api/copilot/topic', { sessionId });
+    setPlan(null);
+    await load(sessionId);
+  };
+
+  const clearConversation = async (): Promise<void> => {
+    if (!sessionId || busy) return;
+    await post('/api/copilot/clear', { sessionId });
+    setPlan(null);
+    setExecution(null);
+    setSearch('');
+    await load(sessionId);
+  };
+
+  /** "Today", "Yesterday", or the date, as the reader's locale writes it. */
+  const dayOf = (iso: string): string => {
+    const day = new Date(iso);
+    const today = new Date(serverNow);
+    const key = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (key(day) === key(today)) return t('copilot.today');
+    const yesterday = new Date(today.getTime() - 86_400_000);
+    if (key(day) === key(yesterday)) return t('copilot.yesterday');
+    return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
+      dateStyle: 'medium',
+    }).format(day);
+  };
+
+  const shown: CopilotMessage[] = [];
+  let lastDay = '';
+  for (const row of found ?? history) {
+    const day = dayOf(row.createdAt);
+    if (day !== lastDay) {
+      shown.push({ id: `day-${row.id}`, author: 'assistant', text: day, kind: 'day' });
+      lastDay = day;
+    }
+    shown.push(
+      row.kind === 'topic_break'
+        ? { id: row.id, author: 'user', text: t('copilot.topicBreak'), kind: 'topic_break' }
+        : {
+            id: row.id,
+            author: row.role === 'USER' ? 'user' : 'assistant',
+            text: row.purged ? t('copilot.purged') : (row.body ?? ''),
+          },
+    );
+  }
+  const conversation: readonly CopilotMessage[] = found ? shown : [...shown, ...messages];
+
   const propose = async (): Promise<void> => {
     if (request.trim().length === 0 || busy) return;
     setBusy(true);
+    setTurnStartedAt(Date.now());
     setErrorCode(null);
     setErrorDetails(null);
     setExecution(null);
@@ -298,15 +485,29 @@ export function CopilotView({
         { id: `u-${current.length}`, author: 'user', text: request },
       ]);
 
+      // ONE KEY PER REQUEST TEXT ON THIS PAGE, so a double click replays the
+      // first turn rather than paying for a second. PR B — a stopped turn
+      // moves the counter, so asking again is a new turn.
+      const idempotencyKey = `copilot:${active}:${pageNonce}:${digest(request)}:${stops}`;
+      setTurn({ sessionId: active, idempotencyKey });
       const result = (await post('/api/copilot/turn', {
         sessionId: active,
         // NO brandId. The session owns its brand; see the turn route (P7-R1).
         request,
-        // ONE KEY PER REQUEST TEXT IN THIS CONVERSATION, so a double click
-        // replays the first turn rather than paying for a second.
-        idempotencyKey: `copilot:${active}:${digest(request)}`,
+        idempotencyKey,
       })) as PlanResponse;
 
+      // PR B — STOPPED: no answer, nothing charged, and no error to show.
+      if (
+        result.error?.code === 'CONFLICT' &&
+        (result.error.details as { reason?: unknown } | undefined)?.reason === 'stopped'
+      ) {
+        setMessages((current) => [
+          ...current,
+          { id: `a-${current.length}`, author: 'assistant', text: t('copilot.stopped') },
+        ]);
+        return;
+      }
       if (result.error?.code) {
         // A conversation the server no longer admits (expired, or the brand
         // scope narrowed) is dropped, so the next request opens a fresh one.
@@ -325,11 +526,16 @@ export function CopilotView({
           ? t('copilot.notice.brandBrainOff')
           : result.notice === 'brand_brain_missing'
             ? missingSentence(result.missing ?? null)
-            : result.saveFact
-              ? t('copilot.saveFact.summary')
-              : locale === 'ar'
-                ? result.summary?.ar
-                : result.summary?.en;
+            : result.notice === 'permission_denied'
+              ? [...new Set(result.deniedPermissions ?? [])]
+                  .map((key) => denials[key])
+                  .filter((line): line is string => Boolean(line))
+                  .join(' ') || t('copilot.notice.permissionDenied')
+              : result.saveFact
+                ? t('copilot.saveFact.summary')
+                : locale === 'ar'
+                  ? result.summary?.ar
+                  : result.summary?.en;
       if (summary) {
         setMessages((current) => [
           ...current,
@@ -337,6 +543,7 @@ export function CopilotView({
         ]);
       }
       setRequest('');
+      await load(active);
     } finally {
       setBusy(false);
     }
@@ -465,12 +672,15 @@ export function CopilotView({
         ? 'danger'
         : 'neutral';
 
-  return (
-    <div style={{ display: 'grid', gap: spacingTokens.lg }}>
-      {/*
-       * A REFUSAL IN THE READER'S LANGUAGE, NEVER A MACHINE CODE. A code the
-       * catalogue does not know renders the generic sentence rather than itself.
-       */}
+  /*
+   * PR B (D-594) — EVERY CARD IS A MESSAGE. A refusal, the answer's sources,
+   * a notice, the plan and its result render INSIDE the conversation, after
+   * its messages and above the composer (`CopilotBody`'s `extra`), never in a
+   * box of their own above or below it. A turn that proposes no step is just
+   * the Copilot's reply.
+   */
+  const conversationCards = (
+    <>
       {errorCode ? (
         <Banner tone="error" testId="copilot-error">
           {aiLimitMessage(
@@ -482,30 +692,6 @@ export function CopilotView({
             t('copilot.failed')}
         </Banner>
       ) : null}
-
-      {/*
-        D-304 — ONE ASSISTANT, ONE COMPOSER. This used to be a card with its own
-        "What would you like to get done?" field above the conversation, whose
-        own composer then sat inert beneath it: two places to type one thing.
-        Now the header states what the conversation is about, the plan and its
-        results follow, and the one composer is the conversation's own.
-      */}
-      {panel ? null : (
-        <p
-          data-testid="copilot-context"
-          style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
-        >
-          {t('copilot.contextBrand').replace('{brand}', brand.name)}
-          {surface !== 'general'
-            ? ` · ${t('copilot.contextFrom').replace(
-                '{screen}',
-                tOr(`copilot.surface.${surface}`, surface),
-              )}`
-            : ''}
-          {subject ? ` · ${t('copilot.contextSubject').replace('{subject}', subject.title)}` : ''}
-        </p>
-      )}
-
       {plan && steps.length === 0 ? (
         <div data-testid="copilot-answered" style={{ display: 'grid', gap: spacingTokens.sm }}>
           {/* D8 — where the brand facts in this answer came from. */}
@@ -522,12 +708,32 @@ export function CopilotView({
           ) : null}
           {plan.notice === 'brand_brain_missing' ? (
             <Banner tone="info" testId="copilot-brand-missing">
-              {missingSentence(plan.missing ?? null)}
+              <span className="bsp-st-inline">
+                <span>{missingSentence(plan.missing ?? null)}</span>
+                {/*
+                  PR B — the retired chat's "Add it now": the key question's
+                  own add form in its area (D12's link), for a member who may
+                  edit facts. Nothing is saved until they add it there.
+                */}
+                {plan.missing && factsEditable ? (
+                  <Link
+                    href={`/${locale}/brand-brain?${new URLSearchParams({
+                      brand: brand.id,
+                      area: plan.missing.area,
+                      question: plan.missing.itemKey,
+                    }).toString()}`}
+                    className={buttonClass('neutral', 'sm')}
+                    data-testid="copilot-missing-add"
+                  >
+                    {t('copilot.missingAdd')}
+                  </Link>
+                ) : null}
+              </span>
             </Banner>
           ) : null}
           {/*
             D8 — THE COPILOT NEVER SAVES A FACT. A save request becomes this
-            card: a link into Brand Brain's chat, Add mode, prefilled. Nothing
+            card: a link into the Brand Brain area's add form, prefilled. Nothing
             is saved until the person adds it there, with their own permission.
           */}
           {plan.saveFact ? (
@@ -537,7 +743,6 @@ export function CopilotView({
                 <Link
                   href={`/${locale}/brand-brain?${new URLSearchParams({
                     brand: brand.id,
-                    tab: 'chat',
                     mode: 'add',
                     ...(plan.saveFact.area ? { area: plan.saveFact.area } : {}),
                     ...(plan.saveFact.title ? { title: plan.saveFact.title } : {}),
@@ -552,9 +757,6 @@ export function CopilotView({
               </span>
             </Banner>
           ) : null}
-          {plan.notice || plan.saveFact ? null : (
-            <StateMessage kind="no-results" title={t('copilot.planEmpty')} />
-          )}
         </div>
       ) : null}
 
@@ -787,26 +989,82 @@ export function CopilotView({
           ) : null}
         </Card>
       ) : null}
+    </>
+  );
+
+  return (
+    <div
+      className={panel ? undefined : 'bsp-cpp'}
+      data-testid="copilot-view"
+      style={panel ? { display: 'grid', gap: spacingTokens.lg } : undefined}
+    >
+      {/*
+       * A REFUSAL IN THE READER'S LANGUAGE, NEVER A MACHINE CODE. A code the
+       * catalogue does not know renders the generic sentence rather than itself.
+       */}
+
+      {/*
+        D-304 — ONE ASSISTANT, ONE COMPOSER. This used to be a card with its own
+        "What would you like to get done?" field above the conversation, whose
+        own composer then sat inert beneath it: two places to type one thing.
+        Now the header states what the conversation is about, the plan and its
+        results follow, and the one composer is the conversation's own.
+      */}
+      {panel ? null : (
+        <p
+          data-testid="copilot-context"
+          style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+        >
+          {t('copilot.contextBrand').replace('{brand}', brand.name)}
+          {surface !== 'general'
+            ? ` · ${t('copilot.contextFrom').replace(
+                '{screen}',
+                tOr(`copilot.surface.${surface}`, surface),
+              )}`
+            : ''}
+          {subject ? ` · ${t('copilot.contextSubject').replace('{subject}', subject.title)}` : ''}
+        </p>
+      )}
 
       {/*
        * THE APPROVED VISUAL SHELL, carrying the real conversation. It is the same
        * component the design showcase renders; the data behind it is real.
        */}
       <Card>
+        <ConversationTools
+          labels={{
+            search: t('copilot.search'),
+            searchPlaceholder: t('copilot.searchPlaceholder'),
+            newTopic: t('copilot.newTopic'),
+            more: t('copilot.more'),
+            clear: t('copilot.clear'),
+            clearTitle: t('copilot.clearTitle'),
+            clearBody: t('copilot.clearBody'),
+            clearConfirm: t('copilot.clearConfirm'),
+            cancel: t('copilot.cancel'),
+            close: t('copilot.close'),
+          }}
+          search={search}
+          onSearch={setSearch}
+          onNewTopic={() => void newTopic()}
+          onClear={() => void clearConversation()}
+          disabled={busy || !sessionId}
+        />
         <CopilotBody
-          labels={panel ? { ...labels, promptPlaceholder: panel.placeholder } : labels}
+          // PR B — one composer, page and panel: "Message Copilot…".
+          labels={{ ...labels, promptPlaceholder: t('copilot.messagePlaceholder') }}
           state={busy ? 'streaming' : proposedAction ? 'approval' : 'idle'}
           messages={
-            panel
-              ? [{ id: 'copilot-hello', author: 'assistant', text: panel.greeting }, ...messages]
-              : messages
+            panel && conversation.length === 0
+              ? [{ id: 'copilot-hello', author: 'assistant', text: panel.greeting }]
+              : conversation
           }
           {...(panel
             ? {
                 suggestions: panel.suggestions,
                 onSuggestion: (id: string) => {
                   const chosen = panel.suggestions.find((entry) => entry.id === id);
-                  if (chosen && !busy) setRequest(chosen.label);
+                  if (chosen && !busy) setRequest(chosen.prompt ?? chosen.label);
                 },
               }
             : {})}
@@ -817,6 +1075,30 @@ export function CopilotView({
           {...(proposedAction ? { proposedAction } : {})}
           onApprove={() => void confirm()}
           onReject={() => void reject()}
+          extra={
+            <>
+              {conversationCards}
+              {attached && sources ? (
+                <SourceCard
+                  key={`${attached.name}-${attached.lastModified}`}
+                  file={attached}
+                  locale={locale}
+                  brandId={brand.id}
+                  canReview={sources.review}
+                  labels={sourceCardLabels(t)}
+                  onAdded={() => setFileAdded(true)}
+                  onDone={() => setAttached(null)}
+                />
+              ) : null}
+            </>
+          }
+          waiting={
+            <WorkingStatus
+              label={labels.streaming}
+              since={turnStartedAt}
+              testId="copilot-working"
+            />
+          }
           composer={{
             value: request,
             onChange: setRequest,
@@ -825,6 +1107,37 @@ export function CopilotView({
             maxLength: 2_000,
             inputTestId: 'copilot-request',
             submitTestId: 'copilot-propose',
+            ...(sources
+              ? {
+                  attach: {
+                    label: t('copilot.attachFile'),
+                    onFile: (file: File) => {
+                      setFileAdded(false);
+                      setAttached(file);
+                    },
+                  },
+                }
+              : {}),
+            price,
+            ...(turn
+              ? {
+                  onStop: () => {
+                    setStops((count) => count + 1);
+                    void post('/api/copilot/stop', turn);
+                  },
+                  stopLabel: t('copilot.stop'),
+                }
+              : {}),
+            note: (
+              <ConversationFoot
+                price={null}
+                retention={
+                  retentionDays
+                    ? t('copilot.retention').replace('{days}', String(retentionDays))
+                    : null
+                }
+              />
+            ),
           }}
         />
       </Card>
@@ -884,6 +1197,13 @@ function InspectionResults({
     </section>
   );
 }
+
+/** PR B — a connection's status as the integrations screen words it. */
+const CHANNEL_STATUS: Readonly<Record<string, string>> = {
+  ACTIVE: 'active',
+  NEEDS_REAUTH: 'needsReauth',
+  DISABLED: 'disabled',
+};
 
 function InspectionLines({
   call,
@@ -972,8 +1292,110 @@ function InspectionLines({
         );
       }
       break;
+    /*
+     * PR B (D-594) — THE WORKSPACE READS. Every number with its period (or
+     * "as of" for a count now) and the place it was read from, so a figure in
+     * the conversation is always traceable to a screen.
+     */
+    case 'team.list':
+      lines.push(
+        t('copilot.inspection.team', '')
+          .replace('{active}', number.format(Number(result['activeCount'] ?? 0)))
+          .replace('{invited}', number.format(Number(result['invitedCount'] ?? 0))),
+      );
+      for (const member of list('members').slice(0, 20)) {
+        lines.push(
+          `${String(member['name'] ?? '—')} — ${String((member['role'] as Record<string, unknown> | undefined)?.[_locale === 'ar' ? 'ar' : 'en'] ?? member['roleKey'] ?? '')}${member['status'] === 'INVITED' ? ` (${t('copilot.inspection.invited', '')})` : ''}`,
+        );
+      }
+      break;
+    case 'credits.balance':
+      if (typeof result['balanceCredits'] === 'number') {
+        lines.push(
+          t('copilot.inspection.creditsLeft', '').replace(
+            '{credits}',
+            number.format(result['balanceCredits']),
+          ),
+        );
+      }
+      if (typeof result['usedThisPeriodCredits'] === 'number') {
+        lines.push(
+          t('copilot.inspection.creditsUsed', '').replace(
+            '{credits}',
+            number.format(result['usedThisPeriodCredits']),
+          ),
+        );
+      }
+      break;
+    case 'plan.summary':
+      if (typeof result['planKey'] === 'string') {
+        lines.push(
+          t('copilot.inspection.plan', '')
+            .replace(
+              '{plan}',
+              String(
+                (result['planName'] as Record<string, unknown> | null | undefined)?.[
+                  _locale === 'ar' ? 'ar' : 'en'
+                ] ?? result['planKey'],
+              ),
+            )
+            .replace(
+              '{status}',
+              t(`billing.status.${String(result['status'])}`, String(result['status'] ?? '')),
+            ),
+        );
+      }
+      if (typeof result['trialEndsAt'] === 'string' && result['status'] === 'TRIALING') {
+        const at = Date.parse(result['trialEndsAt']);
+        if (!Number.isNaN(at)) {
+          lines.push(
+            t('copilot.inspection.trialEnds', '').replace('{date}', time.format(new Date(at))),
+          );
+        }
+      }
+      break;
+    case 'channels.list':
+      lines.push(
+        t('copilot.inspection.channels', '').replace(
+          '{count}',
+          number.format(Number(result['count'] ?? 0)),
+        ),
+      );
+      for (const channel of list('channels').slice(0, 20)) {
+        lines.push(
+          `${String(channel['name'] ?? '')} — ${t(`integrations.provider.${String(channel['provider']).toLowerCase()}`, String(channel['provider'] ?? ''))} · ${t(`integrations.status.${CHANNEL_STATUS[String(channel['status'])] ?? 'active'}`, String(channel['status'] ?? ''))}`,
+        );
+      }
+      break;
+    case 'notifications.recent':
+      lines.push(
+        t('copilot.inspection.unread', '').replace(
+          '{count}',
+          number.format(Number(result['unreadCount'] ?? 0)),
+        ),
+      );
+      break;
     default:
       break;
+  }
+
+  // PR B — where the numbers came from, and the period they cover.
+  if (typeof result['source'] === 'string' && lines.length > 0) {
+    const period = result['period'] as { from?: unknown; to?: unknown } | null | undefined;
+    const from = typeof period?.from === 'string' ? Date.parse(period.from) : Number.NaN;
+    const to = typeof period?.to === 'string' ? Date.parse(period.to) : Number.NaN;
+    const asOf = typeof result['asOf'] === 'string' ? Date.parse(result['asOf']) : Number.NaN;
+    const source = t(`copilot.source.${result['source']}`, String(result['source']));
+    lines.push(
+      !Number.isNaN(from)
+        ? t('copilot.inspection.sourcePeriod', '')
+            .replace('{source}', source)
+            .replace('{from}', time.format(new Date(from)))
+            .replace('{to}', Number.isNaN(to) ? '—' : time.format(new Date(to)))
+        : t('copilot.inspection.sourceAsOf', '')
+            .replace('{source}', source)
+            .replace('{at}', Number.isNaN(asOf) ? '—' : time.format(new Date(asOf))),
+    );
   }
 
   if (lines.length === 0) {
@@ -1001,4 +1423,35 @@ function digest(value: string): string {
     out = (out * 31 + value.charCodeAt(index)) >>> 0;
   }
   return out.toString(16).padStart(8, '0');
+}
+
+/** PR B — the Add card's words, in the reader's language. */
+function sourceCardLabels(t: (key: MessageKey) => string): SourceCardLabels {
+  return {
+    askTitle: t('copilot.source.askTitle'),
+    askBody: t('copilot.source.askBody'),
+    add: t('copilot.source.add'),
+    notNow: t('copilot.source.notNow'),
+    uploading: t('copilot.source.uploading'),
+    stage: {
+      QUEUED: t('copilot.source.stage.queued'),
+      EXTRACTING: t('copilot.source.stage.reading'),
+      CHUNKING: t('copilot.source.stage.reading'),
+      EXTRACTING_FACTS: t('copilot.source.stage.facts'),
+      COMPLETED: t('copilot.source.stage.facts'),
+      WHOLE: t('copilot.source.stage.whole'),
+    },
+    progressLabel: t('copilot.source.progressLabel'),
+    coverage: t('copilot.source.coverage'),
+    coverageNoSkips: t('copilot.source.coverageNoSkips'),
+    coverageOne: t('copilot.source.coverageOne'),
+    coverageNoSkipsOne: t('copilot.source.coverageNoSkipsOne'),
+    todaysExtraction: t('copilot.source.todays'),
+    approveOrReview: t('copilot.source.approveOrReview'),
+    approveAll: t('copilot.source.approveAll'),
+    review: t('copilot.source.review'),
+    approved: t('copilot.source.approved'),
+    failed: t('copilot.source.failed'),
+    refused: t('copilot.source.refused'),
+  };
 }

@@ -131,6 +131,31 @@ const undoSchema = z.object({ planId: z.string().uuid() });
 
 const cancelSchema = z.object({ planId: z.string().uuid() });
 
+/** PR B — reading the one conversation: a page, older than `before`, or a search. */
+const conversationSchema = z.object({
+  sessionId: z.string().uuid(),
+  before: z.string().datetime().optional(),
+  search: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+/** PR B — the price of the message about to be sent. */
+const quoteSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    request: z.string().max(4_000).default(''),
+    /** PR B — a file waiting to be added (its `brand.extract` reading). */
+    attachment: z.literal('file').optional(),
+  })
+  .refine((body) => body.request.trim() !== '' || body.attachment !== undefined);
+
+/** PR B — "New topic" and "Clear conversation" name only the session. */
+const sessionActionSchema = z.object({ sessionId: z.string().uuid() });
+const stopSchema = z.object({
+  sessionId: z.string().uuid(),
+  idempotencyKey: z.string().min(8).max(200),
+});
+
 /** The automations domain as the Copilot may reach it — see copilot-automation.ts. */
 async function automationPort(db: TenantScopedClient, workspaceId: string) {
   const policy = await new TenantAutomationPolicySource(db, currentEnvironment()).load();
@@ -414,6 +439,187 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
     },
   );
 
+  /*
+   * PR B — THE ONE CONVERSATION: read a page (or search it), start a new topic,
+   * or clear it. Each admits the session exactly as a turn does: this person,
+   * this workspace, their brand scope now — anything else is the same 404.
+   */
+  const conversationRun = async <T>(
+    caller: NonNullable<Awaited<ReturnType<typeof resolveCaller>>>,
+    fn: (orchestrator: CopilotOrchestrator, authorization: LiveAuthorization) => Promise<T>,
+  ): Promise<T> =>
+    withWorkspace(
+      caller.workspaceId,
+      async (db) => {
+        const policy = await new TenantCopilotPolicySource(db, currentEnvironment()).load();
+        const automationRuleCheck = await automationRules(db, caller.workspaceId);
+        const orchestrator = new CopilotOrchestrator({
+          db,
+          workspaceId: caller.workspaceId,
+          policy,
+          gateway: gateway(),
+          automationRules: automationRuleCheck,
+        });
+        const authorization = await resolveLiveAuthorization(db, caller.workspaceId, caller.userId);
+        if (!authorization) throw new AppError('NOT_FOUND', 'Conversation not found.');
+        return fn(orchestrator, authorization);
+      },
+      { prisma: getPrisma() },
+    );
+
+  route(
+    app,
+    // POST, like every Copilot route: the dashboard proxy forwards a body, never a query.
+    'POST',
+    '/v1/copilot/conversation',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'workspace.read' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = conversationSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        const page = await conversationRun(caller, (orchestrator, authorization) =>
+          orchestrator.conversation({
+            authorization,
+            sessionId: parsed.data.sessionId,
+            before: parsed.data.before ? new Date(parsed.data.before) : null,
+            search: parsed.data.search ?? null,
+            ...(parsed.data.limit ? { limit: parsed.data.limit } : {}),
+          }),
+        );
+        return reply.send({
+          hasMore: page.hasMore,
+          messages: page.messages.map((message) => ({
+            ...message,
+            createdAt: message.createdAt.toISOString(),
+          })),
+        });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot conversation', error);
+      }
+    },
+  );
+
+  route(
+    app,
+    'POST',
+    '/v1/copilot/quote',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'ai.quote' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = quoteSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        const facts = await workspaceFacts(caller.workspaceId);
+        const text = parsed.data.request.trim();
+        const message = text
+          ? (
+              await conversationRun(caller, (orchestrator, authorization) =>
+                orchestrator.quoteTurn({
+                  authorization,
+                  sessionId: parsed.data.sessionId,
+                  request: text,
+                  planKey: facts.planKey,
+                }),
+              )
+            ).estimateMilli
+          : 0n;
+        /*
+         * PR B (D-594) — THE PRICE OF ADDING THE FILE, beside Send before it is
+         * sent: `brand.extract`'s price, ONLY when it does not depend on the
+         * file (a fixed price per source). Otherwise — priced by size, or not
+         * routed at all — no price is returned and none is shown: never a
+         * wrong number.
+         */
+        if (parsed.data.attachment === 'file') {
+          const file = await gateway()
+            .quote({
+              workspaceId: caller.workspaceId,
+              taskKey: 'brand.extract',
+              planKey: facts.planKey,
+              input: { kind: 'text', prompt: '' },
+            })
+            .catch(() => null);
+          if (!file || !file.fixed) return reply.send({});
+          return reply.send({ estimateMilli: (message + file.estimateMilli).toString() });
+        }
+        return reply.send({ estimateMilli: message.toString() });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot quote', error);
+      }
+    },
+  );
+
+  route(
+    app,
+    'POST',
+    '/v1/copilot/topic',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'workspace.write' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = sessionActionSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        await conversationRun(caller, (orchestrator, authorization) =>
+          orchestrator.newTopic({ authorization, sessionId: parsed.data.sessionId }),
+        );
+        return reply.send({ ok: true });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot topic', error);
+      }
+    },
+  );
+
+  route(
+    app,
+    'POST',
+    '/v1/copilot/clear',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'workspace.write' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = sessionActionSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        const result = await conversationRun(caller, (orchestrator, authorization) =>
+          orchestrator.clearConversation({ authorization, sessionId: parsed.data.sessionId }),
+        );
+        return reply.send({ deleted: result.deleted });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot clear', error);
+      }
+    },
+  );
+
+  /**
+   * PR B (D-594) — STOP the turn under way. Its message is marked stopped and
+   * the turn ends without an answer; the gateway refuses to settle a stopped
+   * turn, so nothing is charged. The caller's own session only.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/copilot/stop',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'workspace.write' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = stopSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        const result = await conversationRun(caller, (orchestrator, authorization) =>
+          orchestrator.stopTurn({ authorization, ...parsed.data }),
+        );
+        return reply.send({ stopped: result.stopped });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot stop', error);
+      }
+    },
+  );
+
   /**
    * One turn: a request in, a PLAN out.
    *
@@ -608,6 +814,12 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
           missing: result.turn.missing,
           saveFact: result.turn.saveFact,
           rejectedToolKeys: result.turn.rejectedToolKeys,
+          // PR B — the permissions a refused workspace read asked for; the
+          // dashboard words the refusal as that screen does.
+          deniedPermissions: result.turn.deniedToolKeys.flatMap((key) => {
+            const tool = findTool(key);
+            return tool ? [tool.permission] : [];
+          }),
           planId: result.created.plan.id,
           planHash: result.created.plan.planHash,
           planVersion: result.created.plan.planVersion,

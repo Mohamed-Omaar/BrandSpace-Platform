@@ -301,42 +301,57 @@ test.describe('Arabic renders the same design, mirrored', () => {
   });
 });
 
-/* --- chat ---------------------------------------------------------------- */
+/* --- asking: the Copilot (PR B, D-594) ------------------------------------ */
 
-test.describe('Talk with the brand is the prototype’s chat card', () => {
-  test('the centre opens it, alone, at the prototype’s fixed height', async ({ page }) => {
+test.describe('the orb centre asks the Copilot (the chat card is retired)', () => {
+  test('the centre opens the Copilot side panel over the page; the hero stays', async ({
+    page,
+  }) => {
     await signIn(page, 'en');
-
     await page.getByTestId('orb-center').click();
-    const chat = page.getByTestId('brand-chat');
-    await expect(chat).toBeVisible();
-
-    // The prototype's chat tab is the card on its own (lines 899–925): the
-    // hero and the grid give way to it, and it does not float over the page.
-    await expect(page.getByTestId('brand-brain-hero')).toHaveCount(0);
-    await expect(page.getByTestId('tab-chat')).toHaveAttribute('aria-selected', 'true');
-    expect(await style(chat, 'position')).toBe('static');
-    expect(Math.abs((await box(chat)).height - scaled(PROTO.chatHeight))).toBeLessThanOrEqual(0.5);
-
-    await shot(page, 'chat-open-desktop-en.png', chat);
+    const drawer = page.getByTestId('copilot-drawer');
+    await expect(drawer).toBeVisible();
+    // No chat card replaces the hero: the page stays, the panel floats beside it.
+    await expect(page.getByTestId('brand-brain-hero')).toBeVisible();
+    await expect(page.getByTestId('brand-chat')).toHaveCount(0);
+    await expect(page.getByTestId('tab-chat')).toHaveCount(0);
   });
 
-  test('the panel does not grow when a message is sent', async ({ page }) => {
+  test('the panel stays inside the window when a message is sent, its composer reachable (D-592)', async ({
+    page,
+  }) => {
+    // The retired chat card had a fixed height. The Copilot side panel is as
+    // tall as its content, capped at the window (D-592, #112): whatever is
+    // sent, it never runs past the window and Send stays on screen.
     await signIn(page, 'en');
     await page.getByTestId('orb-center').click();
-
-    const chat = page.getByTestId('brand-chat');
-    await expect(chat).toBeVisible();
-    const before = await box(chat);
-
-    await page.fill('[data-testid="chat-input"]', 'What is our positioning?');
-    await page.getByTestId('chat-send').click();
-    await expect(
-      page.getByTestId('chat-insufficient').or(page.getByTestId('chat-message-assistant')).first(),
-    ).toBeVisible({ timeout: 20_000 });
-
-    const after = await box(chat);
-    expect(Math.abs(after.height - before.height)).toBeLessThan(2);
+    const drawer = page.getByTestId('copilot-drawer');
+    await expect(drawer).toBeVisible();
+    for (const question of [
+      `What is our tone of voice? (${Date.now()})`,
+      `And our positioning? (${Date.now()})`,
+    ]) {
+      const answered = await drawer.getByTestId('copilot-message-assistant').count();
+      await expect
+        .poll(
+          async () => {
+            await drawer.getByTestId('copilot-request').fill(question);
+            return drawer.getByTestId('copilot-propose').isEnabled();
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(true);
+      await drawer.getByTestId('copilot-propose').click();
+      await expect
+        .poll(async () => drawer.getByTestId('copilot-message-assistant').count(), {
+          timeout: 30_000,
+        })
+        .toBeGreaterThan(answered);
+    }
+    const viewport = page.viewportSize();
+    const panel = await drawer.boundingBox();
+    expect((panel?.y ?? 0) + (panel?.height ?? 0)).toBeLessThanOrEqual((viewport?.height ?? 0) + 1);
+    await expect(drawer.getByTestId('copilot-propose')).toBeInViewport();
   });
 });
 

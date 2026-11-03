@@ -28,9 +28,9 @@ import type { CopilotPolicy } from './policy';
  *     lying about. Its token hash is cleared at the same moment, which is the
  *     part that matters.
  *
- *   - `copilot_session` — ARCHIVED past its window, so an old conversation stops
- *     appearing in the list without its rows disappearing underneath the audit
- *     trail.
+ *   - `copilot_session` — NOT archived (PR B, D-594): one continuous
+ *     conversation per person per brand. Its rolling SUMMARY is cleared once
+ *     the newest message it covers has expired.
  *
  * WHAT IS NEVER TOUCHED, whatever a window says: `audit_event`, `ai_request`,
  * `ai_usage_ledger`, `credit_transaction`. A retention control able to erase a
@@ -49,6 +49,8 @@ export interface CopilotPruneResult {
   readonly messageBodiesPurged: number;
   readonly plansExpired: number;
   readonly sessionsArchived: number;
+  /** PR B — rolling summaries cleared because what they cover expired. */
+  readonly summariesPurged: number;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -126,23 +128,29 @@ export async function pruneCopilot(input: {
           })
         ).count;
 
-  const staleSessions = await input.prisma.copilotSession.findMany({
-    where: {
-      archivedAt: null,
-      OR: [{ expiresAt: { lt: now } }, { expiresAt: null, createdAt: { lt: cutoff } }],
-    },
+  /*
+   * PR B — THE CONVERSATION IS NEVER ARCHIVED AS A WHOLE. There is one
+   * continuous conversation per person per brand (D-594); its messages keep
+   * their own windows (above). What expires with them is the ROLLING SUMMARY,
+   * which quotes them: cleared, and stamped like a purged body, once the
+   * newest message it covers is past its window.
+   */
+  const staleSummaries = await input.prisma.copilotSession.findMany({
+    where: { summary: { not: null }, summaryExpiresAt: { lt: now } },
     select: { id: true },
     take: batch,
   });
-  const sessionsArchived =
-    staleSessions.length === 0
+  const summariesPurged =
+    staleSummaries.length === 0
       ? 0
       : (
           await input.prisma.copilotSession.updateMany({
-            where: { id: { in: staleSessions.map((row) => row.id) } },
-            data: { archivedAt: now },
+            where: { id: { in: staleSummaries.map((row) => row.id) } },
+            data: { summary: null, summaryPurgedAt: now },
           })
         ).count;
+  // Kept in the result's shape for the scheduler's log; nothing archives now.
+  const sessionsArchived = 0;
 
-  return { messageBodiesPurged, plansExpired, sessionsArchived };
+  return { messageBodiesPurged, plansExpired, sessionsArchived, summariesPurged };
 }

@@ -3,7 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields, validationFieldOf } from '@brandspace/shared';
+import {
+  AppError,
+  createLogger,
+  isAppError,
+  internalErrorFields,
+  validationFieldOf,
+} from '@brandspace/shared';
 import {
   acceptConfidentSchema,
   checksumOf,
@@ -456,7 +462,11 @@ export async function acceptConfidentCandidatesAction(formData: FormData): Promi
         return knowledge.reviewCandidates({
           brandId: parsed.brandId,
           candidateIds: parsed.candidateIds,
-          minimumConfidenceMilli: resolved.review.confidentAcceptMilli,
+          // PR B (D-594) — "Approve all" accepts the listed facts whatever
+          // their confidence; the server still skips any in conflict or not
+          // eligible, exactly as it does for the confident ones.
+          minimumConfidenceMilli:
+            formData.get('all') === '1' ? 0 : resolved.review.confidentAcceptMilli,
           actor: knowledgeActor(session),
           policy: resolved.staleness,
         });
@@ -469,6 +479,33 @@ export async function acceptConfidentCandidatesAction(formData: FormData): Promi
     });
   } catch (error: unknown) {
     destination = failure(locale, error, 'accept-confident');
+  }
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}
+
+/**
+ * PR B (D-594) — THE ONE-TIME CLEAN-UP: merge today's duplicate facts, once
+ * the owner confirms the card. Review rights, as accepting facts needs.
+ */
+export async function mergeDuplicatesAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.review');
+    const brandId = String(formData.get('brandId') ?? '');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brandId)) {
+      throw new AppError('VALIDATION_FAILED', 'A brand is required.');
+    }
+    const outcome = await inBrandBrain(session.workspace.workspaceId, async ({ knowledge }) =>
+      knowledge.mergeDuplicates({ brandId, actor: knowledgeActor(session) }),
+    );
+    destination = pageUrl(locale, {
+      ok: 'DUPLICATES_MERGED',
+      merged: String(outcome.archived + outcome.setAside),
+    });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'merge-duplicates');
   }
   revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);
@@ -578,7 +615,8 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
             area,
             ...tabParam(formData),
           }
-        : { ok: 'SOURCE_UPLOADED', area, ...tabParam(formData) },
+        : // PR B — the new source's id, so the Copilot's Add card follows it.
+          { ok: 'SOURCE_UPLOADED', area, source: received.document.id, ...tabParam(formData) },
       back,
     );
   } catch (error: unknown) {
@@ -738,4 +776,41 @@ export async function removeSourceAction(formData: FormData): Promise<void> {
   revalidatePath(`/${locale}/brand-brain`);
   revalidatePath(`/${locale}`);
   redirect(destination);
+}
+
+/**
+ * PR B (D-594) — "Approve all" FOR ONE ADDED FILE, from the Copilot's Add card.
+ * The person's own `brand_brain.review` (as on the Knowledge strip); every
+ * waiting fact of that file, whatever its confidence; the server still skips a
+ * fact in conflict. Returns the counts — the card stays in the conversation.
+ */
+export async function approveSourceFactsAction(input: {
+  readonly locale: string;
+  readonly brandId: string;
+  readonly documentId: string;
+}): Promise<{ readonly accepted: number; readonly skipped: number } | { readonly error: string }> {
+  try {
+    const session = await requireWorkspaceAction(input.locale, 'brand_brain.review');
+    return await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy, db }) => {
+      const pending = await db.brandKnowledgeCandidate.findMany({
+        where: {
+          brandId: input.brandId,
+          sourceDocumentId: input.documentId,
+          status: 'PENDING',
+        },
+        select: { id: true },
+      });
+      if (pending.length === 0) return { accepted: 0, skipped: 0 };
+      const outcome = await knowledge.reviewCandidates({
+        brandId: input.brandId,
+        candidateIds: pending.map((row) => row.id),
+        minimumConfidenceMilli: 0,
+        actor: knowledgeActor(session),
+        policy: (await policy()).staleness,
+      });
+      return { accepted: outcome.accepted.length, skipped: outcome.skipped.length };
+    });
+  } catch (error: unknown) {
+    return { error: isAppError(error) ? error.code : 'INTERNAL' };
+  }
 }

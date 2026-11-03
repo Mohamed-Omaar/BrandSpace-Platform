@@ -34,6 +34,9 @@ import { topbarModel, type TopbarCounts } from '../server/topbar';
 import { copilotSurfaceForPath } from '../server/copilot-surface';
 import { RATE_METRIC_KEYS, copilotLabels } from '../server/copilot-labels';
 import { copilotDrawerSubject } from '../server/copilot-context';
+import { copilotRetentionDays } from '../server/copilot-retention';
+import { copilotDenials } from '../server/copilot-denials';
+import { shellSession } from '../server/topbar-counts';
 import { GlobalCopilot } from './global-copilot';
 import { NotificationsBell } from './notifications-bell';
 import { loadNotificationFeed } from '../app/[locale]/notifications/feed';
@@ -103,6 +106,12 @@ interface NavEntry {
  */
 const NAV: readonly NavEntry[] = [
   { href: '/overview', key: 'nav.overview', permission: null, glyph: 'home' },
+  /*
+   * PR B (owner decision, D-594) — "Copilot", right under Home: the one
+   * assistant's full page. The floating button on every other page opens the
+   * same conversation as a side panel.
+   */
+  { href: '/copilot', key: 'nav.copilot', permission: 'copilot.use', glyph: 'spark' },
   {
     href: '/brand-brain',
     key: 'nav.brandBrain',
@@ -202,7 +211,8 @@ function railPathFromRequest(requestPath: string | null): string | undefined {
 }
 
 const NAV_GROUPS: readonly { titleKey: MessageKey | null; hrefs: readonly string[] }[] = [
-  { titleKey: null, hrefs: ['/overview'] },
+  // PR B (D-594): Copilot, right under Home.
+  { titleKey: null, hrefs: ['/overview', '/copilot'] },
   { titleKey: 'nav.group.brand', hrefs: ['/brand-brain'] },
   { titleKey: 'nav.group.plan', hrefs: ['/strategy', '/campaigns'] },
   { titleKey: 'nav.group.create', hrefs: ['/content', '/assets'] },
@@ -542,6 +552,16 @@ export async function WorkspaceShell({
   ]
     .filter((part): part is string => part !== null)
     .join(' · ');
+  /** PR B — the retired "Talk with the brand" tab's three chips, now Copilot's. */
+  const brandChips = [
+    {
+      id: 'positioning',
+      label: t('bb.suggestPositioningLabel'),
+      prompt: t('bb.suggestPositioningPrompt'),
+    },
+    { id: 'gaps', label: t('bb.suggestGapsLabel'), prompt: t('bb.suggestGapsPrompt') },
+    { id: 'voice', label: t('bb.suggestVoiceLabel'), prompt: t('bb.suggestVoicePrompt') },
+  ];
   // The greeting's name is the person's own first name, never their email.
   const firstName = copilotLink ? greetingName(me?.name) : null;
 
@@ -912,8 +932,17 @@ export async function WorkspaceShell({
 
   /* The floating Copilot (`.fab`), for a member who may use it. */
   const copilot = topbar.links.find((link) => link.key === 'copilot');
+  // PR B — the conversation's retention, for the line under its composer.
+  const shell = !focus && copilot && copilotLink ? await shellSession() : null;
+  const copilotRetention = shell ? await copilotRetentionDays(shell.workspace.workspaceId) : null;
+  const copilotDenied = shell ? await copilotDenials(locale, shell) : {};
+  /*
+   * PR B (D-594) — ON THE COPILOT PAGE ITSELF there is no Copilot button: the
+   * page IS the conversation, and the button (floating, or the header's
+   * "Copilot" when the page is current) only covered its composer and cards.
+   */
   const fab =
-    focus || !copilot ? null : copilotLink ? (
+    focus || !copilot || !copilotLink ? null : (
       <GlobalCopilot
         locale={locale}
         now={systemClock.now().toISOString()}
@@ -923,24 +952,60 @@ export async function WorkspaceShell({
         subject={drawerSubject}
         labels={copilotLabels(words, identity)}
         rateMetricKeys={RATE_METRIC_KEYS}
+        retentionDays={copilotRetention}
+        factsEditable={permissionKeys.includes('brand_brain.edit')}
+        sources={
+          permissionKeys.includes('brand_brain.upload')
+            ? { review: permissionKeys.includes('brand_brain.review') }
+            : null
+        }
+        denials={copilotDenied}
         strings={{
           chooseBrandTitle: t('brand.chooseTitle'),
           chooseBrandBody: t('copilot.noBrandBody'),
           context: drawerContext,
+          // PR B — the balance with its unit ("4,957 credits"), named for a
+          // screen reader ("Credits left: 4,957").
           credits:
             typeof counts.credits === 'number' && permissionKeys.includes('billing.read')
-              ? counts.credits.toLocaleString('en-US')
+              ? t('copilot.creditsLeft').replace(
+                  '{credits}',
+                  counts.credits.toLocaleString('en-US'),
+                )
               : null,
-          creditsLabel: t('account.credits'),
+          creditsLabel:
+            typeof counts.credits === 'number'
+              ? t('copilot.creditsLeftLabel').replace(
+                  '{credits}',
+                  counts.credits.toLocaleString('en-US'),
+                )
+              : t('account.credits'),
           greeting: firstName
             ? t('copilot.hello').replace('{name}', firstName)
             : t('copilot.hello').replace(/\s?\{name\}/, ''),
           placeholder: t('copilot.askPlaceholder'),
+          /*
+           * PR B (D-594) — PAGE-AWARE. The Studio asks about the post first;
+           * Brand Brain's three chips (the retired "Talk with the brand" tab's)
+           * lead on Brand Brain and follow the three general ones elsewhere.
+           */
           suggestions: [
+            ...(drawerSurface === 'content'
+              ? [
+                  {
+                    id: 'page',
+                    label: t('copilot.pageAsk.content'),
+                    prompt: t('copilot.pageAsk.contentPrompt'),
+                  },
+                ]
+              : []),
+            ...(drawerSurface === 'brand_brain' ? brandChips : []),
             { id: 'posts', label: t('copilot.suggest.posts') },
             { id: 'engagement', label: t('copilot.suggest.engagement') },
             { id: 'approvals', label: t('copilot.suggest.approvals') },
+            ...(drawerSurface === 'brand_brain' ? [] : brandChips),
           ],
+          openFull: t('copilot.openInPage'),
         }}
       >
         <PrototypeCopilotFab
@@ -949,13 +1014,6 @@ export async function WorkspaceShell({
           testId="topbar-copilot"
         />
       </GlobalCopilot>
-    ) : (
-      <PrototypeCopilotFab
-        href={copilot.href}
-        label={t('topbar.copilot')}
-        current
-        testId="topbar-copilot"
-      />
     );
 
   /*

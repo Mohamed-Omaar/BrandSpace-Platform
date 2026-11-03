@@ -17,6 +17,7 @@ export {
   COPILOT_TOOL_KEYS,
   BRAND_BRAIN_TOOL_KEYS,
   availableTools,
+  WORKSPACE_READ_KEYS,
   findTool,
   highestActionClass,
   isToolKey,
@@ -75,7 +76,12 @@ export type { CompensationKind, UndoCollaborators, UndoOutcome, UndoServiceOptio
 export { CopilotOrchestrator, automationRuleCatalogueLines } from './orchestrator';
 export type { OrchestratorRun } from './orchestrator';
 export { describeArguments } from './tools';
-export type { OrchestratorOptions, TurnInput, TurnResult } from './orchestrator';
+export type {
+  ConversationMessage,
+  OrchestratorOptions,
+  TurnInput,
+  TurnResult,
+} from './orchestrator';
 
 export {
   confirmationRejected,

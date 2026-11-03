@@ -44,10 +44,6 @@ const STYLED_BY_ANCESTOR_RULE: readonly { readonly file: string; readonly rule: 
     file: 'apps/dashboard/src/app/[locale]/brand-brain/brand-brain-view.tsx',
     rule: ".bb-upload button[type='submit'] in packages/ui/src/brand-brain.css",
   },
-  {
-    file: 'apps/dashboard/src/app/[locale]/brand-brain/brand-chat.tsx',
-    rule: '.bb-chat-suggestions button in packages/ui/src/brand-brain.css',
-  },
 ];
 
 function sourceFiles(dir: string): readonly string[] {

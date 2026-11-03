@@ -78,10 +78,13 @@ class ScriptedAdapter implements AiProviderAdapter {
   }
 
   readonly prompts: string[] = [];
+  /** PR B — the fenced context each call carried (the summary travels there). */
+  readonly contexts: string[] = [];
 
   async generateText(request: TextRequest): Promise<TextResult> {
     this.calls += 1;
     this.prompts.push(request.prompt);
+    this.contexts.push((request.untrustedContext ?? []).join('\n'));
     const step = this.script.shift() ?? { kind: 'text', text: '{"ok":true}' };
     if (step.kind === 'error') {
       throw new ScriptedError(step.failureClass, step.providerCode, step.providerReason);
@@ -681,5 +684,340 @@ describe('H-4 — the provider call runs outside the tenant transaction', () => 
     expect(turn.assistantMessage.body).toBe('Two for one on Fridays.');
     const after = await money(fixtures.a.workspaceId);
     expect(after.charges).toBe(before.charges + 1);
+  });
+});
+
+/*
+ * PR B (D-594) — ONE CONTINUOUS COPILOT CONVERSATION PER PERSON PER BRAND.
+ * Here because this file already holds a scripted provider the prompts can be
+ * read from; the migration that merges existing conversations has its own
+ * suite (pr-b-one-assistant-migration).
+ */
+describe('PR B — the one conversation: memory, New topic, search, Clear', () => {
+  let app: PrismaClient;
+  let fixtures: IsolationFixtures;
+
+  beforeAll(async () => {
+    app = appRoleClient();
+    fixtures = await createIsolationFixtures(app);
+    await ledger.grant({
+      workspaceId: fixtures.a.workspaceId,
+      source: 'PLAN_GRANT',
+      credits: 50,
+      reason: 'PR B conversation fixture allowance',
+      idempotencyKey: `prb-conversation-${fixtures.a.workspaceId}`,
+    });
+  }, 120_000);
+
+  afterAll(async () => {
+    await app?.$disconnect();
+  });
+
+  const inWs = <T>(workspaceId: string, fn: (db: never) => Promise<T>) =>
+    withWorkspace(workspaceId, fn as never, { prisma: app }) as Promise<T>;
+  const inA = <T>(fn: (db: never) => Promise<T>) => inWs(fixtures.a.workspaceId, fn);
+  const orchestratorIn = (db: never, workspaceId = fixtures.a.workspaceId) =>
+    new CopilotOrchestrator({
+      db,
+      workspaceId,
+      policy: parseCopilotPolicy(defaultPayload('copilot')),
+      gateway,
+    });
+  const answer = (en: string) =>
+    JSON.stringify({
+      summary: { ar: en, en },
+      steps: [],
+      brandBrainQuestion: false,
+      saveFact: null,
+    });
+
+  async function me() {
+    const authorization = await inA((db) =>
+      resolveLiveAuthorization(db, fixtures.a.workspaceId, fixtures.a.userId),
+    );
+    if (!authorization) throw new Error('fixture membership missing');
+    return authorization;
+  }
+  async function open() {
+    const authorization = await me();
+    return inA((db) =>
+      orchestratorIn(db).openSession({
+        authorization,
+        brandId: fixtures.a.brandId,
+        surface: 'general',
+        locale: 'EN',
+        expiresAt: null,
+      }),
+    );
+  }
+  async function say(request: string, reply = 'Noted.') {
+    adapter.script.push({ kind: 'text', text: answer(reply) });
+    const session = await open();
+    await CopilotOrchestrator.turnWith((fn) => inA((db) => fn(orchestratorIn(db))), {
+      sessionId: session.id,
+      request,
+      authorization: await me(),
+      planKey: null,
+      idempotencyKey: `prb-${crypto.randomUUID()}`,
+      expiresAt: null,
+    });
+    return adapter.prompts.at(-1) ?? '';
+  }
+
+  it('opening from any page returns the same conversation, on the page now shown', async () => {
+    const first = await open();
+    const authorization = await me();
+    const again = await inA((db) =>
+      orchestratorIn(db).openSession({
+        authorization,
+        brandId: fixtures.a.brandId,
+        surface: 'content',
+        locale: 'AR',
+        expiresAt: null,
+      }),
+    );
+    expect(again.id).toBe(first.id);
+    expect(again).toMatchObject({ surface: 'content', locale: 'AR', archivedAt: null });
+  });
+
+  it('memory: the next turn sees the previous one ("make it shorter" has its context)', async () => {
+    await say(
+      'Write a line about our autumn opening hours.',
+      'We open at 9 every day this autumn.',
+    );
+    const prompt = await say('Make it shorter.');
+    expect(prompt).toContain('Write a line about our autumn opening hours.');
+    expect(prompt).toContain('We open at 9 every day this autumn.');
+  });
+
+  it('New topic: the model no longer reads what came before the divider, which stays visible', async () => {
+    const session = await open();
+    const authorization = await me();
+    await say('Remember the word PINEAPPLE for later.');
+    await inA((db) => orchestratorIn(db).newTopic({ authorization, sessionId: session.id }));
+    const prompt = await say('What were we talking about?');
+    expect(prompt).not.toContain('PINEAPPLE');
+    const page = await inA((db) =>
+      orchestratorIn(db).conversation({ authorization, sessionId: session.id }),
+    );
+    expect(page.messages.some((m) => m.body?.includes('PINEAPPLE'))).toBe(true);
+    expect(page.messages.filter((m) => m.kind === 'topic_break')).toHaveLength(1);
+  });
+
+  it('search finds words inside the conversation', async () => {
+    const session = await open();
+    const authorization = await me();
+    await say('The secret ingredient is cardamom.');
+    const found = await inA((db) =>
+      orchestratorIn(db).conversation({ authorization, sessionId: session.id, search: 'CARDAMOM' }),
+    );
+    expect(found.messages.length).toBeGreaterThan(0);
+    expect(found.messages.every((m) => m.body?.toLowerCase().includes('cardamom'))).toBe(true);
+  });
+
+  it('older turns become the rolling summary, and the summary is in the prompt', async () => {
+    const session = await open();
+    const authorization = await me();
+    await inA((db) => orchestratorIn(db).newTopic({ authorization, sessionId: session.id }));
+    await say('Our founding year is 2019, keep it in mind.');
+    for (let i = 0; i < 6; i += 1) await say(`Filler question number ${i}.`);
+    const stored = await inA((db) =>
+      (db as unknown as PrismaClient).copilotSession.findFirstOrThrow({
+        where: { id: session.id },
+        select: { summary: true, summaryThroughAt: true },
+      }),
+    );
+    expect(stored.summary).toContain('Our founding year is 2019');
+    await say('Which year did I mention?');
+    // Fenced as reference material, like every block of customer text.
+    const context = adapter.contexts.at(-1) ?? '';
+    expect(context).toContain('EARLIER IN THIS CONVERSATION (summary)');
+    expect(context).toContain('Our founding year is 2019');
+  });
+
+  it('another workspace cannot read, divide or clear this conversation (the same 404)', async () => {
+    const session = await open();
+    const theirs = await inWs(fixtures.b.workspaceId, (db) =>
+      resolveLiveAuthorization(db, fixtures.b.workspaceId, fixtures.b.userId),
+    );
+    if (!theirs) throw new Error('fixture membership missing');
+    const acts: ((o: CopilotOrchestrator) => Promise<unknown>)[] = [
+      (o: CopilotOrchestrator) => o.conversation({ authorization: theirs, sessionId: session.id }),
+      (o: CopilotOrchestrator) => o.newTopic({ authorization: theirs, sessionId: session.id }),
+      (o: CopilotOrchestrator) =>
+        o.clearConversation({ authorization: theirs, sessionId: session.id }),
+    ];
+    for (const act of acts) {
+      await expect(
+        inWs(fixtures.b.workspaceId, (db) => act(orchestratorIn(db, fixtures.b.workspaceId))),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    }
+  });
+
+  it('Clear conversation deletes the messages and the summary, and is audited', async () => {
+    const session = await open();
+    const authorization = await me();
+    await say('Something to forget.');
+    const result = await inA((db) =>
+      orchestratorIn(db).clearConversation({ authorization, sessionId: session.id }),
+    );
+    expect(result.deleted).toBeGreaterThan(0);
+    const page = await inA((db) =>
+      orchestratorIn(db).conversation({ authorization, sessionId: session.id }),
+    );
+    expect(page.messages).toEqual([]);
+    const stored = await platform.copilotSession.findUniqueOrThrow({
+      where: { id: session.id },
+      select: { summary: true },
+    });
+    expect(stored.summary).toBeNull();
+    const audit = await platform.auditEvent.findFirst({
+      where: { action: 'copilot.conversation_cleared', resourceId: session.id },
+      select: { after: true },
+    });
+    expect(audit?.after).toEqual({ messagesDeleted: result.deleted });
+  });
+
+  /** A turn whose scripted reply proposes `steps`, as `authorization`. */
+  async function ask(
+    request: string,
+    reply: { en: string; ar?: string; steps?: { toolKey: string; arguments: object }[] },
+    authorization?: Awaited<ReturnType<typeof me>>,
+  ) {
+    adapter.script.push({
+      kind: 'text',
+      text: JSON.stringify({
+        summary: { ar: reply.ar ?? reply.en, en: reply.en },
+        steps: reply.steps ?? [],
+        brandBrainQuestion: false,
+        saveFact: null,
+      }),
+    });
+    const session = await open();
+    const result = await CopilotOrchestrator.turnWith((fn) => inA((db) => fn(orchestratorIn(db))), {
+      sessionId: session.id,
+      request,
+      authorization: authorization ?? (await me()),
+      planKey: null,
+      idempotencyKey: `prb-${crypto.randomUUID()}`,
+      expiresAt: null,
+    });
+    return { result, session, prompt: adapter.prompts.at(-1) ?? '' };
+  }
+
+  it('an Arabic greeting is answered in Arabic, and kept in Arabic', async () => {
+    const authorization = await me();
+    const { session } = await ask('مرحبا! كيف حالك؟', { en: 'Hello!', ar: 'أهلًا بك!' });
+    const page = await inA((db) =>
+      orchestratorIn(db).conversation({ authorization, sessionId: session.id }),
+    );
+    const last = page.messages.at(-1);
+    expect(last).toMatchObject({ role: 'ASSISTANT', body: 'أهلًا بك!' });
+  });
+
+  it('"how many credits" and "who is on my team" are answered from tools, never the model', async () => {
+    const credits = await ask('How many credits do we have left?', {
+      en: 'Let me check.',
+      steps: [{ toolKey: 'credits.balance', arguments: {} }],
+    });
+    expect(credits.prompt).toMatch(/^- credits\.balance \(READ_ONLY\)/m);
+    expect(credits.prompt).toContain('Every number in your answer must come from a tool result');
+    expect(credits.result.steps).toEqual([{ toolKey: 'credits.balance', arguments: {} }]);
+    const team = await ask('Who is on my team?', {
+      en: 'Here is the team.',
+      steps: [{ toolKey: 'team.list', arguments: {} }],
+    });
+    expect(team.result.steps.map((step) => step.toolKey)).toEqual(['team.list']);
+    expect(team.result.notice).toBeNull();
+  });
+
+  it('a member asking for billing is refused the way the Billing screen refuses', async () => {
+    const owner = await me();
+    const member = {
+      ...owner,
+      permissionKeys: owner.permissionKeys.filter((key) => key !== 'billing.read'),
+    };
+    const { result, prompt } = await ask(
+      'Show me our billing and plan.',
+      { en: 'Here is your plan.', steps: [{ toolKey: 'plan.summary', arguments: {} }] },
+      member,
+    );
+    // The model is told it may not use the read, and asked to propose it anyway.
+    expect(prompt).toMatch(/TOOLS THIS PERSON MAY NOT USE[^\n]*plan\.summary/);
+    expect(prompt).not.toMatch(/^- plan\.summary /m);
+    expect(result.steps).toEqual([]);
+    expect(result.notice).toBe('permission_denied');
+    expect(result.deniedToolKeys).toEqual(['plan.summary']);
+    const audit = await platform.auditEvent.findFirst({
+      where: { action: 'copilot.tool_refused', workspaceId: fixtures.a.workspaceId },
+      orderBy: { occurredAt: 'desc' },
+      select: { after: true },
+    });
+    expect(audit?.after).toEqual({ rejectedToolKeys: 'plan.summary' });
+  });
+
+  it('Stop mid-turn: no answer is stored and nothing is charged, even though the model answered', async () => {
+    const session = await open();
+    const authorization = await me();
+    const before = await money(fixtures.a.workspaceId);
+    const idempotencyKey = `prb-stop-${crypto.randomUUID()}`;
+    // The model takes a moment to answer; Stop is pressed while it does.
+    adapter.script.push({
+      kind: 'text',
+      text: answer('An answer nobody waited for.'),
+      delayMs: 400,
+    });
+    const turn = CopilotOrchestrator.turnWith((fn) => inA((db) => fn(orchestratorIn(db))), {
+      sessionId: session.id,
+      request: 'Write a long essay about our brand.',
+      authorization,
+      planKey: null,
+      idempotencyKey,
+      expiresAt: null,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const stopped = await inA((db) =>
+      orchestratorIn(db).stopTurn({ authorization, sessionId: session.id, idempotencyKey }),
+    );
+    expect(stopped).toEqual({ stopped: true });
+    await expect(turn).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    const after = await money(fixtures.a.workspaceId);
+    expect(after.charges).toBe(before.charges);
+    expect(after.balance).toBe(before.balance);
+    expect(after.reserved).toBe(before.reserved);
+    const rows = await platform.copilotMessage.findMany({
+      where: { sessionId: session.id, idempotencyKey: { startsWith: idempotencyKey } },
+      select: { role: true, status: true },
+    });
+    expect(rows).toEqual([{ role: 'USER', status: 'stopped' }]);
+    const audit = await platform.auditEvent.count({
+      where: { action: 'copilot.turn_stopped', resourceId: session.id },
+    });
+    expect(audit).toBeGreaterThan(0);
+    // Stop on a turn that already finished changes nothing.
+    await say('Hello again.');
+    const late = await inA((db) =>
+      orchestratorIn(db).stopTurn({
+        authorization,
+        sessionId: session.id,
+        idempotencyKey: 'no-such-turn-key',
+      }),
+    );
+    expect(late).toEqual({ stopped: false });
+  });
+
+  it('a stopped turn of another person, or another workspace, cannot be stopped from here', async () => {
+    const session = await open();
+    const authorization = await me();
+    await expect(
+      inWs(fixtures.b.workspaceId, (db) =>
+        orchestratorIn(db, fixtures.b.workspaceId).stopTurn({
+          authorization,
+          sessionId: session.id,
+          idempotencyKey: 'any-key-at-all',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

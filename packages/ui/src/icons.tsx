@@ -380,6 +380,17 @@ export function PaperclipIcon(props: IconProps) {
   );
 }
 
+/** "Open in full": a box with an arrow out of its corner (the Copilot panel's "Open in Copilot page"). */
+export function OpenFullIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14 4h6v6" />
+      <path d="M20 4 11 13" />
+      <path d="M19 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 4 18.5v-12A1.5 1.5 0 0 1 5.5 5H10" />
+    </Icon>
+  );
+}
+
 /** The Content Studio: a pen, for the module that writes. */
 export function PencilIcon(props: IconProps) {
   return (

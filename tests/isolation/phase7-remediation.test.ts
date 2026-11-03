@@ -658,6 +658,13 @@ describe('P7-R2: a replay lookup is bound to the caller, the session and the bra
         }),
       );
 
+    // PR B — the session is the person's ONE conversation, so earlier tests'
+    // turns are in it; what this turn wrote is what it added.
+    const before = await inA((db) =>
+      db.copilotMessage.count({
+        where: { workspaceId: fixtures.a.workspaceId, sessionId: session.id },
+      }),
+    );
     const first = await run();
     const retry = await run();
 
@@ -665,6 +672,7 @@ describe('P7-R2: a replay lookup is bound to the caller, the session and the bra
       db.copilotMessage.findMany({
         where: { workspaceId: fixtures.a.workspaceId, sessionId: session.id },
         orderBy: { createdAt: 'asc' },
+        skip: before,
       }),
     );
     // EXACTLY TWO ROWS. The retry wrote nothing: `ON CONFLICT DO NOTHING` on the

@@ -48,6 +48,8 @@ function navHrefs(): readonly string[] {
  */
 const RAIL: readonly string[] = [
   '/overview',
+  // PR B (D-594): Copilot is back on the rail, right under Home.
+  '/copilot',
   '/brand-brain',
   '/strategy',
   '/campaigns',
@@ -68,7 +70,6 @@ const MOVED: Readonly<Record<string, 'top bar' | 'settings' | 'performance'>> = 
   // D-468 batch 4: a finding is opened from Performance's Insights tab.
   '/intelligence': 'performance',
   '/notifications': 'top bar',
-  '/copilot': 'top bar',
   // D-468 batch 3: the Creative Studio is Media's Generate tab, and the top
   // bar's Create menu still opens it.
   '/creative': 'top bar',

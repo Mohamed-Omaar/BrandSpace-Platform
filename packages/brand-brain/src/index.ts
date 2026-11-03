@@ -116,6 +116,8 @@ export {
   chunkText,
   defaultExtractors,
   extractorRegistryFor,
+  normalizedFact,
+  stripListMarker,
   strictUtf8,
 } from './extraction';
 export type {
@@ -129,6 +131,13 @@ export type {
   FactExtractor,
   TextExtractor,
 } from './extraction';
+export {
+  BRAND_EXTRACT_INSTRUCTION,
+  BRAND_EXTRACT_MAX_INPUT_CHARS,
+  BRAND_EXTRACT_MAX_OUTPUT_TOKENS,
+  ModelFactExtractor,
+} from './model-extraction';
+export type { FactModelPort } from './model-extraction';
 export { DocxExtractor, PptxExtractor, declaredOoxmlKind } from './extract-ooxml';
 export type { OoxmlKind } from './extract-ooxml';
 export { PdfExtractor } from './extract-pdf';
@@ -137,6 +146,7 @@ export type { DetectedFormat, SignatureCheck } from './file-signature';
 
 export {
   BrandIngestionService,
+  DUPLICATE_OF_EXISTING,
   extractSourceDocument,
   findStuckIngestionJobs,
   findUnclaimedIngestionJobs,

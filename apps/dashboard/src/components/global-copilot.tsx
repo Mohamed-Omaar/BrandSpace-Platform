@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import {
+  OpenFullIcon,
   StateMessage,
   useDismissOnOutsidePointer,
   useOverlayBehaviour,
@@ -40,8 +41,19 @@ export function GlobalCopilot({
   subject,
   labels,
   rateMetricKeys = [],
+  retentionDays = null,
+  sources = null,
+  factsEditable = false,
+  denials = {},
   strings,
 }: {
+  /** PR B — how long the one conversation is kept (the line under the composer). */
+  readonly retentionDays?: number | null;
+  /** PR B — "+" adds a file to Brand Brain (`brand_brain.upload`). */
+  readonly sources?: { readonly review: boolean } | null;
+  readonly factsEditable?: boolean;
+  /** PR B — the screen's own refusal per permission this member lacks. */
+  readonly denials?: Readonly<Record<string, string>>;
   readonly locale: string;
   /**
    * The server's `systemClock.now()`, as ISO: what this client view reads
@@ -73,7 +85,13 @@ export function GlobalCopilot({
     readonly creditsLabel: string;
     readonly greeting: string;
     readonly placeholder: string;
-    readonly suggestions: readonly { readonly id: string; readonly label: string }[];
+    readonly suggestions: readonly {
+      readonly id: string;
+      readonly label: string;
+      readonly prompt?: string;
+    }[];
+    /** PR B — "Open in Copilot page": the same conversation, full screen. */
+    readonly openFull: string;
   };
 }) {
   const [open, setOpen] = useState(false);
@@ -207,10 +225,24 @@ export function GlobalCopilot({
               <span
                 className="bsp-pill bsp-p-ai"
                 data-testid="copilot-credits"
-                aria-label={`${strings.creditsLabel}: ${strings.credits}`}
+                role="img"
+                aria-label={strings.creditsLabel}
               >
-                <span className="bsp-ltr">{strings.credits}</span>
+                {strings.credits}
               </span>
+            ) : null}
+            {brand ? (
+              // PR B — "Open in Copilot page", an icon button in the head:
+              // its name and its tooltip are the same words.
+              <Link
+                href={href}
+                className="bs-cp-open"
+                aria-label={strings.openFull}
+                title={strings.openFull}
+                data-testid="copilot-open-full"
+              >
+                <OpenFullIcon size={17} />
+              </Link>
             ) : null}
             <button
               type="button"
@@ -248,6 +280,10 @@ export function GlobalCopilot({
                 creditsLabel={null}
                 labels={labels}
                 rateMetricKeys={rateMetricKeys}
+                retentionDays={retentionDays}
+                sources={sources}
+                factsEditable={factsEditable}
+                denials={denials}
                 panel={{
                   greeting: strings.greeting,
                   placeholder: strings.placeholder,

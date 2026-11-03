@@ -190,6 +190,7 @@ be unique, and cost fields must be present before a model can be activated.
 | `strategy.generate` | text       | premium          | Longest context (Brand Brain + market context)           |
 | `analytics.explain` | text       | balanced         | Grounded in metric data; must not hallucinate numbers    |
 | `copilot.chat`      | text       | balanced/premium | Tool-calling, streaming, multi-turn                      |
+| `brand.extract`     | text       | balanced         | One call per added source (D-594); ≤50k tokens in        |
 | `image.generate`    | image      | balanced         | Per-image cost; brand palette guidance                   |
 | `video.generate`    | video      | premium          | Long-running, async, high cost — always queued           |
 | `moderation.check`  | moderation | fast             | Cheap, mandatory on ingest and pre-publish               |

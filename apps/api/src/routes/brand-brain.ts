@@ -1,5 +1,11 @@
+import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  BrandIngestionService,
+  ExtractorRegistry,
+  InMemoryObjectStore,
+  ModelFactExtractor,
+  TenantBrandBrainPolicySource,
   BrandBrainChatService,
   type ChatRun,
   chatMessageSchema,
@@ -143,7 +149,109 @@ async function resolveCaller(
   };
 }
 
+const extractSchema = z.object({ sourceId: z.string().uuid() });
+const EXTRACT_PERMISSION = 'brand_brain.upload';
+
 export function registerBrandBrainRoutes(app: FastifyInstance): void {
+  /*
+   * PR B (D-594) — READ AN ADDED FILE WHOLE WITH `brand.extract`.
+   *
+   * After the worker has read the file (today's extraction), the Copilot's Add
+   * card asks for the whole-source reading here, in the API, the process that
+   * holds the AI gateway (F-07: an ordinary worker may not). One model call,
+   * OUTSIDE any tenant transaction (H-4), then one short transaction replaces
+   * the source's PENDING candidates. Unavailable (no route or price active) or
+   * failed, the gateway releases the reservation, nothing is charged and the
+   * file keeps today's reading — the answer says which. One logical action per
+   * source: a retry replays, never re-pays.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/brand-brain/extract',
+    {
+      scope: 'workspace',
+      permission: EXTRACT_PERMISSION,
+      spendsCredits: true,
+      idempotent: true,
+      rateLimit: 'ai.chat',
+      confirmation: 'not_required',
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const caller = await resolveCaller(req, reply, creditSpendingPermissions(EXTRACT_PERMISSION));
+      if (!caller) return reply;
+      const parsed = extractSchema.safeParse(req.body);
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        const environment = currentEnvironment();
+        const prisma = getPrisma();
+        const ingestion = async (db: Parameters<Parameters<typeof withWorkspace>[1]>[0]) =>
+          new BrandIngestionService({
+            db,
+            workspaceId: caller.workspaceId,
+            store: new InMemoryObjectStore(),
+            policy: (await new TenantBrandBrainPolicySource(db, environment).load()).ingestion,
+            extractors: new ExtractorRegistry([]),
+          });
+        const source = await withWorkspace(
+          caller.workspaceId,
+          async (db) =>
+            (await ingestion(db)).sourceForWholeReading({
+              documentId: parsed.data.sourceId,
+              actorBrandScope: caller.brandScope,
+            }),
+          { prisma },
+        );
+        if (!source) return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
+        if (source.alreadyRead) return reply.send({ readBy: 'brand.extract' });
+
+        const planKey = await planKeyFor(caller.workspaceId);
+        const { gateway } = gatewayDeps();
+        const extractor = new ModelFactExtractor({
+          async complete(request) {
+            const result = await gateway.execute({
+              workspaceId: caller.workspaceId,
+              userId: caller.userId,
+              taskKey: 'brand.extract',
+              planKey,
+              idempotencyKey: `brand.extract:${source.id}`,
+              input: {
+                kind: 'text',
+                prompt: request.prompt,
+                untrustedContext: [...request.context],
+              },
+            });
+            return result.status === 'SUCCEEDED' && result.output?.kind === 'text'
+              ? { text: result.output.text, requestId: result.requestId }
+              : null;
+          },
+        });
+        await extractor.prepare(source.text);
+        if (!extractor.requestId) return reply.send({ readBy: 'keyword' });
+
+        await withWorkspace(
+          caller.workspaceId,
+          async (db) =>
+            (await ingestion(db)).reExtract({
+              documentId: source.id,
+              actorBrandScope: caller.brandScope,
+              extractor,
+            }),
+          { prisma },
+        );
+        return reply.send({ readBy: 'brand.extract' });
+      } catch (error: unknown) {
+        if (isAppError(error)) {
+          return reply
+            .code(error.httpStatus)
+            .send({ error: { code: error.code, details: error.publicDetails } });
+        }
+        log.error('brand brain extract failed', internalErrorFields(error));
+        return reply.code(500).send({ error: { code: 'INTERNAL' } });
+      }
+    },
+  );
+
   route(
     app,
     'POST',

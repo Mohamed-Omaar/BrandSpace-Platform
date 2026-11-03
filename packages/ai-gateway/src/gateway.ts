@@ -43,6 +43,7 @@ import {
   creditsChargedMilli,
   estimateReservationMilli,
   findCreditRule,
+  isFixedPrice,
   providerCostMicroMinor,
   type CreditRule,
   type ModelCostBasis,
@@ -236,6 +237,13 @@ export interface AiQuote {
   readonly estimateMilli: bigint;
   /** The models that would be attempted, primary first. */
   readonly modelKeys: readonly string[];
+  /**
+   * PR B (D-594) — TRUE WHEN THE PRICE DOES NOT DEPEND ON THE INPUT: every
+   * model in the chain is priced per request. Only then can a price be shown
+   * before the input exists (a file not yet read); otherwise the caller shows
+   * none rather than a wrong number.
+   */
+  readonly fixed: boolean;
 }
 
 export interface AiGatewayResult {
@@ -530,6 +538,7 @@ export class AiGateway {
       route,
     );
 
+    let fixed = true;
     const estimateMilli = route.chain.reduce((highest, candidate) => {
       const rule = findCreditRule(
         config.creditRules,
@@ -537,11 +546,12 @@ export class AiGateway {
         candidate,
         imageQualityOf(request.input, route),
       );
+      if (!isFixedPrice(rule)) fixed = false;
       const estimate = estimateReservationMilli(rule, worstCase, multiplier);
       return estimate > highest ? estimate : highest;
     }, 0n);
 
-    return { taskKey: request.taskKey, estimateMilli, modelKeys: route.chain };
+    return { taskKey: request.taskKey, estimateMilli, modelKeys: route.chain, fixed };
   }
 
   // ---------------------------------------------------------------------------

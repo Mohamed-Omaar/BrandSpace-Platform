@@ -60,7 +60,7 @@ describe('B1.0 + Option B — when a post goes out', () => {
   });
 
   it('comes directly after PR 6, and directly before PR E (then connectors A and B, then the AI apps migrations)', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-16)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-17)).toEqual([
       '20261015092000_automation_run_execution_due_index',
       NAME,
       '20261020090000_group_b_fields',
@@ -85,6 +85,8 @@ describe('B1.0 + Option B — when a post goes out', () => {
       '20261103090000_calendar_slot_workspace_status_index',
       '20261103090100_audit_event_workspace_action_index',
       '20261103090200_audit_event_workspace_actor_action_index',
+      // PR B: one Copilot conversation per person per brand (D-594).
+      '20261103120000_one_assistant',
     ]);
   });
 });
