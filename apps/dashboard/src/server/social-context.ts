@@ -1,4 +1,5 @@
 import 'server-only';
+import { contentPolicyCache } from './config-cache';
 import {
   createConnectorRegistry,
   PublishHistoryService,
@@ -128,7 +129,11 @@ export async function inSocial<T>(
           approvals: new ContentApprovalService({
             db: scoped.db,
             workspaceId,
-            policy: await new TenantContentPolicySource(scoped.db, currentEnvironment()).load(),
+            policy: await new TenantContentPolicySource(
+              scoped.db,
+              currentEnvironment(),
+              contentPolicyCache,
+            ).load(),
           }),
         }),
     });

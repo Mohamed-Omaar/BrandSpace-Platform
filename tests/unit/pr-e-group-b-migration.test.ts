@@ -68,7 +68,7 @@ describe('PR E — the Group B fields', () => {
   });
 
   it('comes directly after batch 7 PR C, and only connectors A and B, the AI apps migrations and the D-573 ceiling follow it', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-12)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-15)).toEqual([
       '20261016090000_content_item_publish_time',
       NAME,
       '20261021090000_connectors_a_handles_and_subjects',
@@ -88,6 +88,10 @@ describe('PR E — the Group B fields', () => {
       '20261101090000_ai_output_failure_classes',
       // P1: each person's light / dark / device choice (D-592).
       '20261102090000_user_colour_scheme',
+      // PERF A: the three D-595 indexes (CONCURRENTLY).
+      '20261103090000_calendar_slot_workspace_status_index',
+      '20261103090100_audit_event_workspace_action_index',
+      '20261103090200_audit_event_workspace_actor_action_index',
     ]);
   });
 });

@@ -42,7 +42,7 @@ import { loadNotesPopover } from '../app/[locale]/notes/popover-feed';
 import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
 import { incomingMentions } from '../server/incoming-mentions';
-import { getCustomer, getCustomerAuth, getSessionToken } from '../server/customer-context';
+import { getCustomer, getSessionToken, listWorkspacesOnce } from '../server/customer-context';
 import { greetingName } from '../server/home';
 import { businessSwitcherModel } from '../server/business-switcher';
 import {
@@ -556,11 +556,7 @@ export async function WorkspaceShell({
   const businessCount =
     availableWorkspaces.length > 0
       ? availableWorkspaces.length
-      : (
-          await getCustomerAuth()
-            .listWorkspaces((await getSessionToken()) ?? '')
-            .catch(() => [])
-        ).length;
+      : (await listWorkspacesOnce((await getSessionToken()) ?? '').catch(() => [])).length;
 
   /*
    * THE BUSINESS SWITCHER (Q1 / Q2, D-326). With one brand in view the rail's

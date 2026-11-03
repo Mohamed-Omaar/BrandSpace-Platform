@@ -1,7 +1,7 @@
 import 'server-only';
 import { redirect } from 'next/navigation';
 import {
-  getCustomerAuth,
+  listWorkspacesOnce,
   getSessionToken,
   requireCustomer,
   type WorkspaceSession,
@@ -25,9 +25,10 @@ export async function pendingDeletionSession(locale: string): Promise<
 > {
   const customer = await requireCustomer(locale);
   const token = (await getSessionToken()) ?? '';
-  const available = await getCustomerAuth()
-    .listWorkspaces(token, { includePendingDeletion: true, includeMfaRequired: true })
-    .catch(() => null);
+  const available = await listWorkspacesOnce(token, {
+    includePendingDeletion: true,
+    includeMfaRequired: true,
+  }).catch(() => null);
   if (available === null) redirect(`/${locale}/sign-in`);
   const workspace = customer.activeWorkspaceId
     ? available.find((w) => w.workspaceId === customer.activeWorkspaceId)

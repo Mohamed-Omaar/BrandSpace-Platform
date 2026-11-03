@@ -55,6 +55,7 @@ import { NoticedDecided, NoticedDecision } from './noticed-result';
 import { setupFactsFor } from '../../../server/setup-wizard';
 import { setupSteps } from '../../../server/setup-wizard-state';
 import { connectableChannels } from '../../../server/connectable-channels';
+import { concurrency } from '../../../server/concurrency';
 import { heldSlot } from '../calendar/slot-moves';
 import { SubmitButton } from '../../../components/pending-submit';
 
@@ -168,43 +169,271 @@ export default async function OverviewPage({
   const now = systemClock.now();
   const DAY = 86_400_000;
   const last28 = { start: new Date(now.getTime() - 28 * DAY), end: now };
+  const scope = brandIdQueryFilter({ brandId, brandScope: workspace.brandScope });
 
-  const timeZone = safeZone(
-    await inWorkspace(workspace.workspaceId, async ({ db }) =>
+  /*
+   * PERF A — HOME'S INDEPENDENT READS START TOGETHER. Each section below used
+   * to wait for the one before it, about ten workspace transactions one after
+   * another. They are started here, at most four at a time (`concurrency`),
+   * and each section still awaits its own answer where it is used, so what the
+   * page shows and every `.catch` fallback are unchanged. Reads that need an
+   * earlier answer (recommendations, Retry here, the thumbnails) still wait.
+   */
+  const run = concurrency(4);
+  const timeZoneP = run(() =>
+    inWorkspace(workspace.workspaceId, async ({ db }) =>
       db.workspace
         .findUnique({ where: { id: workspace.workspaceId }, select: { timezone: true } })
         .then((row) => row?.timezone ?? null),
     ),
   );
+  const attentionBaseP = run(() =>
+    inWorkspace(workspace.workspaceId, async (scoped) =>
+      attentionItems(scoped.db, workspace, customer.userId),
+    ),
+  );
+  const performanceShiftP = maySeeAnalytics
+    ? run(() =>
+        inAnalytics(workspace.workspaceId, async (services) => {
+          const queries = await services.queries();
+          const series = await queries.series({
+            scope: {},
+            period: last28,
+            metricKey: 'engagements',
+            brandScope: workspace.brandScope,
+          });
+          return performanceShiftItem(
+            latestShift(
+              detectAnomalies({
+                metricKey: series.metricKey,
+                unit: series.unit,
+                points: series.points,
+                policy: await services.policy(),
+              }),
+              { now, withinDays: PERFORMANCE_SHIFT_RECENT_DAYS },
+            ),
+          );
+        }).catch(() => null),
+      )
+    : null;
+  const suggestionBrandsP = maySeeInsights
+    ? run(() =>
+        inWorkspace(workspace.workspaceId, async ({ db }) =>
+          db.brand.findMany({
+            where: {
+              workspaceId: workspace.workspaceId,
+              deletedAt: null,
+              ...(brandId ? { id: brandId } : {}),
+              ...(workspace.brandScope.length > 0
+                ? { AND: [{ id: { in: [...workspace.brandScope] } }] }
+                : {}),
+            },
+            select: { id: true, aiSuggestionsEnabled: true },
+          }),
+        ),
+      )
+    : [];
+  const noticedP =
+    brandId && may('content.create')
+      ? run(() =>
+          inContentStudio(workspace.workspaceId, async ({ suggestions, policy }) => {
+            const service = await suggestions();
+            const scope = { userId: customer.userId, brandId, brandScope: workspace.brandScope };
+            return {
+              noticedPreferences: (await service.noticedPreferences(scope)).slice(0, 2),
+              noticedWorkflows: (await service.noticedWorkflows(scope)).slice(0, 1),
+              // PR D (Home 5) — "We will remind you in n days" says the configured pause.
+              snoozeDays: (await policy()).learning.snoozeDays,
+            };
+          }),
+        )
+      : { noticedPreferences: [], noticedWorkflows: [], snoozeDays: null };
+  const scheduleP = maySeeContent
+    ? run(() =>
+        inWorkspace(workspace.workspaceId, async ({ db }) => {
+          const [upcoming, scheduled14, published, channels] = await Promise.all([
+            // `upcomingRecs`: the store from now on, the next four.
+            db.calendarSlot.findMany({
+              where: {
+                workspaceId: workspace.workspaceId,
+                status: { in: ['PLANNED', 'SCHEDULED', 'PUBLISHING'] },
+                ...scope,
+                scheduledAtUtc: { gte: now },
+              },
+              orderBy: { scheduledAtUtc: 'asc' },
+              take: 4,
+              select: {
+                id: true,
+                status: true,
+                scheduledAtUtc: true,
+                platformKeys: true,
+                contentItemId: true,
+                item: {
+                  select: {
+                    title: true,
+                    status: true,
+                    variants: { take: 1, select: { assetIds: true, coverAssetId: true } },
+                  },
+                },
+              },
+            }),
+            // `sched14`: scheduled in the next two weeks.
+            db.calendarSlot.count({
+              where: {
+                workspaceId: workspace.workspaceId,
+                status: { in: ['SCHEDULED', 'PUBLISHING'] },
+                ...scope,
+                scheduledAtUtc: { gte: now, lt: new Date(now.getTime() + 14 * DAY) },
+              },
+            }),
+            // F5 — the same live list Performance counts: posts, not per-channel jobs.
+            countPublishedPosts(db, {
+              workspaceId: workspace.workspaceId,
+              brandId,
+              brandScope: workspace.brandScope,
+              period: last28,
+            }),
+            db.socialConnection.count({
+              where: { workspaceId: workspace.workspaceId, status: 'ACTIVE', ...scope },
+            }),
+          ]);
+          return { upcoming, scheduled14, published, channels };
+        }),
+      )
+    : null;
+  const pendingApprovalsP =
+    maySeeContent && mayApprove
+      ? run(() =>
+          inContentStudio(workspace.workspaceId, async ({ approvals }) =>
+            (await approvals()).pendingCount(workspace.brandScope),
+          ),
+        )
+      : null;
+  const reachP = maySeeAnalytics
+    ? run(() =>
+        inAnalytics(workspace.workspaceId, async (services) => {
+          const queries = await services.queries();
+          const previous28 = {
+            start: new Date(last28.start.getTime() - 28 * DAY),
+            end: last28.start,
+          };
+          const [summary, series, previousSeries] = await Promise.all([
+            queries.summary({
+              scope: brandId ? { brandId } : {},
+              period: last28,
+              comparison: previous28,
+              brandScope: workspace.brandScope,
+              metricKeys: ['reach'],
+            }),
+            queries.series({
+              scope: brandId ? { brandId } : {},
+              period: last28,
+              metricKey: 'reach',
+              brandScope: workspace.brandScope,
+            }),
+            queries.series({
+              scope: brandId ? { brandId } : {},
+              period: previous28,
+              metricKey: 'reach',
+              brandScope: workspace.brandScope,
+            }),
+          ]);
+          const metric = summary.metrics.find((entry) => entry.metricKey === 'reach');
+          return {
+            value:
+              metric?.value === null || metric?.value === undefined ? null : Number(metric.value),
+            // Round 4 (4.5): "—" unless the previous 28 days were measured from their first day.
+            changeMilli: comparableChange(
+              metric?.changeMilli ?? null,
+              previousSeries.points.map((point) =>
+                point.value === null ? null : Number(point.value),
+              ),
+            ),
+            points: series.points.map((point) =>
+              point.value === null ? null : Number(point.value),
+            ),
+          };
+        }).catch(() => null),
+      )
+    : null;
+  const creditsP = mayReadCredits
+    ? run(() =>
+        inWorkspace(workspace.workspaceId, async ({ db, entitlements, credits: ledger }) => {
+          const [wallet, row, subscription, trialGrant] = await Promise.all([
+            ledger.wallet(workspace.workspaceId),
+            db.creditWallet.findUnique({
+              where: { workspaceId: workspace.workspaceId },
+              select: { nextResetAt: true },
+            }),
+            db.workspaceSubscription.findUnique({
+              where: { workspaceId: workspace.workspaceId },
+              select: {
+                status: true,
+                currentPeriodEnd: true,
+                trialEndsAt: true,
+                pinnedMonthlyCredits: true,
+              },
+            }),
+            // PR F (f): what the trial actually granted — the trial's "of N".
+            db.creditGrant.aggregate({
+              where: { workspaceId: workspace.workspaceId, source: 'TRIAL_GRANT' },
+              _sum: { amountMilliCredits: true },
+            }),
+          ]);
+          const trialGrantCredits = Number((trialGrant._sum.amountMilliCredits ?? 0n) / 1000n);
+          const context = await entitlements.contextFor(workspace.workspaceId).catch(() => null);
+          const plan = context?.planKey
+            ? (await entitlements.plans().catch(() => [])).find(
+                (entry) => entry.key === context.planKey,
+              )
+            : undefined;
+          // A trial's credits do not reset when it ends, so its end is no reset date.
+          const renews =
+            subscription && subscription.status !== 'TRIALING'
+              ? subscription.currentPeriodEnd
+              : null;
+          return {
+            balance: wallet.balanceCredits,
+            monthly: homeCreditGrant(subscription, plan?.monthlyCredits, trialGrantCredits),
+            planned: subscription !== null,
+            resetsAt: row?.nextResetAt ?? renews ?? null,
+          };
+        }).catch(() => null),
+      )
+    : null;
+  const setupP =
+    brandId !== undefined
+      ? run(() =>
+          inWorkspace(workspace.workspaceId, async ({ db }) =>
+            setupChecklistFacts(db, {
+              workspaceId: workspace.workspaceId,
+              brandId,
+              brandScope: workspace.brandScope,
+            }),
+          ).catch(() => null),
+        )
+      : null;
+  const brandSetUpP =
+    brandId !== undefined
+      ? run(() =>
+          setupFactsFor(workspace.workspaceId, brandId)
+            .then((facts) =>
+              setupSteps(facts)
+                .filter((step) => ['brand', 'learn', 'connect'].includes(step.key))
+                .every((step) => step.complete),
+            )
+            .catch(() => false),
+        )
+      : false;
+  const roleRowsP = kind === 'owner' ? null : run(() => roleSections());
+
+  const timeZone = safeZone(await timeZoneP);
 
   /* ------------------------------------------------------------ Needs you */
-  const performanceShift = maySeeAnalytics
-    ? await inAnalytics(workspace.workspaceId, async (services) => {
-        const queries = await services.queries();
-        const series = await queries.series({
-          scope: {},
-          period: last28,
-          metricKey: 'engagements',
-          brandScope: workspace.brandScope,
-        });
-        return performanceShiftItem(
-          latestShift(
-            detectAnomalies({
-              metricKey: series.metricKey,
-              unit: series.unit,
-              points: series.points,
-              policy: await services.policy(),
-            }),
-            { now, withinDays: PERFORMANCE_SHIFT_RECENT_DAYS },
-          ),
-        );
-      }).catch(() => null)
-    : null;
+  const performanceShift = await performanceShiftP;
 
   const attention = rankAttention([
-    ...(await inWorkspace(workspace.workspaceId, async (scoped) =>
-      attentionItems(scoped.db, workspace, customer.userId),
-    )),
+    ...(await attentionBaseP),
     ...(performanceShift ? [performanceShift] : []),
   ]);
 
@@ -258,21 +487,7 @@ export default async function OverviewPage({
    * D7 (Phase 2B-2) — Settings → AI switches suggestions off per brand; with
    * it off the "noticed" card is not drawn (the prototype's `x.suggestOn`).
    */
-  const suggestionBrands = maySeeInsights
-    ? await inWorkspace(workspace.workspaceId, async ({ db }) =>
-        db.brand.findMany({
-          where: {
-            workspaceId: workspace.workspaceId,
-            deletedAt: null,
-            ...(brandId ? { id: brandId } : {}),
-            ...(workspace.brandScope.length > 0
-              ? { AND: [{ id: { in: [...workspace.brandScope] } }] }
-              : {}),
-          },
-          select: { id: true, aiSuggestionsEnabled: true },
-        }),
-      )
-    : [];
+  const suggestionBrands = await suggestionBrandsP;
   const suggestionsOff = suggestionBrands
     .filter((row) => !row.aiSuggestionsEnabled)
     .map((row) => row.id);
@@ -321,19 +536,7 @@ export default async function OverviewPage({
         ).catch(() => null)
       : null;
 
-  const { noticedPreferences, noticedWorkflows, snoozeDays } =
-    brandId && may('content.create')
-      ? await inContentStudio(workspace.workspaceId, async ({ suggestions, policy }) => {
-          const service = await suggestions();
-          const scope = { userId: customer.userId, brandId, brandScope: workspace.brandScope };
-          return {
-            noticedPreferences: (await service.noticedPreferences(scope)).slice(0, 2),
-            noticedWorkflows: (await service.noticedWorkflows(scope)).slice(0, 1),
-            // PR D (Home 5) — "We will remind you in n days" says the configured pause.
-            snoozeDays: (await policy()).learning.snoozeDays,
-          };
-        })
-      : { noticedPreferences: [], noticedWorkflows: [], snoozeDays: null };
+  const { noticedPreferences, noticedWorkflows, snoozeDays } = await noticedP;
   const preferenceTitle = (preference: (typeof noticedPreferences)[number]): string =>
     (preference.tool === 'shorten'
       ? t('home.preference.shorter')
@@ -371,65 +574,9 @@ export default async function OverviewPage({
       .replace('{count}', String(workflow.repeats));
 
   /* ------------------------------------------------------ the calendar's facts */
-  const scope = brandIdQueryFilter({ brandId, brandScope: workspace.brandScope });
-  const schedule = maySeeContent
-    ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
-        const [upcoming, scheduled14, published, channels] = await Promise.all([
-          // `upcomingRecs`: the store from now on, the next four.
-          db.calendarSlot.findMany({
-            where: {
-              workspaceId: workspace.workspaceId,
-              status: { in: ['PLANNED', 'SCHEDULED', 'PUBLISHING'] },
-              ...scope,
-              scheduledAtUtc: { gte: now },
-            },
-            orderBy: { scheduledAtUtc: 'asc' },
-            take: 4,
-            select: {
-              id: true,
-              status: true,
-              scheduledAtUtc: true,
-              platformKeys: true,
-              contentItemId: true,
-              item: {
-                select: {
-                  title: true,
-                  status: true,
-                  variants: { take: 1, select: { assetIds: true, coverAssetId: true } },
-                },
-              },
-            },
-          }),
-          // `sched14`: scheduled in the next two weeks.
-          db.calendarSlot.count({
-            where: {
-              workspaceId: workspace.workspaceId,
-              status: { in: ['SCHEDULED', 'PUBLISHING'] },
-              ...scope,
-              scheduledAtUtc: { gte: now, lt: new Date(now.getTime() + 14 * DAY) },
-            },
-          }),
-          // F5 — the same live list Performance counts: posts, not per-channel jobs.
-          countPublishedPosts(db, {
-            workspaceId: workspace.workspaceId,
-            brandId,
-            brandScope: workspace.brandScope,
-            period: last28,
-          }),
-          db.socialConnection.count({
-            where: { workspaceId: workspace.workspaceId, status: 'ACTIVE', ...scope },
-          }),
-        ]);
-        return { upcoming, scheduled14, published, channels };
-      })
-    : null;
+  const schedule = await scheduleP;
 
-  const pendingApprovals =
-    maySeeContent && mayApprove
-      ? await inContentStudio(workspace.workspaceId, async ({ approvals }) =>
-          (await approvals()).pendingCount(workspace.brandScope),
-        )
-      : null;
+  const pendingApprovals = await pendingApprovalsP;
 
   /* The upcoming rows' pictures: the post's own cover or first attachment. */
   const thumbIds = new Map(
@@ -454,49 +601,7 @@ export default async function OverviewPage({
   };
 
   /* ------------------------------------------------ Performance · last 28 days */
-  const reach = maySeeAnalytics
-    ? await inAnalytics(workspace.workspaceId, async (services) => {
-        const queries = await services.queries();
-        const previous28 = {
-          start: new Date(last28.start.getTime() - 28 * DAY),
-          end: last28.start,
-        };
-        const [summary, series, previousSeries] = await Promise.all([
-          queries.summary({
-            scope: brandId ? { brandId } : {},
-            period: last28,
-            comparison: previous28,
-            brandScope: workspace.brandScope,
-            metricKeys: ['reach'],
-          }),
-          queries.series({
-            scope: brandId ? { brandId } : {},
-            period: last28,
-            metricKey: 'reach',
-            brandScope: workspace.brandScope,
-          }),
-          queries.series({
-            scope: brandId ? { brandId } : {},
-            period: previous28,
-            metricKey: 'reach',
-            brandScope: workspace.brandScope,
-          }),
-        ]);
-        const metric = summary.metrics.find((entry) => entry.metricKey === 'reach');
-        return {
-          value:
-            metric?.value === null || metric?.value === undefined ? null : Number(metric.value),
-          // Round 4 (4.5): "—" unless the previous 28 days were measured from their first day.
-          changeMilli: comparableChange(
-            metric?.changeMilli ?? null,
-            previousSeries.points.map((point) =>
-              point.value === null ? null : Number(point.value),
-            ),
-          ),
-          points: series.points.map((point) => (point.value === null ? null : Number(point.value))),
-        };
-      }).catch(() => null)
-    : null;
+  const reach = await reachP;
 
   /* ---------------------------------------------------------------- AI credits */
   /*
@@ -513,77 +618,19 @@ export default async function OverviewPage({
    * A workspace with no subscription has no monthly grant: the card shows
    * the balance and "No plan", with no bar (there is no N to measure against).
    */
-  const credits = mayReadCredits
-    ? await inWorkspace(workspace.workspaceId, async ({ db, entitlements, credits: ledger }) => {
-        const [wallet, row, subscription, trialGrant] = await Promise.all([
-          ledger.wallet(workspace.workspaceId),
-          db.creditWallet.findUnique({
-            where: { workspaceId: workspace.workspaceId },
-            select: { nextResetAt: true },
-          }),
-          db.workspaceSubscription.findUnique({
-            where: { workspaceId: workspace.workspaceId },
-            select: {
-              status: true,
-              currentPeriodEnd: true,
-              trialEndsAt: true,
-              pinnedMonthlyCredits: true,
-            },
-          }),
-          // PR F (f): what the trial actually granted — the trial's "of N".
-          db.creditGrant.aggregate({
-            where: { workspaceId: workspace.workspaceId, source: 'TRIAL_GRANT' },
-            _sum: { amountMilliCredits: true },
-          }),
-        ]);
-        const trialGrantCredits = Number((trialGrant._sum.amountMilliCredits ?? 0n) / 1000n);
-        const context = await entitlements.contextFor(workspace.workspaceId).catch(() => null);
-        const plan = context?.planKey
-          ? (await entitlements.plans().catch(() => [])).find(
-              (entry) => entry.key === context.planKey,
-            )
-          : undefined;
-        // A trial's credits do not reset when it ends, so its end is no reset date.
-        const renews =
-          subscription && subscription.status !== 'TRIALING' ? subscription.currentPeriodEnd : null;
-        return {
-          balance: wallet.balanceCredits,
-          monthly: homeCreditGrant(subscription, plan?.monthlyCredits, trialGrantCredits),
-          planned: subscription !== null,
-          resetsAt: row?.nextResetAt ?? renews ?? null,
-        };
-      }).catch(() => null)
-    : null;
+  const credits = await creditsP;
 
   /* ----------------------------------------------------------- setup checklist */
-  const setup =
-    brandId !== undefined
-      ? await inWorkspace(workspace.workspaceId, async ({ db }) =>
-          setupChecklistFacts(db, {
-            workspaceId: workspace.workspaceId,
-            brandId,
-            brandScope: workspace.brandScope,
-          }),
-        ).catch(() => null)
-      : null;
+  const setup = await setupP;
   /*
    * Round 3 (C6) — THE PROTOTYPE HIDES THE CHECKLIST ONCE THE BRAND IS SET UP:
    * the setup wizard's brand, teach and accounts steps done (its own truth
    * conditions, `setupSteps`). Until then it is shown as before.
    */
-  const brandSetUp =
-    brandId !== undefined
-      ? await setupFactsFor(workspace.workspaceId, brandId)
-          .then((facts) =>
-            setupSteps(facts)
-              .filter((step) => ['brand', 'learn', 'connect'].includes(step.key))
-              .every((step) => step.complete),
-          )
-          .catch(() => false)
-      : false;
+  const brandSetUp = await brandSetUpP;
 
   /* ---------------------------------------------------------- the role Homes */
-  const roleRows = kind === 'owner' ? null : await roleSections();
+  const roleRows = await roleRowsP;
   async function roleSections() {
     return inWorkspace(workspace.workspaceId, async ({ db }) => {
       const select = {

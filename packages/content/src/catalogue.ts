@@ -4,6 +4,7 @@ import {
   type Environment,
 } from '@brandspace/config';
 import { parseContentPolicy, type ContentPolicy } from './policy';
+import type { TtlCache } from '@brandspace/shared';
 
 /**
  * Where the Content Studio's policy comes from, and who may ask for it.
@@ -46,13 +47,21 @@ export async function resolveContentPolicy(
 export class TenantContentPolicySource {
   readonly #db: CatalogueReader;
   readonly #environment: Environment;
+  readonly #cache: TtlCache<ContentPolicy> | undefined;
 
-  constructor(db: CatalogueReader, environment: Environment) {
+  /** PERF A (#4): `cache` — optional, process-wide, at most 30 s (`TtlCache`). */
+  constructor(db: CatalogueReader, environment: Environment, cache?: TtlCache<ContentPolicy>) {
     this.#db = db;
     this.#environment = environment;
+    this.#cache = cache;
   }
 
-  async load(): Promise<ContentPolicy> {
+  load(): Promise<ContentPolicy> {
+    if (!this.#cache) return this.#read();
+    return this.#cache.get(this.#environment, () => this.#read());
+  }
+
+  async #read(): Promise<ContentPolicy> {
     const row = await this.#db.entitlementCatalogueSnapshot.findUnique({
       where: {
         domain_environment: { domain: CONTENT_CONFIG_DOMAIN, environment: this.#environment },

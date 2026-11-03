@@ -1,7 +1,7 @@
 // The client TYPE comes from @brandspace/database, the only package permitted
 // to import @prisma/client directly (docs/ARCHITECTURE.md §4.1).
 import type { PrismaClient } from '@brandspace/database';
-import { AppError, type Clock, systemClock } from '@brandspace/shared';
+import { AppError, type Clock, systemClock, type TtlCache } from '@brandspace/shared';
 import { parseConfigPayload, type ConfigurationService } from '@brandspace/config';
 import {
   resolveEntitlement,
@@ -133,13 +133,31 @@ export class ConfigurationCatalogueSource implements CatalogueSource {
 export class TenantCatalogueSource implements CatalogueSource {
   readonly #prisma: PrismaClient;
   readonly #environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
+  readonly #cache: TtlCache<Record<string, unknown>> | undefined;
 
-  constructor(prisma: PrismaClient, environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION') {
+  /**
+   * PERF A (#4): `cache` — a process-wide cache of the PARSED global catalogue
+   * (at most 30 s, `TtlCache`). Optional: without one every load reads the
+   * projection, as before. Nothing tenant-specific goes in it.
+   */
+  constructor(
+    prisma: PrismaClient,
+    environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION',
+    cache?: TtlCache<Record<string, unknown>>,
+  ) {
     this.#prisma = prisma;
     this.#environment = environment;
+    this.#cache = cache;
   }
 
-  async load(domain: 'entitlements' | 'plans' | 'feature-flags'): Promise<Record<string, unknown>> {
+  load(domain: 'entitlements' | 'plans' | 'feature-flags'): Promise<Record<string, unknown>> {
+    if (!this.#cache) return this.#read(domain);
+    return this.#cache.get(`${domain}:${this.#environment}`, () => this.#read(domain));
+  }
+
+  async #read(
+    domain: 'entitlements' | 'plans' | 'feature-flags',
+  ): Promise<Record<string, unknown>> {
     const row = await this.#prisma.entitlementCatalogueSnapshot.findUnique({
       where: { domain_environment: { domain, environment: this.#environment } },
     });

@@ -1,4 +1,6 @@
 import 'server-only';
+import { catalogueCache } from './config-cache';
+import { cache } from 'react';
 import { cookies, headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import {
@@ -141,7 +143,7 @@ export async function inWorkspace<T>(
           // source reads `entitlement_catalogue_snapshot` instead — the
           // projection the Configuration Service writes on activation, holding
           // only the three customer-visible domains (D-44).
-          catalogueSource: new TenantCatalogueSource(scoped, currentEnvironment()),
+          catalogueSource: new TenantCatalogueSource(scoped, currentEnvironment(), catalogueCache),
           environment: currentEnvironment(),
         }),
         credits: new CreditService({ prisma: scoped }),
@@ -213,7 +215,46 @@ export function getUnscopedEmailProvider(): EmailProvider {
 export async function getCustomer(): Promise<AuthenticatedCustomer | null> {
   const token = await getSessionToken();
   if (!token) return null;
-  return getCustomerAuth().resolve(token);
+  return resolveOnce(token);
+}
+
+/*
+ * PERF A (#2) — THE SESSION AND THE WORKSPACE LIST, ONCE PER REQUEST.
+ *
+ * A Home render resolved the session about three times and listed the
+ * workspaces five or six times — the layout, the page's gate, the shell, the
+ * top bar — each a full round of queries, and each resolve also wrote the
+ * session's sliding expiry. React's `cache()` keeps an answer for ONE request
+ * only: the next request asks the database again. So a revoked session, a
+ * removed member or a changed role still lands on the very next request, as
+ * before; only the duplicate questions inside one request are gone. Nothing
+ * here is kept in module memory.
+ */
+const resolveOnce = cache((token: string) => getCustomerAuth().resolve(token));
+
+const workspacesOnce = cache(
+  (token: string, includePendingDeletion: boolean, includeMfaRequired: boolean) =>
+    includePendingDeletion || includeMfaRequired
+      ? getCustomerAuth().listWorkspaces(token, { includePendingDeletion, includeMfaRequired })
+      : getCustomerAuth().listWorkspaces(token),
+);
+
+/**
+ * The workspaces this session may act in, asked once per request for each
+ * combination of options. Same answer, same refusal, as `listWorkspaces`.
+ */
+export function listWorkspacesOnce(
+  token: string,
+  options: {
+    readonly includePendingDeletion?: boolean;
+    readonly includeMfaRequired?: boolean;
+  } = {},
+): ReturnType<CustomerAuthService['listWorkspaces']> {
+  return workspacesOnce(
+    token,
+    options.includePendingDeletion === true,
+    options.includeMfaRequired === true,
+  );
 }
 
 /** The raw session token from the cookie. Never logged, never rendered. */
@@ -278,9 +319,10 @@ export async function requireWorkspace(
   // `listWorkspaces` REFUSES a token that matches no live session rather than
   // returning an empty list, so a session revoked between `requireCustomer` and
   // here lands on sign-in instead of on "you are a member of nothing".
-  const available = await getCustomerAuth()
-    .listWorkspaces(token, { includePendingDeletion: true, includeMfaRequired: true })
-    .catch(() => null);
+  const available = await listWorkspacesOnce(token, {
+    includePendingDeletion: true,
+    includeMfaRequired: true,
+  }).catch(() => null);
   if (available === null) redirect(`/${locale}/sign-in`);
 
   if (available.length === 0) {
@@ -427,9 +469,7 @@ export async function resolveApiWorkspace(
   const customer = await getCustomer().catch(() => null);
   if (!customer) return null;
   const token = (await getSessionToken()) ?? '';
-  const available = await getCustomerAuth()
-    .listWorkspaces(token)
-    .catch(() => null);
+  const available = await listWorkspacesOnce(token).catch(() => null);
   if (available === null || available.length === 0) return null;
 
   const workspace = customer.activeWorkspaceId

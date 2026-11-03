@@ -80,6 +80,10 @@ describe('M4 — the asks-first expiry index', () => {
       '20261101090000_ai_output_failure_classes',
       // P1: each person's light / dark / device choice (D-592).
       '20261102090000_user_colour_scheme',
+      // PERF A: the three D-595 indexes (CONCURRENTLY).
+      '20261103090000_calendar_slot_workspace_status_index',
+      '20261103090100_audit_event_workspace_action_index',
+      '20261103090200_audit_event_workspace_actor_action_index',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261013090000_brand_scope_not_null');
   });

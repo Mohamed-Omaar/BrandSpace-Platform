@@ -108,4 +108,7 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261028090000_secret_version_kek_rewrap',
   '20261101090000_ai_output_failure_classes',
   '20261102090000_user_colour_scheme',
+  '20261103090000_calendar_slot_workspace_status_index',
+  '20261103090100_audit_event_workspace_action_index',
+  '20261103090200_audit_event_workspace_actor_action_index',
 ];

@@ -1108,18 +1108,10 @@ h4 {
   position: absolute;
   border-radius: 50%;
   filter: blur(var(--bs-ambient-blur));
-  /* Neutralised entirely by the reduced-motion block above. */
-  animation: bs-drift var(--bs-ambient-drift) var(--bs-ease-in-out) infinite alternate;
-}
-
-@keyframes bs-drift {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    /* `@keyframes float { to { transform: translate(5vw,4vh) scale(1.08) } }`. */
-    transform: translate3d(5vw, 4vh, 0) scale(1.08);
-  }
+  /* PERF A (owner, D-595): THE ORBS ARE STILL. The prototype drifted them
+     (`@keyframes float`, 16 s, alternate), which repainted three 100px-blurred
+     layers behind the frame on every frame. They now rest where the drift
+     began; reduced motion is unchanged (it was still before as well). */
 }
 
 /*

@@ -520,6 +520,13 @@ containment "within the cache TTL (seconds)", and thirty seconds is not seconds.
 stale another process can be; `EntitlementService.invalidate()` is the fast path for the one that made the
 change. Neither replaces the cross-instance invalidation F-12 still records.
 
+**D-595 (performance)**: the customer dashboard now keeps its own process-wide copy of the
+tenant-readable projections — the entitlement catalogue for at most **5 s** (it carries the kill
+switches) and the content policy for at most **30 s** (`apps/dashboard/src/server/config-cache.ts`,
+`TtlCache`, never longer than 30 s) — and the Control Center uses one `ConfigurationService` per
+process, so its 30-second cache lasts beyond one call. Sessions, memberships, roles, permissions,
+subscriptions and overrides are never cached across requests.
+
 **Phase 3 also projects plan QUOTAS into the catalogue** rather than requiring them to be written twice.
 A quota on a plan appears as a plan entitlement under a canonical key (`limit.seats`, `limit.brands`, …).
 The projection is deterministic and one-directional, and an explicitly declared entitlement for the same

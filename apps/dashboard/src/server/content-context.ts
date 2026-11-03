@@ -1,4 +1,5 @@
 import 'server-only';
+import { contentPolicyCache } from './config-cache';
 import {
   MemberSuggestionService,
   CampaignService,
@@ -53,7 +54,7 @@ export type { ContentPolicy };
  * lookup rather than a cross-tenant reach.
  */
 export async function contentPolicy(db: CatalogueReader): Promise<ContentPolicy> {
-  return new TenantContentPolicySource(db, currentEnvironment()).load();
+  return new TenantContentPolicySource(db, currentEnvironment(), contentPolicyCache).load();
 }
 
 export interface ContentServices extends ScopedServices {

@@ -65,7 +65,7 @@ describe('D-568 · the AI apps token key, scoped to the workspace', () => {
   });
 
   it('comes directly after the AI apps migration, and only the D-573 platform ceiling follows', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-6)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-9)).toEqual([
       '20261023090000_ai_app_connections',
       NAME,
       '20261027100000_ai_platform_spend_ceiling',
@@ -75,6 +75,10 @@ describe('D-568 · the AI apps token key, scoped to the workspace', () => {
       '20261101090000_ai_output_failure_classes',
       // P1: each person's light / dark / device choice (D-592).
       '20261102090000_user_colour_scheme',
+      // PERF A: the three D-595 indexes (CONCURRENTLY).
+      '20261103090000_calendar_slot_workspace_status_index',
+      '20261103090100_audit_event_workspace_action_index',
+      '20261103090200_audit_event_workspace_actor_action_index',
     ]);
   });
 });
