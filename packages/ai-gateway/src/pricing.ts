@@ -176,6 +176,15 @@ export function creditsChargedMilli(
   return divideRoundingUp((base + perUnit) * BigInt(multiplierBasisPoints), 1000n * 10_000n);
 }
 
+/**
+ * PR B (D-594) — A PRICE THAT DOES NOT DEPEND ON THE INPUT: a flat price per
+ * request. Only such a price can be shown before the input exists (a file not
+ * yet read); any other is shown only once it can be computed.
+ */
+export function isFixedPrice(rule: Pick<CreditRule, 'unit' | 'perUnitMilliCredits'>): boolean {
+  return rule.unit === 'request' && rule.perUnitMilliCredits === 0;
+}
+
 /** Find the rule for a task/model pair. There is no fallback rule by design. */
 export function findCreditRule(
   rules: readonly CreditRule[],

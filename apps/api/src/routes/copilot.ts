@@ -140,10 +140,14 @@ const conversationSchema = z.object({
 });
 
 /** PR B — the price of the message about to be sent. */
-const quoteSchema = z.object({
-  sessionId: z.string().uuid(),
-  request: z.string().min(1).max(4_000),
-});
+const quoteSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    request: z.string().max(4_000).default(''),
+    /** PR B — a file waiting to be added (its `brand.extract` reading). */
+    attachment: z.literal('file').optional(),
+  })
+  .refine((body) => body.request.trim() !== '' || body.attachment !== undefined);
 
 /** PR B — "New topic" and "Clear conversation" name only the session. */
 const sessionActionSchema = z.object({ sessionId: z.string().uuid() });
@@ -509,15 +513,39 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
       if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
       try {
         const facts = await workspaceFacts(caller.workspaceId);
-        const quote = await conversationRun(caller, (orchestrator, authorization) =>
-          orchestrator.quoteTurn({
-            authorization,
-            sessionId: parsed.data.sessionId,
-            request: parsed.data.request,
-            planKey: facts.planKey,
-          }),
-        );
-        return reply.send({ estimateMilli: quote.estimateMilli.toString() });
+        const text = parsed.data.request.trim();
+        const message = text
+          ? (
+              await conversationRun(caller, (orchestrator, authorization) =>
+                orchestrator.quoteTurn({
+                  authorization,
+                  sessionId: parsed.data.sessionId,
+                  request: text,
+                  planKey: facts.planKey,
+                }),
+              )
+            ).estimateMilli
+          : 0n;
+        /*
+         * PR B (D-594) — THE PRICE OF ADDING THE FILE, beside Send before it is
+         * sent: `brand.extract`'s price, ONLY when it does not depend on the
+         * file (a fixed price per source). Otherwise — priced by size, or not
+         * routed at all — no price is returned and none is shown: never a
+         * wrong number.
+         */
+        if (parsed.data.attachment === 'file') {
+          const file = await gateway()
+            .quote({
+              workspaceId: caller.workspaceId,
+              taskKey: 'brand.extract',
+              planKey: facts.planKey,
+              input: { kind: 'text', prompt: '' },
+            })
+            .catch(() => null);
+          if (!file || !file.fixed) return reply.send({});
+          return reply.send({ estimateMilli: (message + file.estimateMilli).toString() });
+        }
+        return reply.send({ estimateMilli: message.toString() });
       } catch (error: unknown) {
         return fail(reply, 'copilot quote', error);
       }

@@ -77,6 +77,7 @@ export function SourceCard({
   brandId,
   canReview,
   labels,
+  onAdded,
   onDone,
 }: {
   readonly file: File;
@@ -84,11 +85,19 @@ export function SourceCard({
   readonly brandId: string;
   readonly canReview: boolean;
   readonly labels: SourceCardLabels;
+  /** PR B — Add pressed: the file's reading is no longer a price to show. */
+  readonly onAdded?: () => void;
   readonly onDone: () => void;
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: 'ask' });
   const live = useRef(true);
   const askedWhole = useRef(false);
+  // A card is a message: when it appears or moves to its next step, it is
+  // brought into the conversation's view (only as far as needed).
+  const card = useRef<HTMLElement>(null);
+  useEffect(() => {
+    card.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [phase.kind]);
   useEffect(
     () => () => {
       live.current = false;
@@ -99,6 +108,7 @@ export function SourceCard({
   const detail = `${file.name} · ${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 
   const add = async () => {
+    onAdded?.();
     setPhase({ kind: 'uploading', percent: 0 });
     const form = new FormData();
     form.set('locale', locale);
@@ -181,7 +191,12 @@ export function SourceCard({
   };
 
   return (
-    <section className="bsp-card bsp-bb-bulk" data-testid="copilot-source-card" aria-live="polite">
+    <section
+      ref={card}
+      className="bs-cpb-card"
+      data-testid="copilot-source-card"
+      aria-live="polite"
+    >
       {phase.kind === 'ask' ? (
         <>
           <b data-testid="copilot-source-ask">{labels.askTitle.replace('{file}', file.name)}</b>

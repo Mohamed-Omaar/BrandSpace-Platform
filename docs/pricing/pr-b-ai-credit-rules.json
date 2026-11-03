@@ -102,44 +102,27 @@
     {
       "taskKey": "image.generate",
       "modelKey": "gpt-image-2",
-      "baseMilliCredits": 1000,
+      "baseMilliCredits": 60000,
       "perUnitMilliCredits": 0,
-      "unit": "request",
-      "imageQuality": "low"
-    },
-    {
-      "taskKey": "image.generate",
-      "modelKey": "gpt-image-2",
-      "baseMilliCredits": 6000,
-      "perUnitMilliCredits": 0,
-      "unit": "request",
-      "imageQuality": "medium"
-    },
-    {
-      "taskKey": "image.generate",
-      "modelKey": "gpt-image-2",
-      "baseMilliCredits": 24000,
-      "perUnitMilliCredits": 0,
-      "unit": "request",
-      "imageQuality": "high"
+      "unit": "request"
     },
     {
       "taskKey": "brand.extract",
       "modelKey": "gpt-5.4-mini",
-      "baseMilliCredits": 2000,
+      "baseMilliCredits": 3000,
       "perUnitMilliCredits": 0,
       "unit": "request"
     },
     {
       "taskKey": "brand.extract",
       "modelKey": "gpt-5.4-nano",
-      "baseMilliCredits": 2000,
+      "baseMilliCredits": 3000,
       "perUnitMilliCredits": 0,
       "unit": "request"
     }
   ],
   "targetGrossMarginPercent": 65,
   "minimumGrossMarginPercent": 0,
-  "creditValueMicroMinor": 5800000,
+  "creditValueMicroMinor": 1000000,
   "referenceCurrency": "USD"
 }

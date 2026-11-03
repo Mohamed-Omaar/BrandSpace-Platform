@@ -10,8 +10,8 @@ import {
   Card,
   CopilotBody,
   SectionHeader,
-  StateMessage,
   StatusBadge,
+  WorkingStatus,
   colorTokens,
   spacingTokens,
   typographyTokens,
@@ -148,6 +148,7 @@ export function CopilotView({
   creditsLabel,
   denials = {},
   sources = null,
+  factsEditable = false,
   subject = null,
   initialRequest = '',
   rateMetricKeys = [],
@@ -229,6 +230,8 @@ export function CopilotView({
    * for a member who may upload sources; `review` offers Approve all.
    */
   readonly sources?: { readonly review: boolean } | null;
+  /** PR B — the member may edit Brand Brain facts ("Add it now"). */
+  readonly factsEditable?: boolean;
 }) {
   /*
    * THE DICTIONARY IS RESOLVED HERE, FROM THE LOCALE — never handed in as a
@@ -296,9 +299,11 @@ export function CopilotView({
   const [history, setHistory] = useState<readonly HistoryRow[]>([]);
   const [search, setSearch] = useState('');
   const [attached, setAttached] = useState<File | null>(null);
+  const [fileAdded, setFileAdded] = useState(false);
   // PR B — the turn under way, for Stop; and how many were stopped.
   const [turn, setTurn] = useState<{ sessionId: string; idempotencyKey: string } | null>(null);
   const [stops, setStops] = useState(0);
+  const [turnStartedAt, setTurnStartedAt] = useState(0);
   // PR B — ONE KEY PER PAGE LOAD: a double click replays the turn, while the
   // same words asked again after a reload or a Clear are a new request (the
   // gateway's own replay outlives the cleared messages).
@@ -382,27 +387,38 @@ export function CopilotView({
     return () => window.clearTimeout(timer);
   }, [search, sessionId]);
 
-  // The price of the message being written, shown before it is sent.
+  /*
+   * The price of the message being written, shown beside Send before it is
+   * sent — and, PR B, of the file waiting on its Add card (its reading). No
+   * number is shown while it is being worked out, and none when it cannot be
+   * (a reading priced by the file's size): never a wrong one.
+   */
+  const filePending = attached !== null && !fileAdded;
   useEffect(() => {
     const text = request.trim();
-    if (text === '' || !sessionId) {
-      setPrice(null);
-      return undefined;
-    }
+    setPrice(null);
+    if ((text === '' && !filePending) || !sessionId) return undefined;
+    let current = true;
     const timer = window.setTimeout(() => {
       void (async () => {
-        const quote = (await post('/api/copilot/quote', { sessionId, request: text })) as {
-          estimateMilli?: string;
-        };
+        const quote = (await post('/api/copilot/quote', {
+          sessionId,
+          request: text,
+          ...(filePending ? { attachment: 'file' } : {}),
+        })) as { estimateMilli?: string };
+        if (!current) return;
         setPrice(
-          quote.estimateMilli !== undefined
+          typeof quote.estimateMilli === 'string'
             ? t('copilot.messagePrice').replace('{credits}', formatCredits(quote.estimateMilli))
             : null,
         );
       })();
     }, 600);
-    return () => window.clearTimeout(timer);
-  }, [request, sessionId]);
+    return () => {
+      current = false;
+      window.clearTimeout(timer);
+    };
+  }, [request, sessionId, filePending]);
 
   const newTopic = async (): Promise<void> => {
     if (!sessionId || busy) return;
@@ -456,6 +472,7 @@ export function CopilotView({
   const propose = async (): Promise<void> => {
     if (request.trim().length === 0 || busy) return;
     setBusy(true);
+    setTurnStartedAt(Date.now());
     setErrorCode(null);
     setErrorDetails(null);
     setExecution(null);
@@ -655,12 +672,15 @@ export function CopilotView({
         ? 'danger'
         : 'neutral';
 
-  return (
-    <div style={{ display: 'grid', gap: spacingTokens.lg }}>
-      {/*
-       * A REFUSAL IN THE READER'S LANGUAGE, NEVER A MACHINE CODE. A code the
-       * catalogue does not know renders the generic sentence rather than itself.
-       */}
+  /*
+   * PR B (D-594) — EVERY CARD IS A MESSAGE. A refusal, the answer's sources,
+   * a notice, the plan and its result render INSIDE the conversation, after
+   * its messages and above the composer (`CopilotBody`'s `extra`), never in a
+   * box of their own above or below it. A turn that proposes no step is just
+   * the Copilot's reply.
+   */
+  const conversationCards = (
+    <>
       {errorCode ? (
         <Banner tone="error" testId="copilot-error">
           {aiLimitMessage(
@@ -672,30 +692,6 @@ export function CopilotView({
             t('copilot.failed')}
         </Banner>
       ) : null}
-
-      {/*
-        D-304 — ONE ASSISTANT, ONE COMPOSER. This used to be a card with its own
-        "What would you like to get done?" field above the conversation, whose
-        own composer then sat inert beneath it: two places to type one thing.
-        Now the header states what the conversation is about, the plan and its
-        results follow, and the one composer is the conversation's own.
-      */}
-      {panel ? null : (
-        <p
-          data-testid="copilot-context"
-          style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
-        >
-          {t('copilot.contextBrand').replace('{brand}', brand.name)}
-          {surface !== 'general'
-            ? ` · ${t('copilot.contextFrom').replace(
-                '{screen}',
-                tOr(`copilot.surface.${surface}`, surface),
-              )}`
-            : ''}
-          {subject ? ` · ${t('copilot.contextSubject').replace('{subject}', subject.title)}` : ''}
-        </p>
-      )}
-
       {plan && steps.length === 0 ? (
         <div data-testid="copilot-answered" style={{ display: 'grid', gap: spacingTokens.sm }}>
           {/* D8 — where the brand facts in this answer came from. */}
@@ -712,7 +708,27 @@ export function CopilotView({
           ) : null}
           {plan.notice === 'brand_brain_missing' ? (
             <Banner tone="info" testId="copilot-brand-missing">
-              {missingSentence(plan.missing ?? null)}
+              <span className="bsp-st-inline">
+                <span>{missingSentence(plan.missing ?? null)}</span>
+                {/*
+                  PR B — the retired chat's "Add it now": the key question's
+                  own add form in its area (D12's link), for a member who may
+                  edit facts. Nothing is saved until they add it there.
+                */}
+                {plan.missing && factsEditable ? (
+                  <Link
+                    href={`/${locale}/brand-brain?${new URLSearchParams({
+                      brand: brand.id,
+                      area: plan.missing.area,
+                      question: plan.missing.itemKey,
+                    }).toString()}`}
+                    className={buttonClass('neutral', 'sm')}
+                    data-testid="copilot-missing-add"
+                  >
+                    {t('copilot.missingAdd')}
+                  </Link>
+                ) : null}
+              </span>
             </Banner>
           ) : null}
           {/*
@@ -741,9 +757,6 @@ export function CopilotView({
               </span>
             </Banner>
           ) : null}
-          {plan.notice || plan.saveFact ? null : (
-            <StateMessage kind="no-results" title={t('copilot.planEmpty')} />
-          )}
         </div>
       ) : null}
 
@@ -976,6 +989,42 @@ export function CopilotView({
           ) : null}
         </Card>
       ) : null}
+    </>
+  );
+
+  return (
+    <div
+      className={panel ? undefined : 'bsp-cpp'}
+      data-testid="copilot-view"
+      style={panel ? { display: 'grid', gap: spacingTokens.lg } : undefined}
+    >
+      {/*
+       * A REFUSAL IN THE READER'S LANGUAGE, NEVER A MACHINE CODE. A code the
+       * catalogue does not know renders the generic sentence rather than itself.
+       */}
+
+      {/*
+        D-304 — ONE ASSISTANT, ONE COMPOSER. This used to be a card with its own
+        "What would you like to get done?" field above the conversation, whose
+        own composer then sat inert beneath it: two places to type one thing.
+        Now the header states what the conversation is about, the plan and its
+        results follow, and the one composer is the conversation's own.
+      */}
+      {panel ? null : (
+        <p
+          data-testid="copilot-context"
+          style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+        >
+          {t('copilot.contextBrand').replace('{brand}', brand.name)}
+          {surface !== 'general'
+            ? ` · ${t('copilot.contextFrom').replace(
+                '{screen}',
+                tOr(`copilot.surface.${surface}`, surface),
+              )}`
+            : ''}
+          {subject ? ` · ${t('copilot.contextSubject').replace('{subject}', subject.title)}` : ''}
+        </p>
+      )}
 
       {/*
        * THE APPROVED VISUAL SHELL, carrying the real conversation. It is the same
@@ -1000,17 +1049,10 @@ export function CopilotView({
           onNewTopic={() => void newTopic()}
           onClear={() => void clearConversation()}
           disabled={busy || !sessionId}
-          {...(sources
-            ? {
-                attach: {
-                  label: t('copilot.attachFile'),
-                  onFile: (file: File) => setAttached(file),
-                },
-              }
-            : {})}
         />
         <CopilotBody
-          labels={panel ? { ...labels, promptPlaceholder: panel.placeholder } : labels}
+          // PR B — one composer, page and panel: "Message Copilot…".
+          labels={{ ...labels, promptPlaceholder: t('copilot.messagePlaceholder') }}
           state={busy ? 'streaming' : proposedAction ? 'approval' : 'idle'}
           messages={
             panel && conversation.length === 0
@@ -1033,6 +1075,30 @@ export function CopilotView({
           {...(proposedAction ? { proposedAction } : {})}
           onApprove={() => void confirm()}
           onReject={() => void reject()}
+          extra={
+            <>
+              {conversationCards}
+              {attached && sources ? (
+                <SourceCard
+                  key={`${attached.name}-${attached.lastModified}`}
+                  file={attached}
+                  locale={locale}
+                  brandId={brand.id}
+                  canReview={sources.review}
+                  labels={sourceCardLabels(t)}
+                  onAdded={() => setFileAdded(true)}
+                  onDone={() => setAttached(null)}
+                />
+              ) : null}
+            </>
+          }
+          waiting={
+            <WorkingStatus
+              label={labels.streaming}
+              since={turnStartedAt}
+              testId="copilot-working"
+            />
+          }
           composer={{
             value: request,
             onChange: setRequest,
@@ -1041,39 +1107,38 @@ export function CopilotView({
             maxLength: 2_000,
             inputTestId: 'copilot-request',
             submitTestId: 'copilot-propose',
+            ...(sources
+              ? {
+                  attach: {
+                    label: t('copilot.attachFile'),
+                    onFile: (file: File) => {
+                      setFileAdded(false);
+                      setAttached(file);
+                    },
+                  },
+                }
+              : {}),
+            price,
+            ...(turn
+              ? {
+                  onStop: () => {
+                    setStops((count) => count + 1);
+                    void post('/api/copilot/stop', turn);
+                  },
+                  stopLabel: t('copilot.stop'),
+                }
+              : {}),
+            note: (
+              <ConversationFoot
+                price={null}
+                retention={
+                  retentionDays
+                    ? t('copilot.retention').replace('{days}', String(retentionDays))
+                    : null
+                }
+              />
+            ),
           }}
-        />
-        {attached && sources ? (
-          <SourceCard
-            key={`${attached.name}-${attached.lastModified}`}
-            file={attached}
-            locale={locale}
-            brandId={brand.id}
-            canReview={sources.review}
-            labels={sourceCardLabels(t)}
-            onDone={() => setAttached(null)}
-          />
-        ) : null}
-        {busy && turn ? (
-          <span className="bsp-st-inline">
-            <button
-              type="button"
-              className="bsp-btn bsp-sm bsp-sec"
-              data-testid="copilot-stop"
-              onClick={() => {
-                setStops((count) => count + 1);
-                void post('/api/copilot/stop', turn);
-              }}
-            >
-              {t('copilot.stop')}
-            </button>
-          </span>
-        ) : null}
-        <ConversationFoot
-          price={price}
-          retention={
-            retentionDays ? t('copilot.retention').replace('{days}', String(retentionDays)) : null
-          }
         />
       </Card>
     </div>

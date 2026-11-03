@@ -11,10 +11,10 @@ import { MoreDisclosure } from '../../../components/more-disclosure';
  * conversation is kept.
  *
  * An APPROVED DESIGN-SYSTEM EXTENSION (CLAUDE.md §4.2): the prototype's Copilot
- * has no conversation history to search or clear. Composed only of the shared
- * classes the Studio already uses (`bsp-st-inline`, `bsp-chip`, `bs-control`,
- * `bsp-st-hint`), `MoreDisclosure` and the shared `ConfirmDialog`: no inline
- * style, no new class, no literal.
+ * has no conversation history to search or clear. One row on the page and in
+ * the panel (`bs-cpt`: search, New topic, ⋯), built from the shared
+ * `bs-control`, `bsp-chip`, `MoreDisclosure` and `ConfirmDialog`, with design
+ * tokens only: no inline style, no literal.
  */
 export interface ConversationToolLabels {
   readonly search: string;
@@ -36,7 +36,6 @@ export function ConversationTools({
   onNewTopic,
   onClear,
   disabled,
-  attach,
 }: {
   readonly labels: ConversationToolLabels;
   readonly search: string;
@@ -44,18 +43,13 @@ export function ConversationTools({
   readonly onNewTopic: () => void;
   readonly onClear: () => void;
   readonly disabled: boolean;
-  /**
-   * PR B — "+", the retired Brand Brain chat's attach: a file chosen here is
-   * only held in the tab until its Add card is confirmed (`SourceCard`).
-   */
-  readonly attach?: { readonly label: string; readonly onFile: (file: File) => void };
 }) {
   const [confirming, setConfirming] = useState(false);
   return (
-    <div className="bsp-st-inline" data-testid="copilot-conversation-tools">
+    <div className="bs-cpt" data-testid="copilot-conversation-tools">
       <input
         type="search"
-        className="bs-control bsp-st-select"
+        className="bs-control bs-cpt-search"
         value={search}
         onChange={(event) => onSearch(event.target.value)}
         placeholder={labels.searchPlaceholder}
@@ -63,22 +57,6 @@ export function ConversationTools({
         maxLength={200}
         data-testid="copilot-search"
       />
-      {attach ? (
-        <label className="bsp-btn bsp-sm bsp-bb-pick" data-testid="copilot-attach">
-          + {attach.label}
-          <input
-            type="file"
-            className="bs-control bsp-bb-file"
-            aria-label={attach.label}
-            data-testid="copilot-attach-input"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) attach.onFile(file);
-              event.target.value = '';
-            }}
-          />
-        </label>
-      ) : null}
       <button
         type="button"
         className="bsp-chip bsp-st-sm"

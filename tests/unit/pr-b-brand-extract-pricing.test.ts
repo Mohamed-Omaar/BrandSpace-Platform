@@ -6,7 +6,12 @@ import {
   type ConfigContext,
   type ConfigDomain,
 } from '@brandspace/config';
-import { ConfigurationAiSource, findAiTask, findCreditRule } from '@brandspace/ai-gateway';
+import {
+  ConfigurationAiSource,
+  findAiTask,
+  findCreditRule,
+  isFixedPrice,
+} from '@brandspace/ai-gateway';
 import {
   BRAND_EXTRACT_MAX_INPUT_CHARS,
   BRAND_EXTRACT_MAX_OUTPUT_TOKENS,
@@ -117,31 +122,70 @@ describe('PR B — brand.extract pricing documents', () => {
     expect(config.routingRules.some((rule) => rule.taskKey === 'brand.extract')).toBe(true);
   });
 
-  it('one source costs 2 credits and keeps a ≥ 65% margin at the worst-case source', () => {
+  it('one source costs 3 credits, for sources up to 50,000 tokens, as agreed', () => {
     // The extractor never sends more than this: a whole source up to
-    // BRAND_EXTRACT_MAX_INPUT_CHARS (≤ 1 token per 2 characters, the Arabic
-    // case) plus a 1,500-token instruction, and asks for at most
+    // BRAND_EXTRACT_MAX_INPUT_CHARS at the worst case of 2 characters per
+    // token (Arabic) — 50,000 tokens — and asks for at most
     // BRAND_EXTRACT_MAX_OUTPUT_TOKENS.
-    const inputTokens = BRAND_EXTRACT_MAX_INPUT_CHARS / 2 + 1_500;
+    const inputTokens = BRAND_EXTRACT_MAX_INPUT_CHARS / 2;
+    expect(inputTokens).toBe(50_000);
     const outputTokens = BRAND_EXTRACT_MAX_OUTPUT_TOKENS;
-    const priceMicroMinor = (2000 / 1000) * rules.creditValueMicroMinor;
-    for (const model of MODELS.models.filter((m) => m.key.startsWith('gpt-5.4'))) {
+    for (const modelKey of ['gpt-5.4-mini', 'gpt-5.4-nano']) {
       const row = rules.costs.find(
         (c: { taskKey: string; modelKey: string }) =>
-          c.taskKey === 'brand.extract' && c.modelKey === model.key,
+          c.taskKey === 'brand.extract' && c.modelKey === modelKey,
       );
-      expect(row, model.key).toMatchObject({ baseMilliCredits: 2000, unit: 'request' });
-      const cost =
-        (inputTokens / 1000) * model.inputCostPerUnitMicroMinor +
-        (outputTokens / 1000) * model.outputCostPerUnitMicroMinor;
-      const margin = 1 - cost / priceMicroMinor;
-      expect(margin, model.key).toBeGreaterThanOrEqual(0.65);
+      expect(row, modelKey).toMatchObject({ baseMilliCredits: 3000, unit: 'request' });
     }
+    // The agreed price holds the D-15 target (65%) at the cap at the credit
+    // value it was agreed at ($0.058). The documents keep staging's ACTIVE
+    // credit value, which the owner sets (see the PR report).
+    const AGREED_CREDIT_VALUE = 5_800_000;
+    const mini = MODELS.models[0]!;
+    const cost =
+      (inputTokens / 1000) * mini.inputCostPerUnitMicroMinor +
+      (outputTokens / 1000) * mini.outputCostPerUnitMicroMinor;
+    expect(1 - cost / (3 * AGREED_CREDIT_VALUE)).toBeGreaterThanOrEqual(0.65);
   });
 
-  it('every row of staging’s current document is kept, unchanged', () => {
+  it('only brand.extract is added: every active row and the credit value kept', () => {
     const kept = rules.costs.filter((c: { taskKey: string }) => c.taskKey !== 'brand.extract');
-    expect(kept).toHaveLength(17);
-    expect(rules).toMatchObject({ creditValueMicroMinor: 5800000, targetGrossMarginPercent: 65 });
+    // Staging's active (rolled-back) document, as #111's runtime test records it.
+    expect(kept).toHaveLength(15);
+    expect(kept.find((c: { taskKey: string }) => c.taskKey === 'image.generate')).toMatchObject({
+      modelKey: 'gpt-image-2',
+      baseMilliCredits: 60000,
+    });
+    expect(rules).toMatchObject({ creditValueMicroMinor: 1000000, targetGrossMarginPercent: 65 });
+    expect(routing.rules.map((r: { taskKey: string }) => r.taskKey).sort()).toEqual(
+      [
+        'analytics.explain',
+        'brand.extract',
+        'caption.generate',
+        'content.translate',
+        'copilot.chat',
+        'ideas.generate',
+        'image.generate',
+        'plan.monthly',
+        'strategy.generate',
+      ].sort(),
+    );
+  });
+
+  it('the price beside Send: a file’s price is shown only when it is fixed per source', async () => {
+    const config = await runtimeLoad({
+      'ai.models': MODELS,
+      'ai.routing': routing,
+      'ai.credit-rules': rules,
+    });
+    // brand.extract is one flat price per source: shown before the file is read.
+    for (const modelKey of ['gpt-5.4-mini', 'gpt-5.4-nano']) {
+      expect(isFixedPrice(findCreditRule(config.creditRules, 'brand.extract', modelKey))).toBe(
+        true,
+      );
+    }
+    // A price per token depends on the input: never shown before it exists.
+    expect(isFixedPrice({ unit: '1k_tokens', perUnitMilliCredits: 5 })).toBe(false);
+    expect(isFixedPrice({ unit: 'request', perUnitMilliCredits: 5 })).toBe(false);
   });
 });

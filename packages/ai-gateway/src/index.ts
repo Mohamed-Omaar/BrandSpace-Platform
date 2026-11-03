@@ -112,6 +112,7 @@ export {
   creditsChargedMilli,
   estimateReservationMilli,
   findCreditRule,
+  isFixedPrice,
   PricingError,
   providerCostMicroMinor,
   requiredPriceMicroMinor,

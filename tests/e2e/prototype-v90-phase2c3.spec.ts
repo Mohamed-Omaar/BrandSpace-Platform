@@ -508,6 +508,9 @@ test.describe('D8 · the Copilot answers from the same facts, and a missing fact
       'Brand Brain doesn’t have',
       { timeout: 60_000 },
     );
+    // PR B — the retired chat's "Add it now": the key question's add form.
+    await page.getByTestId('copilot-missing-add').click();
+    await expect(page.getByTestId('new-item-question')).toBeVisible();
   });
 });
 

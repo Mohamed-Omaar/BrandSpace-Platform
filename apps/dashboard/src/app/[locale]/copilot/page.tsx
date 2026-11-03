@@ -92,6 +92,22 @@ export default async function CopilotPage({
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={session.customer.name ?? session.customer.email}
       permissionKeys={workspace.permissionKeys}
+      // PR B (D-594) — credits left in the header, as in the side panel's head.
+      meta={
+        wallet ? (
+          <span
+            className="bsp-pill bsp-p-ai"
+            data-testid="copilot-credits"
+            role="img"
+            aria-label={t('copilot.creditsLeftLabel').replace(
+              '{credits}',
+              number.format(wallet.balanceCredits),
+            )}
+          >
+            {t('copilot.creditsLeft').replace('{credits}', number.format(wallet.balanceCredits))}
+          </span>
+        ) : undefined
+      }
     >
       <Stack gap={spacingTokens.lg}>
         {/* PR F (b), Q9: opened directly while AI cannot run, the page says so — nothing else. */}
@@ -134,6 +150,7 @@ export default async function CopilotPage({
             rateMetricKeys={RATE_METRIC_KEYS}
             retentionDays={await copilotRetentionDays(workspace.workspaceId)}
             // PR B — "+" adds a file to Brand Brain for a member who may upload.
+            factsEditable={workspace.permissionKeys.includes('brand_brain.edit')}
             sources={
               workspace.permissionKeys.includes('brand_brain.upload')
                 ? { review: workspace.permissionKeys.includes('brand_brain.review') }

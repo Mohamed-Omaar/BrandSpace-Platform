@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import {
+  OpenFullIcon,
   StateMessage,
   useDismissOnOutsidePointer,
   useOverlayBehaviour,
@@ -42,6 +43,7 @@ export function GlobalCopilot({
   rateMetricKeys = [],
   retentionDays = null,
   sources = null,
+  factsEditable = false,
   denials = {},
   strings,
 }: {
@@ -49,6 +51,7 @@ export function GlobalCopilot({
   readonly retentionDays?: number | null;
   /** PR B — "+" adds a file to Brand Brain (`brand_brain.upload`). */
   readonly sources?: { readonly review: boolean } | null;
+  readonly factsEditable?: boolean;
   /** PR B — the screen's own refusal per permission this member lacks. */
   readonly denials?: Readonly<Record<string, string>>;
   readonly locale: string;
@@ -222,10 +225,24 @@ export function GlobalCopilot({
               <span
                 className="bsp-pill bsp-p-ai"
                 data-testid="copilot-credits"
-                aria-label={`${strings.creditsLabel}: ${strings.credits}`}
+                role="img"
+                aria-label={strings.creditsLabel}
               >
-                <span className="bsp-ltr">{strings.credits}</span>
+                {strings.credits}
               </span>
+            ) : null}
+            {brand ? (
+              // PR B — "Open in Copilot page", an icon button in the head:
+              // its name and its tooltip are the same words.
+              <Link
+                href={href}
+                className="bs-cp-open"
+                aria-label={strings.openFull}
+                title={strings.openFull}
+                data-testid="copilot-open-full"
+              >
+                <OpenFullIcon size={17} />
+              </Link>
             ) : null}
             <button
               type="button"
@@ -252,11 +269,6 @@ export function GlobalCopilot({
           </div>
           <div className="bsp-cp-body">
             {brand ? (
-              <Link href={href} className="bsp-chip bsp-st-sm" data-testid="copilot-open-full">
-                {strings.openFull}
-              </Link>
-            ) : null}
-            {brand ? (
               <CopilotView
                 key={conversation.key}
                 locale={locale}
@@ -270,6 +282,7 @@ export function GlobalCopilot({
                 rateMetricKeys={rateMetricKeys}
                 retentionDays={retentionDays}
                 sources={sources}
+                factsEditable={factsEditable}
                 denials={denials}
                 panel={{
                   greeting: strings.greeting,

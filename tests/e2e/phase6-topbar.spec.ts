@@ -256,10 +256,16 @@ test.describe('P6-16 · the customer top bar', () => {
     await expect(context).toContainText(`looking at “${campaign?.name}”`);
   });
 
-  test('the full Copilot screen is still one click away', async ({ page }) => {
+  test('the full Copilot screen is reached, and has no Copilot button of its own', async ({
+    page,
+  }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/copilot?from=analytics`);
-    await expect(page.getByTestId('topbar-copilot')).toHaveAttribute('aria-current', 'page');
+    // PR B (D-594, owner review): the page IS the conversation, so neither the
+    // floating button nor the header's "Copilot" is drawn over it.
+    await expect(page.getByTestId('copilot-request')).toBeVisible();
+    await expect(page.getByTestId('topbar-copilot')).toHaveCount(0);
+    await expect(page.locator('.bsp-fab')).toHaveCount(0);
     await expect(page.getByTestId('copilot-context')).toContainText(/opened from Analytics/);
   });
 

@@ -24,7 +24,8 @@ import {
  *
  * THE COST IS BOUNDED HERE, and the per-source price in `ai.credit-rules` is
  * set against these bounds (tests/unit/pr-b-brand-extract-pricing.test.ts):
- * at most BRAND_EXTRACT_MAX_INPUT_CHARS of the source are sent and at most
+ * at most BRAND_EXTRACT_MAX_INPUT_CHARS of the source are sent — 50,000
+ * tokens at the worst case of 2 characters per token (Arabic) — and at most
  * BRAND_EXTRACT_MAX_OUTPUT_TOKENS are asked for. A longer source is read up to
  * the bound and the coverage line says how much was read.
  *
@@ -33,7 +34,7 @@ import {
  * the job records no AI request, and the screen says it used today's
  * extraction. A failed call is never charged (the gateway releases it).
  */
-export const BRAND_EXTRACT_MAX_INPUT_CHARS = 56_000;
+export const BRAND_EXTRACT_MAX_INPUT_CHARS = 100_000;
 export const BRAND_EXTRACT_MAX_OUTPUT_TOKENS = 4_000;
 const MAX_FACTS = 60;
 

@@ -2583,13 +2583,33 @@ draft alike.
 
 ### 6.3.81 PR B — one assistant (D-594)
 
-APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2), composed of the shared card, chip, button, hint and
-control classes, `MoreDisclosure`, `ConfirmDialog` and `ProgressBar`; no inline style, no new
-colour, no new class family:
+**The Copilot page and the side panel are one conversation with one look** (owner review of
+#115): the page takes the panel's chat look and composer — "Message Copilot…", attach, Send, the
+message's price beside Send, Enter to send, the retention line under it — with the panel's user
+and Copilot bubbles. The page header and the conversation's toolbar (search, New topic, ⋯) stay
+put; only the messages scroll; the composer is pinned at the bottom (desktop and phone). Every card
+— a plan, its result, an answer's sources, a notice, the file card — is a message in the
+conversation, above the composer. A turn that proposes no step is the Copilot's reply; there is
+no separate "no step" box. While a turn runs the conversation shows #112's `WorkingStatus`. The
+Copilot page draws no Copilot button of its own; its credits sit in the page header as in the
+panel's head. The panel's suggestion chips are one row, scrolled sideways.
+
+The price beside Send is shown before the message is sent and follows an attached file: a file's
+reading (`brand.extract`) is added only when it is a flat price per source (`isFixedPrice`);
+otherwise, and when there is nothing to price, no number is shown. The credits pill names its
+unit ("4,957 credits" / «4,957 رصيد») and is labelled "Credits left: …" for a screen reader.
+
+APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2), composed of the shared chip, button, hint and control
+classes, `MoreDisclosure`, `ConfirmDialog`, `ProgressBar` and `WorkingStatus`; no inline style, no
+new colour. Four Copilot classes carry their own values, all from design tokens, and no selector
+of another component carries them: `.bs-cpb-card` (the file card: `--bs-surface-lavender` on a
+`--bs-control-border-width` `--bs-surface-lavender-strong` edge), `.bs-cpb-attach` (hover
+`--bs-surface-soft`, focus `--bs-focus-ring`), `.bs-cpt` (the toolbar in one row) and
+`.bs-cp-open` (the panel head's icon button):
 
 - **The one conversation's controls** (`copilot/conversation-tools.tsx`): search inside it,
-  "+ Attach a file", "New topic", "Clear conversation" behind ⋯ with a confirmation; under the
-  composer, the message's price and the retention line. Day labels and the New topic divider
+  "New topic", "Clear conversation" behind ⋯ with a confirmation; attach, the price and Stop are
+  the composer's (`CopilotBody`), the retention line under it. Day labels and the New topic divider
   (`.bs-cpb-day`, `.bs-cpb-topic`, hairline on `--bs-table-rule`) in the shared Copilot shell.
   Stop beside the composer while a turn is under way.
 - **The Add card for a file** (`copilot/source-card.tsx`): Add / Not now, then the shared
@@ -2598,6 +2618,7 @@ colour, no new class family:
 - **Brand Brain**: the "Talk with the brand" tab (the prototype's chat card, lines 899–925) is
   REMOVED by owner decision; asking opens the Copilot's side panel, which keeps its own
   prototype geometry. The Knowledge strip's "Approve all" and the one-time duplicates card reuse
-  the bulk card's classes. The side panel's "Open in Copilot page" is a shared chip.
+  the bulk card's classes. The side panel's "Open in Copilot page" is an icon button in its head,
+  beside the credits and the close, named and with a tooltip in the same words.
 - **Workspace reads** under "What the Copilot found": one line per number and a "Source: … ·
   period" line, in the inspection list's existing caption style.

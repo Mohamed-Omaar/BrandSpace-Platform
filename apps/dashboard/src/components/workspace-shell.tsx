@@ -936,8 +936,13 @@ export async function WorkspaceShell({
   const shell = !focus && copilot && copilotLink ? await shellSession() : null;
   const copilotRetention = shell ? await copilotRetentionDays(shell.workspace.workspaceId) : null;
   const copilotDenied = shell ? await copilotDenials(locale, shell) : {};
+  /*
+   * PR B (D-594) — ON THE COPILOT PAGE ITSELF there is no Copilot button: the
+   * page IS the conversation, and the button (floating, or the header's
+   * "Copilot" when the page is current) only covered its composer and cards.
+   */
   const fab =
-    focus || !copilot ? null : copilotLink ? (
+    focus || !copilot || !copilotLink ? null : (
       <GlobalCopilot
         locale={locale}
         now={systemClock.now().toISOString()}
@@ -948,6 +953,7 @@ export async function WorkspaceShell({
         labels={copilotLabels(words, identity)}
         rateMetricKeys={RATE_METRIC_KEYS}
         retentionDays={copilotRetention}
+        factsEditable={permissionKeys.includes('brand_brain.edit')}
         sources={
           permissionKeys.includes('brand_brain.upload')
             ? { review: permissionKeys.includes('brand_brain.review') }
@@ -958,11 +964,22 @@ export async function WorkspaceShell({
           chooseBrandTitle: t('brand.chooseTitle'),
           chooseBrandBody: t('copilot.noBrandBody'),
           context: drawerContext,
+          // PR B — the balance with its unit ("4,957 credits"), named for a
+          // screen reader ("Credits left: 4,957").
           credits:
             typeof counts.credits === 'number' && permissionKeys.includes('billing.read')
-              ? counts.credits.toLocaleString('en-US')
+              ? t('copilot.creditsLeft').replace(
+                  '{credits}',
+                  counts.credits.toLocaleString('en-US'),
+                )
               : null,
-          creditsLabel: t('account.credits'),
+          creditsLabel:
+            typeof counts.credits === 'number'
+              ? t('copilot.creditsLeftLabel').replace(
+                  '{credits}',
+                  counts.credits.toLocaleString('en-US'),
+                )
+              : t('account.credits'),
           greeting: firstName
             ? t('copilot.hello').replace('{name}', firstName)
             : t('copilot.hello').replace(/\s?\{name\}/, ''),
@@ -997,13 +1014,6 @@ export async function WorkspaceShell({
           testId="topbar-copilot"
         />
       </GlobalCopilot>
-    ) : (
-      <PrototypeCopilotFab
-        href={copilot.href}
-        label={t('topbar.copilot')}
-        current
-        testId="topbar-copilot"
-      />
     );
 
   /*

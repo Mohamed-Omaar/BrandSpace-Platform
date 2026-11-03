@@ -7983,29 +7983,28 @@ img.bsp-pf-art {
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
 }
 /* The plan: `border: 1px solid #e6dcff; border-radius: 16px; padding: 14px; background: #fcfbff`. */
-.bsp-cp-body > div > section[data-surface='card']:not(:has(> .bs-cpb)) {
-  order: 2;
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-log section[data-surface='card'] {
   border: 1px solid var(--bs-lit-e6dcff) !important;
   border-radius: calc(var(--bsp-px-16) * var(--bs-radius-scale)) !important;
   padding: var(--bsp-px-14) !important;
   background: var(--bs-lit-fcfbff) !important;
   box-shadow: none !important;
 }
-.bsp-cp .bs-cpb-msg {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-msg {
   display: flex !important;
   flex-direction: column;
   gap: var(--bsp-px-6) !important;
   max-inline-size: 88% !important;
 }
-.bsp-cp .bs-cpb-msg > div {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-msg > div {
   display: block !important;
 }
-.bsp-cp .bs-cpb-av {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-av {
   display: none !important;
 }
-.bsp-cp .bs-cpb-who,
-.bsp-cp .bs-cpb-label,
-.bsp-cp .bs-cpb-sendl {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-who,
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-label,
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-sendl {
   position: absolute !important;
   inline-size: 1px;
   block-size: 1px;
@@ -8013,7 +8012,7 @@ img.bsp-pf-art {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
 }
-.bsp-cp .bs-cpb-bubble {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-bubble {
   background: var(--bs-lit-f5f5f7) !important;
   color: var(--bs-text-primary) !important;
   border-radius: calc(var(--bsp-px-16) * var(--bs-radius-scale)) !important;
@@ -8021,7 +8020,7 @@ img.bsp-pf-art {
   font-size: var(--bsp-fs-13-5) !important;
   line-height: 1.55 !important;
 }
-.bsp-cp [data-testid='copilot-message-user'] .bs-cpb-bubble {
+:is(.bsp-cp, .bsp-cpp) [data-testid='copilot-message-user'] .bs-cpb-bubble {
   background: var(--bs-text-primary) !important;
   color: var(--bs-surface) !important;
 }
@@ -8040,7 +8039,7 @@ img.bsp-pf-art {
   gap: var(--bsp-px-6) !important;
 }
 /* `.chip` at `font-size: 12px; min-block-size: 30px; padding: 4px 10px`. */
-.bsp-cp .bs-cpb-chip {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-chip {
   gap: var(--bsp-px-7) !important;
   border: 1px solid var(--bs-lit-e4e4e8) !important;
   background: var(--bs-surface) !important;
@@ -8051,10 +8050,10 @@ img.bsp-pf-art {
   font-weight: 600 !important;
   min-block-size: var(--bsp-px-30) !important;
 }
-.bsp-cp .bs-cpb-chip:hover:not(:disabled) {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-chip:hover:not(:disabled) {
   border-color: var(--bs-lit-c9c9d1) !important;
 }
-.bsp-cp .bs-cpb-compose {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-compose {
   display: flex !important;
   gap: var(--bsp-px-8) !important;
   padding: 0 !important;
@@ -8062,7 +8061,7 @@ img.bsp-pf-art {
   box-shadow: none !important;
   border-radius: 0 !important;
 }
-.bsp-cp .bs-cpb-compose textarea {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-compose textarea {
   flex-grow: 1;
   min-inline-size: 0;
   block-size: var(--bsp-px-41) !important;
@@ -8075,7 +8074,7 @@ img.bsp-pf-art {
   font-size: var(--bsp-fs-13-5) !important;
   line-height: 1.4 !important;
 }
-.bsp-cp .bs-cpb-send {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-send {
   gap: var(--bsp-px-8) !important;
 }
 
@@ -8235,8 +8234,8 @@ img.bsp-pf-art {
   line-height: 1.5;
   color: var(--bs-lit-55555c);
 }
-.bsp-cp .bs-cpb-foot [data-testid='copilot-send'],
-.bsp-cp .bs-cpb-send > button {
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-foot [data-testid='copilot-send'],
+:is(.bsp-cp, .bsp-cpp) .bs-cpb-send > button {
   background: var(--bs-brand-purple) !important;
   border-color: var(--bs-brand-purple) !important;
   color: var(--bs-surface) !important;
@@ -13869,4 +13868,162 @@ select.bs-select.bsp-chevron {
   content: '';
   flex: 1 1 0;
   border-block-start: var(--bs-table-rule);
+}
+
+/*
+ * PR B (D-594) — ONE CONVERSATION, ONE LOOK, PAGE AND PANEL.
+ *
+ * The Copilot page (`.bsp-cpp`) takes the side panel's chat look (shared
+ * through `:is(.bsp-cp, .bsp-cpp)` above) and its frame: the page header and
+ * the conversation's toolbar stay put, only the messages scroll, and the one
+ * composer is pinned at the bottom with the retention line under it — on a
+ * desktop and on a phone. An APPROVED DESIGN-SYSTEM EXTENSION (CLAUDE.md §4.2).
+ */
+.bsp-scroll:has(.bsp-cpp) {
+  overflow: hidden;
+}
+.bsp-scroll:has(.bsp-cpp) > .bsp-page {
+  block-size: 100%;
+  min-block-size: 0;
+  padding-block-end: var(--bsp-px-16);
+}
+/* Every wrapper between the page and the view stretches with it. */
+.bsp-scroll:has(.bsp-cpp) > .bsp-page :has(.bsp-cpp) {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  display: flex !important;
+  flex-direction: column;
+}
+.bsp-cpp {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-12);
+}
+.bsp-cpp > section[data-surface='card'] {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--bsp-px-12);
+}
+.bsp-cpp .bs-cpb {
+  min-block-size: 0;
+}
+.bsp-cpp .bs-cpb-log {
+  min-block-size: 0;
+}
+.bsp-cpp .bs-cpb-foot {
+  background: var(--bs-surface) !important;
+  border-block-start: var(--bs-table-rule);
+}
+@media (max-width: 767.98px) {
+  .bsp-main:has(.bsp-cpp) {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    block-size: 100dvh;
+    min-block-size: 0;
+  }
+  .bsp-main:has(.bsp-cpp) > .bsp-scroll {
+    overflow: hidden;
+    min-block-size: 0;
+  }
+}
+
+/* The file card (Add / Not now, then its progress and "found N facts"): a
+   message in the conversation, framed with design tokens. */
+.bs-cpb-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-8);
+  padding: var(--bsp-px-14);
+  border: var(--bs-control-border-width) solid var(--bs-surface-lavender-strong);
+  border-radius: calc(var(--bsp-px-16) * var(--bs-radius-scale));
+  background: var(--bs-surface-lavender);
+}
+
+/* The composer's attach and price, beside Send. */
+.bs-cpb-attach {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--bsp-px-36);
+  block-size: var(--bsp-px-36);
+  flex: none;
+  border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
+  color: var(--bs-text-primary);
+  cursor: pointer;
+}
+.bs-cpb-attach:hover {
+  background: var(--bs-surface-soft);
+}
+.bs-cpb-attach:focus-within {
+  outline: var(--bs-field-border-2) solid var(--bs-focus-ring);
+  outline-offset: var(--bsp-px-2);
+}
+.bs-cpb-file {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  inline-size: 100%;
+  block-size: 100%;
+}
+.bs-cpb-price {
+  flex: none;
+  font-size: var(--bsp-fs-12);
+  color: var(--bs-text-muted);
+  white-space: nowrap;
+}
+.bs-cpb-note {
+  display: grid;
+  gap: var(--bsp-px-6);
+}
+
+/* The panel's suggestion chips: one row, scrolled sideways. */
+.bsp-cp [data-testid='copilot-suggestions'] {
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+}
+.bsp-cp .bs-cpb-chip {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* The panel's conversation toolbar in one row: search takes the room left,
+   New topic and ⋯ keep their size. Page and panel alike. */
+.bs-cpt {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--bsp-px-8);
+  min-inline-size: 0;
+}
+.bs-cpt > * {
+  flex: none;
+}
+.bs-cpt > .bs-cpt-search {
+  flex: 1 1 auto;
+  inline-size: auto;
+  min-inline-size: 0;
+  min-block-size: var(--bsp-px-28);
+  padding-block: 0;
+  padding-inline: var(--bsp-px-10);
+  border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
+  font-size: var(--bsp-fs-12);
+}
+
+/* "Open in Copilot page" in the panel's head: an icon button beside the close. */
+.bs-cp-open {
+  inline-size: var(--bsp-px-34);
+  block-size: var(--bsp-px-34);
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
+  color: var(--bs-text-primary);
+}
+.bs-cp-open:hover {
+  background: var(--bs-surface-soft);
 }

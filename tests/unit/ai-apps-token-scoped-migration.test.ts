@@ -65,7 +65,7 @@ describe('D-568 · the AI apps token key, scoped to the workspace', () => {
   });
 
   it('comes directly after the AI apps migration, and only the D-573 platform ceiling follows', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-9)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-10)).toEqual([
       '20261023090000_ai_app_connections',
       NAME,
       '20261027100000_ai_platform_spend_ceiling',

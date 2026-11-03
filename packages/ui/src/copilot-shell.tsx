@@ -423,6 +423,8 @@ export function CopilotBody({
   onReject,
   disabled = false,
   composer,
+  extra,
+  waiting,
 }: {
   readonly labels: CopilotLabels;
   readonly state: CopilotState;
@@ -456,8 +458,28 @@ export function CopilotBody({
         readonly maxLength?: number | undefined;
         readonly inputTestId?: string | undefined;
         readonly submitTestId?: string | undefined;
+        /**
+         * PR B (D-594) — THE ONE CHAT COMPOSER, page and panel alike: attach
+         * (a file is offered as a card in the conversation, nothing stored
+         * before Add), the message's price beside Send, Stop while a turn is
+         * under way, and the retention line under it.
+         */
+        readonly attach?:
+          { readonly label: string; readonly onFile: (file: File) => void } | undefined;
+        readonly price?: string | null | undefined;
+        readonly onStop?: (() => void) | undefined;
+        readonly stopLabel?: string | undefined;
+        readonly note?: ReactNode;
       }
     | undefined;
+  /**
+   * PR B — EVERY CARD IS A MESSAGE. Plans, answers' sources, notices and the
+   * file card render inside the conversation, after its messages and above
+   * the composer — never outside it.
+   */
+  readonly extra?: ReactNode;
+  /** PR B — what the conversation shows while a turn runs (#112's waiting state). */
+  readonly waiting?: ReactNode;
 }) {
   const promptId = useId();
   const live = composer !== undefined;
@@ -557,6 +579,8 @@ export function CopilotBody({
           <MessageRow key={message.id} message={message} labels={labels} />
         ))}
 
+        {extra}
+
         {tools.length > 0 ? (
           <section
             aria-label={labels.toolsLabel}
@@ -569,7 +593,13 @@ export function CopilotBody({
           </section>
         ) : null}
 
-        {state === 'streaming' ? (
+        {state === 'streaming' && waiting ? (
+          <div data-testid="copilot-streaming" className="bs-cpb-waiting">
+            {waiting}
+          </div>
+        ) : null}
+
+        {state === 'streaming' && !waiting ? (
           <div
             data-testid="copilot-streaming"
             className="bs-cpb-bubble"
@@ -838,20 +868,57 @@ export function CopilotBody({
                 icon={<PaperclipIcon size={16} />}
               />
             )}
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={
-                composer ? composer.busy === true || composer.value.trim().length === 0 : disabled
-              }
-              icon={<SendIcon size={16} />}
-              data-testid={composer?.submitTestId ?? 'copilot-send'}
-              {...(composer ? { onClick: () => composer.onSubmit() } : {})}
-            >
-              <span className="bs-cpb-sendl">{labels.send}</span>
-            </Button>
+            {composer?.attach ? (
+              <label
+                className="bs-cpb-attach"
+                title={composer.attach.label}
+                data-testid="copilot-attach"
+              >
+                <PaperclipIcon size={16} />
+                <input
+                  type="file"
+                  className="bs-cpb-file"
+                  aria-label={composer.attach.label}
+                  data-testid="copilot-attach-input"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) composer.attach?.onFile(file);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
+            ) : null}
+            {composer?.price ? (
+              <span className="bs-cpb-price" data-testid="copilot-message-price">
+                {composer.price}
+              </span>
+            ) : null}
+            {composer?.busy && composer.onStop ? (
+              <Button
+                variant="neutral"
+                size="sm"
+                onClick={composer.onStop}
+                data-testid="copilot-stop"
+              >
+                {composer.stopLabel}
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={
+                  composer ? composer.busy === true || composer.value.trim().length === 0 : disabled
+                }
+                icon={<SendIcon size={16} />}
+                data-testid={composer?.submitTestId ?? 'copilot-send'}
+                {...(composer ? { onClick: () => composer.onSubmit() } : {})}
+              >
+                <span className="bs-cpb-sendl">{labels.send}</span>
+              </Button>
+            )}
           </div>
         </div>
+        {composer?.note ? <div className="bs-cpb-note">{composer.note}</div> : null}
         {/*
           The composer is INERT and says why. A prompt box that looks live but
           does nothing is precisely the "button that claims an unsupported
