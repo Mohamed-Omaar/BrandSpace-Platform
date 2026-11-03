@@ -317,19 +317,41 @@ test.describe('the orb centre asks the Copilot (the chat card is retired)', () =
     await expect(page.getByTestId('tab-chat')).toHaveCount(0);
   });
 
-  test('the panel does not grow when a message is sent', async ({ page }) => {
+  test('the panel stays inside the window when a message is sent, its composer reachable (D-592)', async ({
+    page,
+  }) => {
+    // The retired chat card had a fixed height. The Copilot side panel is as
+    // tall as its content, capped at the window (D-592, #112): whatever is
+    // sent, it never runs past the window and Send stays on screen.
     await signIn(page, 'en');
     await page.getByTestId('orb-center').click();
     const drawer = page.getByTestId('copilot-drawer');
     await expect(drawer).toBeVisible();
-    const before = await box(drawer);
-    await drawer.getByTestId('copilot-request').fill('What is our positioning?');
-    await drawer.getByTestId('copilot-propose').click();
-    await expect(drawer.getByTestId('copilot-message-assistant').last()).toBeVisible({
-      timeout: 20_000,
-    });
-    const after = await box(drawer);
-    expect(Math.abs(after.height - before.height)).toBeLessThan(2);
+    for (const question of [
+      `What is our tone of voice? (${Date.now()})`,
+      `And our positioning? (${Date.now()})`,
+    ]) {
+      const answered = await drawer.getByTestId('copilot-message-assistant').count();
+      await expect
+        .poll(
+          async () => {
+            await drawer.getByTestId('copilot-request').fill(question);
+            return drawer.getByTestId('copilot-propose').isEnabled();
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(true);
+      await drawer.getByTestId('copilot-propose').click();
+      await expect
+        .poll(async () => drawer.getByTestId('copilot-message-assistant').count(), {
+          timeout: 30_000,
+        })
+        .toBeGreaterThan(answered);
+    }
+    const viewport = page.viewportSize();
+    const panel = await drawer.boundingBox();
+    expect((panel?.y ?? 0) + (panel?.height ?? 0)).toBeLessThanOrEqual((viewport?.height ?? 0) + 1);
+    await expect(drawer.getByTestId('copilot-propose')).toBeInViewport();
   });
 });
 

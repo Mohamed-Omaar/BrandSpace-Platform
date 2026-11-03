@@ -36,6 +36,8 @@ export interface SourceCardLabels {
   readonly progressLabel: string;
   readonly coverage: string;
   readonly coverageNoSkips: string;
+  readonly coverageOne: string;
+  readonly coverageNoSkipsOne: string;
   readonly todaysExtraction: string;
   readonly approveOrReview: string;
   readonly approveAll: string;
@@ -234,7 +236,14 @@ export function SourceCard({
       {phase.kind === 'done' ? (
         <>
           <b data-testid="copilot-source-coverage">
-            {(phase.skipped > 0 ? labels.coverage : labels.coverageNoSkips)
+            {((phase.pages ?? 1) === 1
+              ? phase.skipped > 0
+                ? labels.coverageOne
+                : labels.coverageNoSkipsOne
+              : phase.skipped > 0
+                ? labels.coverage
+                : labels.coverageNoSkips
+            )
               .replace('{pages}', String(phase.pages ?? 1))
               .replace('{found}', String(phase.found))
               .replace('{skipped}', String(phase.skipped))}

@@ -3246,6 +3246,8 @@ export const messages = {
     'copilot.source.coverage':
       'قُرئت {pages} صفحات، ووُجدت {found} معلومات، وتُركت {skipped} لأنها موجودة في عقل العلامة.',
     'copilot.source.coverageNoSkips': 'قُرئت {pages} صفحات، ووُجدت {found} معلومات.',
+    'copilot.source.coverageOne': 'قُرئت صفحة واحدة، ووُجدت {found} معلومات، وتُركت {skipped} لأنها موجودة في عقل العلامة.',
+    'copilot.source.coverageNoSkipsOne': 'قُرئت صفحة واحدة، ووُجدت {found} معلومات.',
     'copilot.source.todays':
       'قُرئ بطريقة الاستخراج الحالية؛ القراءة الكاملة بالذكاء الاصطناعي لم تُفعَّل بعد.',
     'copilot.source.approveOrReview': 'هل تعتمدها كلها، أم تراجعها؟',
@@ -7722,6 +7724,8 @@ export const messages = {
     'copilot.source.coverage':
       'Read {pages} pages, found {found} facts, skipped {skipped} because they are already in Brand Brain.',
     'copilot.source.coverageNoSkips': 'Read {pages} pages, found {found} facts.',
+    'copilot.source.coverageOne': 'Read 1 page, found {found} facts, skipped {skipped} because they are already in Brand Brain.',
+    'copilot.source.coverageNoSkipsOne': 'Read 1 page, found {found} facts.',
     'copilot.source.todays': 'Read with today’s extraction; the full AI reading is not on yet.',
     'copilot.source.approveOrReview': 'Approve all, or review them?',
     'copilot.source.approveAll': 'Approve all',
