@@ -12,7 +12,7 @@ import {
 } from './fixtures';
 
 /**
- * PR B (D-591) — A FACT IS A CARD. The Copilot proposes a fact, an edit or a
+ * PR B (D-594) — A FACT IS A CARD. The Copilot proposes a fact, an edit or a
  * removal as a step the person confirms; the step then runs with THEIR
  * permission. With `brand_brain.review` an added fact is approved at once;
  * with edit alone it is SENT FOR REVIEW; without edit no card is offered. A

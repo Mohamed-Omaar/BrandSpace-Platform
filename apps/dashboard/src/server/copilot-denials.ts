@@ -3,7 +3,7 @@ import { denialText } from './denial';
 import { memberDisplayName, workspaceOwnerName, type WorkspaceSession } from './customer-context';
 
 /**
- * PR B (D-591) — THE PERMISSIONS THE COPILOT'S WORKSPACE READS ASK, the same
+ * PR B (D-594) — THE PERMISSIONS THE COPILOT'S WORKSPACE READS ASK, the same
  * ones their screens ask (team → `member.read`, credits → `credits.read`,
  * plan → `billing.read`, channels → `integrations.read`, notifications →
  * `workspace.read`). `tests/unit/pr-b-workspace-reads.test.ts` holds this list

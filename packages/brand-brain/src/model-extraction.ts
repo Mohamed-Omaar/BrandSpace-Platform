@@ -12,7 +12,7 @@ import {
 } from './extraction';
 
 /**
- * PR B (D-591) — WHOLE-SOURCE FACT EXTRACTION, `brand.extract`.
+ * PR B (D-594) — WHOLE-SOURCE FACT EXTRACTION, `brand.extract`.
  *
  * ONE model call per source reads it whole and proposes its facts. They are
  * CANDIDATES, exactly as the keyword extractor's are: they wait in Pending and

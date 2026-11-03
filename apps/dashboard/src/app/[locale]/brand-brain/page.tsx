@@ -253,7 +253,7 @@ export default async function BrandBrainPage({
        * D4 + C1 — the preview for "Accept the confident ones": the configured
        * threshold, never a conflict. The same rule the action re-applies.
        */
-      // PR B (D-591) — today's duplicates, for the one-time clean-up card.
+      // PR B (D-594) — today's duplicates, for the one-time clean-up card.
       duplicates: can('brand_brain.review')
         ? await knowledge.duplicateFacts({ brandId: brand.id, brandScope: workspace.brandScope })
         : null,
@@ -758,7 +758,7 @@ export default async function BrandBrainPage({
   };
 
   /*
-   * D7 / D8 / D9 (Phase 2C-3), PR B (D-591) — a hand-over opens an AREA:
+   * D7 / D8 / D9 (Phase 2C-3), PR B (D-594) — a hand-over opens an AREA:
    * `?mode=add&area=…&title=…&body=…&key=…` from the Copilot's "save this
    * fact" fills that area's add form, and `?mode=edit&fact=<id>` from the
    * Studio's "Fix it" opens that fact's edit box (the retired chat's Add and
@@ -975,7 +975,7 @@ export default async function BrandBrainPage({
           review: can('brand_brain.review'),
           // E3 — archiving a fact needs `brand_brain.edit`, the same as the action.
           remove: can('brand_brain.edit'),
-          // PR B (D-591) — "Ask" is the Copilot: a member who may use it
+          // PR B (D-594) — "Ask" is the Copilot: a member who may use it
           // (Q18, an answer spends credits) and a model that can answer
           // (PR F (b), Q9, D-507).
           chat: maySpendCredits(workspace.permissionKeys, 'copilot.use') && aiChat,

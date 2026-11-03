@@ -567,7 +567,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
   );
 
   /**
-   * PR B (D-591) — STOP the turn under way. Its message is marked stopped and
+   * PR B (D-594) — STOP the turn under way. Its message is marked stopped and
    * the turn ends without an answer; the gateway refuses to settle a stopped
    * turn, so nothing is charged. The caller's own session only.
    */

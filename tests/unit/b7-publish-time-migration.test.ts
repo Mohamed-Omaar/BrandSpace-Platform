@@ -85,7 +85,7 @@ describe('B1.0 + Option B — when a post goes out', () => {
       '20261103090000_calendar_slot_workspace_status_index',
       '20261103090100_audit_event_workspace_action_index',
       '20261103090200_audit_event_workspace_actor_action_index',
-      // PR B: one Copilot conversation per person per brand (D-591).
+      // PR B: one Copilot conversation per person per brand (D-594).
       '20261103120000_one_assistant',
     ]);
   });

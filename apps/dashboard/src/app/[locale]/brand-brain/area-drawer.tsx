@@ -84,7 +84,7 @@ export function AreaDrawer({
   /** D4 — open the one review card at this area's first candidate. */
   onReview: (area: string) => void;
   /**
-   * PR B (D-591) — what the retired chat's Add and Edit modes received: the
+   * PR B (D-594) — what the retired chat's Add and Edit modes received: the
    * Copilot's "save this fact" hand-over fills the add form (nothing is saved
    * until the person presses Add), and the Studio's "Fix it" opens that fact's
    * edit box. A prefill is only a starting point.

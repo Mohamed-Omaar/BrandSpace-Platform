@@ -497,7 +497,7 @@ function scoreSentence(
 }
 
 /**
- * PR B (D-591) — A LIST MARKER IS NOT PART OF THE FACT. "- Open daily from 8"
+ * PR B (D-594) — A LIST MARKER IS NOT PART OF THE FACT. "- Open daily from 8"
  * and "• Open daily from 8" are the same sentence as "Open daily from 8", and
  * keeping the marker made the same fact arrive twice from two files.
  */

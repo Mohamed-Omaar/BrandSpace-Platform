@@ -462,7 +462,7 @@ export async function acceptConfidentCandidatesAction(formData: FormData): Promi
         return knowledge.reviewCandidates({
           brandId: parsed.brandId,
           candidateIds: parsed.candidateIds,
-          // PR B (D-591) — "Approve all" accepts the listed facts whatever
+          // PR B (D-594) — "Approve all" accepts the listed facts whatever
           // their confidence; the server still skips any in conflict or not
           // eligible, exactly as it does for the confident ones.
           minimumConfidenceMilli:
@@ -485,7 +485,7 @@ export async function acceptConfidentCandidatesAction(formData: FormData): Promi
 }
 
 /**
- * PR B (D-591) — THE ONE-TIME CLEAN-UP: merge today's duplicate facts, once
+ * PR B (D-594) — THE ONE-TIME CLEAN-UP: merge today's duplicate facts, once
  * the owner confirms the card. Review rights, as accepting facts needs.
  */
 export async function mergeDuplicatesAction(formData: FormData): Promise<void> {
@@ -779,7 +779,7 @@ export async function removeSourceAction(formData: FormData): Promise<void> {
 }
 
 /**
- * PR B (D-591) — "Approve all" FOR ONE ADDED FILE, from the Copilot's Add card.
+ * PR B (D-594) — "Approve all" FOR ONE ADDED FILE, from the Copilot's Add card.
  * The person's own `brand_brain.review` (as on the Knowledge strip); every
  * waiting fact of that file, whatever its confidence; the server still skips a
  * fact in conflict. Returns the counts — the card stays in the conversation.

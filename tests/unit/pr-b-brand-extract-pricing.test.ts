@@ -13,7 +13,7 @@ import {
 } from '@brandspace/brand-brain';
 
 /**
- * PR B (D-591) — `brand.extract`, PRICED PER SOURCE, AND THE DOCUMENTS THE
+ * PR B (D-594) — `brand.extract`, PRICED PER SOURCE, AND THE DOCUMENTS THE
  * OWNER PASTES (`docs/pricing/pr-b-ai-credit-rules.json`,
  * `docs/pricing/pr-b-ai-routing.json`), loaded through the RUNTIME SOURCE the
  * API reads (#111) over staging's models as the owner pasted them on

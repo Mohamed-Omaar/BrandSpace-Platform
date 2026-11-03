@@ -281,7 +281,7 @@ describe('R2-A: the plan idempotency constraint is session-scoped, not workspace
     const mine = await authorizationFor(fixtures.a.userId);
     const one = await openSession(mine, fixtures.a.brandId);
     /*
-     * PR B (D-591): a member has ONE active conversation per brand, so opening
+     * PR B (D-594): a member has ONE active conversation per brand, so opening
      * again returns the same session. A second session of the same member and
      * brand now exists only once the first is ARCHIVED — exactly what the
      * one-assistant migration does to the sessions it merges away — and the key

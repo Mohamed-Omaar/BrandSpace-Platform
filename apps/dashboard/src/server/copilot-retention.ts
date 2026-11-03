@@ -3,7 +3,7 @@ import { CONFIG_DOMAINS } from '@brandspace/config';
 import { currentEnvironment, inWorkspace } from './customer-context';
 
 /**
- * PR B (D-591) — HOW LONG THE COPILOT CONVERSATION IS KEPT, for the line under
+ * PR B (D-594) — HOW LONG THE COPILOT CONVERSATION IS KEPT, for the line under
  * its composer ("Kept for 90 days, then its content is cleared"). Read from
  * the tenant-readable catalogue projection of the `copilot` domain — the same
  * row `TenantCopilotPolicySource` reads in the API — through the domain's own

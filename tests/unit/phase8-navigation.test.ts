@@ -48,7 +48,7 @@ function navHrefs(): readonly string[] {
  */
 const RAIL: readonly string[] = [
   '/overview',
-  // PR B (D-591): Copilot is back on the rail, right under Home.
+  // PR B (D-594): Copilot is back on the rail, right under Home.
   '/copilot',
   '/brand-brain',
   '/strategy',

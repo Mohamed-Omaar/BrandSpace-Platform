@@ -107,7 +107,7 @@ interface NavEntry {
 const NAV: readonly NavEntry[] = [
   { href: '/overview', key: 'nav.overview', permission: null, glyph: 'home' },
   /*
-   * PR B (owner decision, D-591) — "Copilot", right under Home: the one
+   * PR B (owner decision, D-594) — "Copilot", right under Home: the one
    * assistant's full page. The floating button on every other page opens the
    * same conversation as a side panel.
    */
@@ -211,7 +211,7 @@ function railPathFromRequest(requestPath: string | null): string | undefined {
 }
 
 const NAV_GROUPS: readonly { titleKey: MessageKey | null; hrefs: readonly string[] }[] = [
-  // PR B (D-591): Copilot, right under Home.
+  // PR B (D-594): Copilot, right under Home.
   { titleKey: null, hrefs: ['/overview', '/copilot'] },
   { titleKey: 'nav.group.brand', hrefs: ['/brand-brain'] },
   { titleKey: 'nav.group.plan', hrefs: ['/strategy', '/campaigns'] },
@@ -968,7 +968,7 @@ export async function WorkspaceShell({
             : t('copilot.hello').replace(/\s?\{name\}/, ''),
           placeholder: t('copilot.askPlaceholder'),
           /*
-           * PR B (D-591) — PAGE-AWARE. The Studio asks about the post first;
+           * PR B (D-594) — PAGE-AWARE. The Studio asks about the post first;
            * Brand Brain's three chips (the retired "Talk with the brand" tab's)
            * lead on Brand Brain and follow the three general ones elsewhere.
            */

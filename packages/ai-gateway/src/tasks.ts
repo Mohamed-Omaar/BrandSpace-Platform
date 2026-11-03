@@ -101,7 +101,7 @@ export const AI_TASKS = [
     mvpApproved: true,
   },
   /*
-   * PR B (D-591, owner-approved new task key) — WHOLE-SOURCE FACT EXTRACTION:
+   * PR B (D-594, owner-approved new task key) — WHOLE-SOURCE FACT EXTRACTION:
    * one call per added file reads it whole and proposes its facts, which wait
    * in Pending for a person. Priced per source in `ai.credit-rules`; until a
    * route and a price are active, Add uses today's keyword extraction.

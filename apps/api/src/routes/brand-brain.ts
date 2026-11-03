@@ -154,7 +154,7 @@ const EXTRACT_PERMISSION = 'brand_brain.upload';
 
 export function registerBrandBrainRoutes(app: FastifyInstance): void {
   /*
-   * PR B (D-591) — READ AN ADDED FILE WHOLE WITH `brand.extract`.
+   * PR B (D-594) — READ AN ADDED FILE WHOLE WITH `brand.extract`.
    *
    * After the worker has read the file (today's extraction), the Copilot's Add
    * card asks for the whole-source reading here, in the API, the process that
@@ -185,39 +185,21 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
       try {
         const environment = currentEnvironment();
         const prisma = getPrisma();
+        const ingestion = async (db: Parameters<Parameters<typeof withWorkspace>[1]>[0]) =>
+          new BrandIngestionService({
+            db,
+            workspaceId: caller.workspaceId,
+            store: new InMemoryObjectStore(),
+            policy: (await new TenantBrandBrainPolicySource(db, environment).load()).ingestion,
+            extractors: new ExtractorRegistry([]),
+          });
         const source = await withWorkspace(
           caller.workspaceId,
-          async (db) => {
-            const document = await db.brandSourceDocument.findFirst({
-              where: {
-                id: parsed.data.sourceId,
-                status: 'READY',
-                deletedAt: null,
-                ...(caller.brandScope.length > 0
-                  ? { brandId: { in: [...caller.brandScope] } }
-                  : {}),
-              },
-              select: {
-                id: true,
-                ingestionJobs: {
-                  orderBy: { queuedAt: 'desc' },
-                  take: 1,
-                  select: { aiRequestId: true },
-                },
-              },
-            });
-            if (!document) return null;
-            const chunks = await db.brandSourceChunk.findMany({
-              where: { sourceDocumentId: document.id },
-              orderBy: { chunkIndex: 'asc' },
-              select: { text: true },
-            });
-            return {
-              id: document.id,
-              alreadyRead: Boolean(document.ingestionJobs[0]?.aiRequestId),
-              text: chunks.map((chunk) => chunk.text).join('\n\n'),
-            };
-          },
+          async (db) =>
+            (await ingestion(db)).sourceForWholeReading({
+              documentId: parsed.data.sourceId,
+              actorBrandScope: caller.brandScope,
+            }),
           { prisma },
         );
         if (!source) return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
@@ -249,20 +231,12 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
 
         await withWorkspace(
           caller.workspaceId,
-          async (db) => {
-            const policy = await new TenantBrandBrainPolicySource(db, environment).load();
-            return new BrandIngestionService({
-              db,
-              workspaceId: caller.workspaceId,
-              store: new InMemoryObjectStore(),
-              policy: policy.ingestion,
-              extractors: new ExtractorRegistry([]),
-            }).reExtract({
+          async (db) =>
+            (await ingestion(db)).reExtract({
               documentId: source.id,
               actorBrandScope: caller.brandScope,
-              extractor: extractor as never,
-            });
-          },
+              extractor,
+            }),
           { prisma },
         );
         return reply.send({ readBy: 'brand.extract' });

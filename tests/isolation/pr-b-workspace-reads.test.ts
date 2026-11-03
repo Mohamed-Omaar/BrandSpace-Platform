@@ -12,7 +12,7 @@ import {
 } from './fixtures';
 
 /**
- * PR B (D-591) — THE COPILOT'S WORKSPACE READS, AGAINST REAL POSTGRESQL.
+ * PR B (D-594) — THE COPILOT'S WORKSPACE READS, AGAINST REAL POSTGRESQL.
  *
  * "Who is on my team", "how many credits", "which channels" and "my
  * notifications" are answered from these tools. Each must read only the

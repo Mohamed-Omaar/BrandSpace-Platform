@@ -318,6 +318,8 @@ describe('E3 + Q18 · spending credits needs copilot.use as well as the feature 
     expect(marked.sort()).toEqual([
       '/v1/analytics/explain',
       '/v1/brand-brain/chat',
+      // PR B — brand.extract reads an added source whole.
+      '/v1/brand-brain/extract',
       '/v1/content/generate',
       '/v1/content/tool',
       '/v1/creative/generate',
@@ -379,7 +381,7 @@ describe('E3 + Q18 · spending credits needs copilot.use as well as the feature 
       ],
       [
         'brand-brain/page.tsx',
-        // PR B (D-591) — Brand Brain's "Ask" is the Copilot.
+        // PR B (D-594) — Brand Brain's "Ask" is the Copilot.
         /chat: maySpendCredits\(workspace\.permissionKeys, 'copilot\.use'\) && aiChat/,
       ],
       [

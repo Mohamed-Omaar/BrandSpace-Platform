@@ -9306,7 +9306,7 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     en: 'The confident facts you confirmed are accepted.',
     ar: 'تم اعتماد الحقائق الموثوقة التي أكّدتها.',
   },
-  // PR B (D-591) — the one-time clean-up of duplicate facts.
+  // PR B (D-594) — the one-time clean-up of duplicate facts.
   DUPLICATES_MERGED: {
     en: 'The duplicate facts are merged.',
     ar: 'تم دمج المعلومات المكررة.',

@@ -286,7 +286,7 @@ describe('the development AI double answers the two conversational shapes', () =
 /* D8 — the Copilot has no knowledge-writing tool                           */
 /* ------------------------------------------------------------------------ */
 
-describe('D8, PR B (D-591) — the Copilot writes Brand Brain knowledge only through a confirmed card', () => {
+describe('D8, PR B (D-594) — the Copilot writes Brand Brain knowledge only through a confirmed card', () => {
   it('its only knowledge writes are the three fact cards, each confirmed, none approving', () => {
     const everything = [
       'copilot.use',

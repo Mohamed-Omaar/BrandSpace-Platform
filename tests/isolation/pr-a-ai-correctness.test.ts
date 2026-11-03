@@ -688,7 +688,7 @@ describe('H-4 — the provider call runs outside the tenant transaction', () => 
 });
 
 /*
- * PR B (D-591) — ONE CONTINUOUS COPILOT CONVERSATION PER PERSON PER BRAND.
+ * PR B (D-594) — ONE CONTINUOUS COPILOT CONVERSATION PER PERSON PER BRAND.
  * Here because this file already holds a scripted provider the prompts can be
  * read from; the migration that merges existing conversations has its own
  * suite (pr-b-one-assistant-migration).

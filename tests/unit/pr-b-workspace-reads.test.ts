@@ -4,7 +4,7 @@ import { COPILOT_TOOLS, WORKSPACE_READ_KEYS, availableTools } from '@brandspace/
 import { messages } from '../../apps/dashboard/src/i18n/messages';
 
 /**
- * PR B (D-591) — THE COPILOT'S WORKSPACE READS.
+ * PR B (D-594) — THE COPILOT'S WORKSPACE READS.
  *
  * Team, credits, plan, channels and notifications are answered from tools that
  * ask the SAME permission as their screens. A member without one is refused in
