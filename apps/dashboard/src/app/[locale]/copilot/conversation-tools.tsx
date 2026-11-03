@@ -56,6 +56,7 @@ export function ConversationTools({
         aria-label={labels.search}
         maxLength={200}
         data-testid="copilot-search"
+        dir="auto"
       />
       <button
         type="button"

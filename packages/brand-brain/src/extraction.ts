@@ -92,6 +92,12 @@ export type ExtractionFailureReason =
   | 'pdf_unreadable'
   | 'pdf_has_no_text_layer'
   | 'extraction_timed_out'
+  /**
+   * PR U — the READER could not run (a missing runtime feature, a library that
+   * failed to load). Never the file's fault: retried with the configured
+   * backoff, like any transient failure, and told to the customer as ours.
+   */
+  | 'reader_unavailable'
   | 'content_does_not_match_type'
   // Phase 2C-4 — what upload validation refuses on the bytes themselves.
   | 'ooxml_content_types_missing'

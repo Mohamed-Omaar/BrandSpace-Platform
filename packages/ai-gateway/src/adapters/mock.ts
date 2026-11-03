@@ -646,6 +646,8 @@ function copilotDocument(
         ? reads
         : approvalsStep(prompt, request);
   return JSON.stringify({
+    // PR U — the one reply; the both-languages summary is still read for replays.
+    reply: text,
     summary: { ar: text, en: text },
     steps,
     // A request a tool answers is not a question about the brand itself.

@@ -245,7 +245,9 @@ function MessageRow({
         >
           {assistant ? labels.assistantName : labels.userName}
         </span>
-        <div className="bs-cpb-bubble" style={bubbleStyle(message.author)}>
+        {/* PR U — the text decides its own direction: Arabic in an English UI
+            reads right to left (and its "؟" lands at the end), and the reverse. */}
+        <div className="bs-cpb-bubble" dir="auto" style={bubbleStyle(message.author)}>
           {message.text}
         </div>
       </div>
@@ -288,6 +290,7 @@ function ToolCard({ run }: { readonly run: CopilotToolRun }) {
   return (
     <div
       data-testid="copilot-tool-card"
+      dir="auto"
       data-status={run.status}
       style={{
         display: 'grid',
@@ -602,6 +605,7 @@ export function CopilotBody({
         {state === 'streaming' && !waiting ? (
           <div
             data-testid="copilot-streaming"
+            dir="auto"
             className="bs-cpb-bubble"
             style={{ ...bubbleStyle('assistant'), display: 'grid', gap: spacingTokens.xs }}
           >
@@ -626,7 +630,7 @@ export function CopilotBody({
         ) : null}
 
         {state === 'error' ? (
-          <div data-testid="copilot-error">
+          <div data-testid="copilot-error" dir="auto">
             <Banner tone="error" testId="copilot-error-banner">
               <strong>{labels.errorTitle}</strong>
               <span style={{ display: 'block' }}>{labels.errorBody}</span>
@@ -651,6 +655,7 @@ export function CopilotBody({
         {proposedAction ? (
           <section
             data-testid="copilot-approval"
+            dir="auto"
             aria-label={labels.approvalTitle}
             style={{
               borderRadius: radiusTokens.xl,
@@ -740,6 +745,7 @@ export function CopilotBody({
                 disabled={disabled}
                 onClick={onSuggestion ? () => onSuggestion(suggestion.id) : undefined}
                 data-testid={`copilot-suggestion-${suggestion.id}`}
+                dir="auto"
                 className="bs-pressable bs-cpb-chip"
                 style={{
                   display: 'inline-flex',
@@ -823,6 +829,7 @@ export function CopilotBody({
           <textarea
             id={promptId}
             data-testid={composer?.inputTestId ?? 'copilot-prompt'}
+            dir="auto"
             rows={3}
             disabled={live ? false : disabled}
             placeholder={labels.promptPlaceholder}

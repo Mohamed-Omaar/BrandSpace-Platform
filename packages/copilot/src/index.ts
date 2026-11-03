@@ -109,4 +109,13 @@ export type { CopilotSurface } from './surfaces';
 export { COPILOT_SUBJECT_TYPES, copilotSubjectType } from './subject';
 export type { CopilotSubject, CopilotSubjectType } from './subject';
 
-export { modelArguments } from './orchestrator';
+export {
+  modelArguments,
+  CONVERSATION_RULES,
+  REPLY_MAX_CHARS,
+  boundedReply,
+  groundedOnBrandBrain,
+  replyLanguage,
+} from './orchestrator';
+export { productFactsLines, typeName } from './product-facts';
+export type { ProductFacts } from './product-facts';

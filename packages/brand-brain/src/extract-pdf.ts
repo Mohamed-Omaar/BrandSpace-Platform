@@ -76,29 +76,44 @@ export class PdfExtractor implements TextExtractor {
      * that never touches a PDF should not pay for it, and a process that never
      * ingests one should not hold it in memory.
      */
-    const { getDocument } = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as {
-      getDocument: (options: Record<string, unknown>) => PdfLoadingTask;
-    };
-
-    const task = getDocument({
-      // A COPY. pdf.js transfers ownership of the buffer it is given and
-      // detaches it; handing it the caller's array would leave the ingestion
-      // service holding an empty one, which surfaces much later as a checksum
-      // that no longer matches its own bytes.
-      data: new Uint8Array(input.bytes),
-      isEvalSupported: false,
-      useWorkerFetch: false,
-      disableFontFace: true,
-      useSystemFonts: false,
-      stopAtErrors: false,
-      verbosity: 0,
-    });
+    /*
+     * PR U — THE READER ITSELF IS INSIDE THE CLASSIFICATION. Loading pdf.js
+     * and handing it the bytes used to sit outside any `try`: on Node 20
+     * `getDocument` throws `Promise.withResolvers is not a function` before it
+     * reads a byte, that TypeError fell through to the general
+     * `extraction_failed`, and every PDF on staging failed three times. A
+     * failure HERE is the reader's, never the file's: `reader_unavailable`.
+     * Only the opening of the document (`task.promise`) speaks about the file.
+     */
+    let task: PdfLoadingTask;
+    try {
+      const { getDocument } = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as {
+        getDocument: (options: Record<string, unknown>) => PdfLoadingTask;
+      };
+      task = getDocument({
+        // A COPY. pdf.js transfers ownership of the buffer it is given and
+        // detaches it; handing it the caller's array would leave the ingestion
+        // service holding an empty one, which surfaces much later as a checksum
+        // that no longer matches its own bytes.
+        data: new Uint8Array(input.bytes),
+        isEvalSupported: false,
+        useWorkerFetch: false,
+        disableFontFace: true,
+        useSystemFonts: false,
+        stopAtErrors: false,
+        verbosity: 0,
+      });
+    } catch (error: unknown) {
+      throw new ExtractionFailedError('reader_unavailable', error);
+    }
 
     let document: PdfDocument;
     try {
       document = await task.promise;
     } catch (error: unknown) {
       await task.destroy().catch(() => undefined);
+      // The runtime is missing something the reader needs: ours, not the file's.
+      if (isRuntimeFault(error)) throw new ExtractionFailedError('reader_unavailable', error);
       // Encrypted, truncated, or not a PDF after all. All three are the
       // customer's file rather than our failure, and none of pdf.js's own
       // wording reaches them.
@@ -148,6 +163,14 @@ export class PdfExtractor implements TextExtractor {
       await task.destroy().catch(() => undefined);
     }
   }
+}
+
+/**
+ * A JavaScript engine error — a missing built-in or global — rather than
+ * pdf.js's own `InvalidPDFException` / `PasswordException` family about a file.
+ */
+function isRuntimeFault(error: unknown): boolean {
+  return error instanceof TypeError || error instanceof ReferenceError;
 }
 
 /**
