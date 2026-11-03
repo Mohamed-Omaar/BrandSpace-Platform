@@ -84,21 +84,26 @@ async function setRole(email: string, roleKey: string): Promise<void> {
   });
 }
 
-const compose = `${DASHBOARD_BASE_URL}/en/content/compose`;
+// `member.read`: a copywriter holds it, a read-only viewer does not.
+const members = `${DASHBOARD_BASE_URL}/en/members`;
 
 test.describe('PERF A · per-request answers are never kept between requests', () => {
   test('a changed role takes effect on the next request, both ways', async ({ page, isMobile }) => {
     test.skip(isMobile === true, 'one size is enough for the server');
     const { email, password } = await freshMember('copywriter');
     await signIn(page, email, password);
-    expect((await page.goto(compose))?.status()).toBe(200);
+    await page.goto(members);
+    await expect(page.getByTestId('route-no-access')).toHaveCount(0);
 
     await setRole(email, 'client_viewer');
-    // The very next request: a read-only viewer cannot open the Studio (404, D-29).
-    expect((await page.goto(compose))?.status()).toBe(404);
+    // The very next request: a read-only viewer is told the page is not open
+    // to their role (the product's "No access to this page" screen).
+    await page.goto(members);
+    await expect(page.getByTestId('route-no-access')).toBeVisible();
 
     await setRole(email, 'copywriter');
-    expect((await page.goto(compose))?.status()).toBe(200);
+    await page.goto(members);
+    await expect(page.getByTestId('route-no-access')).toHaveCount(0);
   });
 
   test('a removed member is out on the next request', async ({ page, isMobile }) => {
