@@ -10,9 +10,13 @@ import {
   REPLY_MAX_CHARS,
   parseCopilotPolicy,
   resolveLiveAuthorization,
+  productFactsLines,
+  readableSize,
   type LiveAuthorization,
   type ProductFacts,
 } from '@brandspace/copilot';
+import { TenantBrandBrainPolicySource } from '@brandspace/brand-brain';
+import { currentEnvironment } from '@brandspace/shared';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
 
 /**
@@ -166,15 +170,22 @@ describe('PR U · the staging conversation, with Brand Brain off', () => {
     ];
     for (const request of turns) await say(sessionId, script, request);
 
+    /*
+     * The real list: whatever this database's activated `brand-brain`
+     * configuration says (the defaults on a fresh database; another suite may
+     * have activated a narrower one), read the way the Copilot reads it.
+     */
+    const policy = await inA((db) =>
+      new TenantBrandBrainPolicySource(db, currentEnvironment()).load(),
+    );
+    const expected = productFactsLines({ upload: policy.ingestion, extraction: policy.extraction });
+    expect(expected.join('\n')).toContain('Brand Brain reads ONLY these file types:');
+
     expect(script.prompts).toHaveLength(4);
     for (const prompt of script.prompts) {
       expect(prompt).toContain(CONVERSATION_RULES);
       expect(prompt).toContain('REPLY LANGUAGE: Arabic.');
-      // The real list, from the activated (here: default) configuration.
-      expect(prompt).toContain(
-        'Brand Brain reads ONLY these file types: PDF (.pdf) with selectable text, Word (.docx), PowerPoint (.pptx), plain text (.txt), CSV (.csv), Markdown (.md). Every other type is not accepted.',
-      );
-      expect(prompt).toContain('Each file may be up to 20 MB');
+      expect(prompt).toContain(expected.join('\n'));
       expect(prompt).not.toMatch(/Excel|\.xlsx/);
       // One reply, never the two-language summary.
       expect(prompt).toContain('{"reply":string,');
@@ -321,7 +332,7 @@ describe('PR U · one reply, in the person’s language, bounded', () => {
           },
         };
       },
-    } as AiGateway;
+    } as unknown as AiGateway;
     const turn = await inA((db) =>
       new CopilotOrchestrator({
         db,
@@ -343,6 +354,13 @@ describe('PR U · one reply, in the person’s language, bounded', () => {
 });
 
 describe('PR U · PRODUCT FACTS follow the configuration', () => {
+  it('sizes read as a person reads them, never "0.0 MB"', () => {
+    expect(readableSize(20 * 1024 * 1024)).toBe('20 MB');
+    expect(readableSize(1.5 * 1024 * 1024)).toBe('1.5 MB');
+    expect(readableSize(512 * 1024)).toBe('512 KB');
+    expect(readableSize(64)).toBe('64 bytes');
+  });
+
   it('a narrower accepted list is what the model is told; an unreadable one says "not sure"', async () => {
     const script: Script = { replies: [], prompts: [] };
     const sessionId = await freshSession(script);

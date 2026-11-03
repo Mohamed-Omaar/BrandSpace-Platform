@@ -35,9 +35,12 @@ export function typeName(mimeType: string): string {
   return TYPE_NAMES[mimeType] ?? mimeType;
 }
 
-function megabytes(bytes: number): string {
-  const value = bytes / (1024 * 1024);
-  return Number.isInteger(value) ? `${value} MB` : `${value.toFixed(1)} MB`;
+/** A size as a person reads it: whole MB, one decimal, or KB under 1 MB (never "0.0 MB"). */
+export function readableSize(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return Number.isInteger(mb) ? `${mb} MB` : `${mb.toFixed(1)} MB`;
+  const kb = bytes / 1024;
+  return kb >= 1 ? `${Math.floor(kb)} KB` : `${bytes} bytes`;
 }
 
 /**
@@ -52,7 +55,7 @@ export function productFactsLines(facts: ProductFacts | null): readonly string[]
   if (facts) {
     lines.push(
       `- Brand Brain reads ONLY these file types: ${facts.upload.allowedMimeTypes.map(typeName).join(', ')}. Every other type is not accepted.`,
-      `- Each file may be up to ${megabytes(facts.upload.maxFileBytes)}; at most the first ${facts.extraction.maxPages} pages are read; a brand may hold up to ${facts.upload.maxDocumentsPerBrand} files.`,
+      `- Each file may be up to ${readableSize(facts.upload.maxFileBytes)}; at most the first ${facts.extraction.maxPages} pages are read; a brand may hold up to ${facts.upload.maxDocumentsPerBrand} files.`,
       '- Scanned PDFs (pictures of pages without selectable text) cannot be read.',
     );
   } else {

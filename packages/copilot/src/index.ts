@@ -117,5 +117,5 @@ export {
   groundedOnBrandBrain,
   replyLanguage,
 } from './orchestrator';
-export { productFactsLines, typeName } from './product-facts';
+export { productFactsLines, readableSize, typeName } from './product-facts';
 export type { ProductFacts } from './product-facts';

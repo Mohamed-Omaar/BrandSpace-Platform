@@ -66,14 +66,18 @@ function docx(paragraphs: readonly string[]): Uint8Array {
   });
 }
 
-/** Node 20, on any Node: the built-in pdf.js 6 needs, removed for one call. */
-const original = Promise.withResolvers;
+/**
+ * Node 20, on any Node: the built-in pdf.js 6 needs, removed for one call.
+ * Reached through a structural view because the tests compile against
+ * ES2022, whose `PromiseConstructor` does not declare it (ES2024 does).
+ */
+const promiseConstructor = Promise as unknown as { withResolvers?: unknown };
+const original = promiseConstructor.withResolvers;
 function withoutWithResolvers(): void {
-  // @ts-expect-error -- deleting a built-in is the point of this test.
-  delete Promise.withResolvers;
+  delete promiseConstructor.withResolvers;
 }
 afterEach(() => {
-  Promise.withResolvers = original;
+  promiseConstructor.withResolvers = original;
 });
 
 function started(mimeType: string, fileName: string): StartedIngestion {
