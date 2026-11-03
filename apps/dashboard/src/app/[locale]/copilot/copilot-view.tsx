@@ -299,6 +299,10 @@ export function CopilotView({
   // PR B — the turn under way, for Stop; and how many were stopped.
   const [turn, setTurn] = useState<{ sessionId: string; idempotencyKey: string } | null>(null);
   const [stops, setStops] = useState(0);
+  // PR B — ONE KEY PER PAGE LOAD: a double click replays the turn, while the
+  // same words asked again after a reload or a Clear are a new request (the
+  // gateway's own replay outlives the cleared messages).
+  const [pageNonce] = useState(() => Math.floor(Math.random() * 0x7fffffff).toString(36));
   const [found, setFound] = useState<readonly HistoryRow[] | null>(null);
   const [price, setPrice] = useState<string | null>(null);
 
@@ -464,10 +468,10 @@ export function CopilotView({
         { id: `u-${current.length}`, author: 'user', text: request },
       ]);
 
-      // ONE KEY PER REQUEST TEXT IN THIS CONVERSATION, so a double click
-      // replays the first turn rather than paying for a second. PR B — a
-      // stopped turn moves the counter, so asking again is a new turn.
-      const idempotencyKey = `copilot:${active}:${digest(request)}:${stops}`;
+      // ONE KEY PER REQUEST TEXT ON THIS PAGE, so a double click replays the
+      // first turn rather than paying for a second. PR B — a stopped turn
+      // moves the counter, so asking again is a new turn.
+      const idempotencyKey = `copilot:${active}:${pageNonce}:${digest(request)}:${stops}`;
       setTurn({ sessionId: active, idempotencyKey });
       const result = (await post('/api/copilot/turn', {
         sessionId: active,
@@ -1375,6 +1379,8 @@ function sourceCardLabels(t: (key: MessageKey) => string): SourceCardLabels {
     progressLabel: t('copilot.source.progressLabel'),
     coverage: t('copilot.source.coverage'),
     coverageNoSkips: t('copilot.source.coverageNoSkips'),
+    coverageOne: t('copilot.source.coverageOne'),
+    coverageNoSkipsOne: t('copilot.source.coverageNoSkipsOne'),
     todaysExtraction: t('copilot.source.todays'),
     approveOrReview: t('copilot.source.approveOrReview'),
     approveAll: t('copilot.source.approveAll'),

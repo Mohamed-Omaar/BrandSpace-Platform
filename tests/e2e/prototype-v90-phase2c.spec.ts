@@ -261,7 +261,10 @@ async function openBrandBrain(page: Page, locale = 'en', tab?: string): Promise<
 
 test.describe('Item 2 · D1 tabs', () => {
   for (const locale of ['en', 'ar'] as const) {
-    test(`four tabs, keyboard-operable, addressable — ${locale}`, async ({ page, isMobile }) => {
+    test(`three tabs (PR B: no chat tab), keyboard-operable, addressable — ${locale}`, async ({
+      page,
+      isMobile,
+    }) => {
       test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
       const { slug } = await ownWorkspace(`bb-tabs-${locale}`);
       await enter(page, slug, locale);
@@ -269,7 +272,7 @@ test.describe('Item 2 · D1 tabs', () => {
       await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
 
       const tabs = page.getByTestId('brand-brain-tabs').getByRole('tab');
-      await expect(tabs).toHaveCount(4);
+      await expect(tabs).toHaveCount(3);
       await expect(page.getByTestId('tab-knowledge')).toHaveAttribute('aria-selected', 'true');
       await expect(page.getByTestId('area-grid')).toBeVisible();
       await noSeriousViolations(page);
@@ -287,7 +290,6 @@ test.describe('Item 2 · D1 tabs', () => {
       // PR B (D-594) — "Talk with the brand" is retired: asking is the
       // Copilot's, so the three tabs are Knowledge, Look & voice and Sources.
       await expect(page.getByTestId('tab-chat')).toHaveCount(0);
-      await expect(page.getByRole('tab')).toHaveCount(3);
 
       // The address survives a reload.
       await openBrandBrain(page, locale, 'sources');

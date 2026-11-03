@@ -647,7 +647,15 @@ async function main(): Promise<void> {
     await ensureMockSecret(prisma, actor);
 
     console.log('› activating mock AI configuration (development only) …');
-    for (const domain of Object.keys(PAYLOADS) as Array<keyof typeof PAYLOADS>) {
+    // PR B — PRICES BEFORE ROUTES. Since #111 a route is refused unless the
+    // ACTIVE credit rules price it, so a re-seed that adds a task (brand.extract)
+    // activates the new prices first; on an empty database the order is moot.
+    const domains = Object.keys(PAYLOADS) as Array<keyof typeof PAYLOADS>;
+    const ordered = [
+      ...domains.filter((domain) => domain !== 'ai.routing'),
+      ...domains.filter((domain) => domain === 'ai.routing'),
+    ];
+    for (const domain of ordered) {
       await activate(configuration, actor, domain);
     }
 

@@ -64,7 +64,7 @@ export function ConversationTools({
         data-testid="copilot-search"
       />
       {attach ? (
-        <label className="bsp-chip bsp-st-sm" data-testid="copilot-attach">
+        <label className="bsp-btn bsp-sm bsp-bb-pick" data-testid="copilot-attach">
           + {attach.label}
           <input
             type="file"

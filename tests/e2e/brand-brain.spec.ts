@@ -299,28 +299,57 @@ test.describe('Brand Brain asks the Copilot (PR B)', () => {
     await expect(drawer.getByTestId('copilot-open-full')).toBeVisible();
   });
 
-  test('the panel has a FIXED height and does not grow when a message is sent', async ({
+  test('the panel stays inside the window when a message is sent, its composer reachable (D-592)', async ({
     page,
   }) => {
+    // The retired chat card had a fixed height. The Copilot side panel is as
+    // tall as its content, capped at the window (D-592, #112): whatever is
+    // sent, it never runs past the window and Send stays on screen.
     await openBrandBrain(page);
     await ensureBrand(page);
     const drawer = await openCopilotFromOrb(page);
-    const before = await drawer.boundingBox();
-    await drawer.getByTestId('copilot-request').fill('What is our tone of voice?');
-    await drawer.getByTestId('copilot-propose').click();
-    await page.waitForTimeout(1500);
-    const after = await drawer.boundingBox();
-    expect(Math.abs((after?.height ?? 0) - (before?.height ?? 0))).toBeLessThan(2);
+    for (const question of [
+      `What is our tone of voice? (${Date.now()})`,
+      `And our positioning? (${Date.now()})`,
+    ]) {
+      const answered = await drawer.getByTestId('copilot-message-assistant').count();
+      await expect
+        .poll(
+          async () => {
+            await drawer.getByTestId('copilot-request').fill(question);
+            return drawer.getByTestId('copilot-propose').isEnabled();
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(true);
+      await drawer.getByTestId('copilot-propose').click();
+      await expect
+        .poll(async () => drawer.getByTestId('copilot-message-assistant').count(), {
+          timeout: 30_000,
+        })
+        .toBeGreaterThan(answered);
+    }
+    const viewport = page.viewportSize();
+    const panel = await drawer.boundingBox();
+    expect((panel?.y ?? 0) + (panel?.height ?? 0)).toBeLessThanOrEqual((viewport?.height ?? 0) + 1);
+    await expect(drawer.getByTestId('copilot-propose')).toBeInViewport();
   });
 
   test('messages scroll INSIDE the conversation area', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
     const drawer = await openCopilotFromOrb(page);
-    const overflow = await drawer
-      .getByTestId('copilot-conversation')
-      .evaluate((el) => getComputedStyle(el).overflowY);
-    expect(['auto', 'scroll']).toContain(overflow);
+    // The conversation scrolls inside the panel: the list itself or the
+    // panel body around it is the scroller, never the page.
+    const scrolls = await drawer.getByTestId('copilot-conversation').evaluate((el) => {
+      for (let node: Element | null = el; node; node = node.parentElement) {
+        if (['auto', 'scroll'].includes(getComputedStyle(node).overflowY)) {
+          return node.closest('[data-testid="copilot-drawer"]') !== null;
+        }
+      }
+      return false;
+    });
+    expect(scrolls).toBe(true);
   });
 
   test('the composer stays visible and reachable', async ({ page }) => {
@@ -528,14 +557,16 @@ test.describe('Copilot answers about the brand, in development, without a real p
   test('an answer is grounded in approved knowledge and names its areas', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
-    const marker = `Kestrel Provisioning ${Date.now()}`;
+    // One word no earlier run used, asked on its own, so retrieval ranks this
+    // run's fact first whatever earlier runs left behind.
+    const marker = `Kestrel${Date.now().toString(36)}`;
     await addKnowledge(
       page,
       'IDENTITY',
       `positioning-${Date.now()}`,
       `Our positioning is ${marker}. We help independent retailers compete with national chains.`,
     );
-    const drawer = await askFromBrandBrain(page, `What does ${marker} mean for our brand?`);
+    const drawer = await askFromBrandBrain(page, `${marker}?`);
     await expect(drawer.getByTestId('copilot-message-assistant').last()).toContainText(marker, {
       timeout: 20_000,
     });

@@ -841,12 +841,13 @@ describe('PR B — the one conversation: memory, New topic, search, Clear', () =
       resolveLiveAuthorization(db, fixtures.b.workspaceId, fixtures.b.userId),
     );
     if (!theirs) throw new Error('fixture membership missing');
-    for (const act of [
+    const acts: ((o: CopilotOrchestrator) => Promise<unknown>)[] = [
       (o: CopilotOrchestrator) => o.conversation({ authorization: theirs, sessionId: session.id }),
       (o: CopilotOrchestrator) => o.newTopic({ authorization: theirs, sessionId: session.id }),
       (o: CopilotOrchestrator) =>
         o.clearConversation({ authorization: theirs, sessionId: session.id }),
-    ]) {
+    ];
+    for (const act of acts) {
       await expect(
         inWs(fixtures.b.workspaceId, (db) => act(orchestratorIn(db, fixtures.b.workspaceId))),
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
