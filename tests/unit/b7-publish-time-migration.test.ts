@@ -60,7 +60,7 @@ describe('B1.0 + Option B — when a post goes out', () => {
   });
 
   it('comes directly after PR 6, and directly before PR E (then connectors A and B, then the AI apps migrations)', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-13)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-16)).toEqual([
       '20261015092000_automation_run_execution_due_index',
       NAME,
       '20261020090000_group_b_fields',
@@ -81,6 +81,10 @@ describe('B1.0 + Option B — when a post goes out', () => {
       '20261101090000_ai_output_failure_classes',
       // P1: each person's light / dark / device choice (D-592).
       '20261102090000_user_colour_scheme',
+      // PERF A: the three D-595 indexes (CONCURRENTLY).
+      '20261103090000_calendar_slot_workspace_status_index',
+      '20261103090100_audit_event_workspace_action_index',
+      '20261103090200_audit_event_workspace_actor_action_index',
     ]);
   });
 });

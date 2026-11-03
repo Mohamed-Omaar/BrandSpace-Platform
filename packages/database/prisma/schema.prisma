@@ -719,6 +719,10 @@ model AuditEvent {
   @@index([actorId, occurredAt(sort: Desc)])
   @@index([resourceType, resourceId, occurredAt(sort: Desc)])
   @@index([action, occurredAt(sort: Desc)])
+  /// D-595: the Activity filter's options (CONCURRENTLY, 20261103090100).
+  @@index([workspaceId, action])
+  /// D-595: "BrandSpace noticed" (CONCURRENTLY, 20261103090200).
+  @@index([workspaceId, actorId, action, occurredAt])
   @@map("audit_event")
 }
 
@@ -3411,6 +3415,8 @@ model CalendarSlot {
   @@index([workspaceId, brandId, scheduledAtUtc])
   @@index([workspaceId, contentItemId])
   @@index([status, scheduledAtUtc])
+  /// D-595: the top bar's failed-post count (CONCURRENTLY, 20261103090000).
+  @@index([workspaceId, status])
   @@map("calendar_slot")
 }
 

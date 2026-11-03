@@ -149,7 +149,7 @@ describe('connectors B · B2 and B3 — one concurrent index each, nothing else'
 
 describe('connectors B · order', () => {
   it('the three come directly after connectors A, in order, and only the AI apps migrations and the D-573 ceiling follow', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-10)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-13)).toEqual([
       '20261021090000_connectors_a_handles_and_subjects',
       B1,
       B2,
@@ -166,6 +166,10 @@ describe('connectors B · order', () => {
       '20261101090000_ai_output_failure_classes',
       // P1: each person's light / dark / device choice (D-592).
       '20261102090000_user_colour_scheme',
+      // PERF A: the three D-595 indexes (CONCURRENTLY).
+      '20261103090000_calendar_slot_workspace_status_index',
+      '20261103090100_audit_event_workspace_action_index',
+      '20261103090200_audit_event_workspace_actor_action_index',
     ]);
   });
 });
