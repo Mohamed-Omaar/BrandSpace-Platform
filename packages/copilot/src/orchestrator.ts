@@ -36,7 +36,12 @@ import {
   systemClock,
   type Clock,
 } from '@brandspace/shared';
-import { copilotGenerationFailed, copilotSessionNotFound, requestTooLong } from './errors';
+import {
+  copilotGenerationFailed,
+  copilotSessionNotFound,
+  copilotTurnStopped,
+  requestTooLong,
+} from './errors';
 import type { LiveAuthorization } from './authorization';
 import type { CopilotPolicy } from './policy';
 import {
@@ -190,6 +195,14 @@ const SUMMARY_LINE_CHARS = 200;
 const SUMMARY_MAX_LINES = 40;
 
 /** PR B — one entry of the conversation as the screen shows it. */
+/** PR B — the person stopped the turn; the gateway releases its reservation. */
+class TurnStoppedError extends Error {
+  constructor() {
+    super('The turn was stopped.');
+    this.name = 'TurnStoppedError';
+  }
+}
+
 export interface ConversationMessage {
   readonly id: string;
   readonly role: 'USER' | 'ASSISTANT';
@@ -822,7 +835,13 @@ export class CopilotOrchestrator {
               },
             }
           : {}),
-        accept: (output) => {
+        accept: async (output) => {
+          /*
+           * PR B — STOPPED IS NOT CHARGED. The check runs here, before the
+           * gateway settles (H-3): a refusal releases the reservation, so a
+           * turn the person stopped costs nothing even when the model answered.
+           */
+          if (await run((copilot) => copilot.#stopped(input))) throw new TurnStoppedError();
           try {
             accepted = acceptPlan(output, prepared.brandId);
           } catch (error) {
@@ -840,16 +859,81 @@ export class CopilotOrchestrator {
 
     const first = await attempt([]);
     let { result, accepted } = first;
+    if (await run((copilot) => copilot.#stopped(input))) throw copilotTurnStopped();
     if (result.status !== 'SUCCEEDED' && result.failureClass === 'OUTPUT_INVALID') {
       ({ result, accepted } = await attempt(
         first.notes ?? ['the reply did not match the required JSON shape'],
       ));
     }
+    if (await run((copilot) => copilot.#stopped(input))) throw copilotTurnStopped();
     if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
+      await run((copilot) => copilot.#markTurn(input, 'failed'));
       throw copilotGenerationFailed(result.failureMessage);
     }
     const parsed = accepted ?? acceptPlan(result.output, prepared.brandId, 'lenient');
-    return run((copilot) => copilot.#finishTurn(input, prepared, result, parsed));
+    const finished = await run((copilot) => copilot.#finishTurn(input, prepared, result, parsed));
+    await run((copilot) => copilot.#markTurn(input, 'complete'));
+    return finished;
+  }
+
+  /**
+   * PR B — STOP. The person pressed Stop while the turn was under way: its
+   * message is marked `stopped` (only while it is still `streaming`), and the
+   * turn, wherever it is, ends without an answer and without a charge. Their
+   * own session only (the 404 shape otherwise). Audited.
+   */
+  async stopTurn(input: {
+    readonly authorization: LiveAuthorization;
+    readonly sessionId: string;
+    readonly idempotencyKey: string;
+  }): Promise<{ readonly stopped: boolean }> {
+    const session = await this.#ownSession(input.sessionId, input.authorization);
+    const updated = await this.#db.copilotMessage.updateMany({
+      where: {
+        workspaceId: this.#workspaceId,
+        sessionId: session.id,
+        idempotencyKey: input.idempotencyKey,
+        role: 'USER',
+        status: 'streaming',
+      },
+      data: { status: 'stopped' },
+    });
+    if (updated.count > 0) {
+      await writeAuditEvent(this.#db, this.#workspaceId, {
+        action: 'copilot.turn_stopped',
+        actorType: 'USER',
+        actorId: input.authorization.userId,
+        resourceType: 'CopilotSession',
+        resourceId: session.id,
+      });
+    }
+    return { stopped: updated.count > 0 };
+  }
+
+  async #stopped(input: TurnInput): Promise<boolean> {
+    const row = await this.#db.copilotMessage.findFirst({
+      where: {
+        workspaceId: this.#workspaceId,
+        sessionId: input.sessionId,
+        idempotencyKey: input.idempotencyKey,
+        role: 'USER',
+      },
+      select: { status: true },
+    });
+    return row?.status === 'stopped';
+  }
+
+  async #markTurn(input: TurnInput, status: 'complete' | 'failed'): Promise<void> {
+    await this.#db.copilotMessage.updateMany({
+      where: {
+        workspaceId: this.#workspaceId,
+        sessionId: input.sessionId,
+        idempotencyKey: input.idempotencyKey,
+        role: 'USER',
+        status: 'streaming',
+      },
+      data: { status },
+    });
   }
 
   async #prepareTurn(input: TurnInput): Promise<PreparedTurn> {
@@ -916,6 +1000,8 @@ export class CopilotOrchestrator {
           idempotencyKey: input.idempotencyKey,
           correlationId: randomUUID(),
           expiresAt: input.expiresAt,
+          // PR B — the turn is under way until it answers, fails or is stopped.
+          status: 'streaming',
         },
       ],
       skipDuplicates: true,

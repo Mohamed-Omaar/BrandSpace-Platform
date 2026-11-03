@@ -3,7 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { AppError, createLogger, isAppError, internalErrorFields, validationFieldOf } from '@brandspace/shared';
+import {
+  AppError,
+  createLogger,
+  isAppError,
+  internalErrorFields,
+  validationFieldOf,
+} from '@brandspace/shared';
 import {
   acceptConfidentSchema,
   checksumOf,

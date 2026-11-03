@@ -49,6 +49,7 @@ type Phase =
   | { readonly kind: 'ask' }
   | { readonly kind: 'uploading'; readonly percent: number }
   | { readonly kind: 'reading'; readonly sourceId: string; readonly stage: string | null }
+  | { readonly kind: 'whole'; readonly sourceId: string }
   | {
       readonly kind: 'done';
       readonly sourceId: string;
@@ -85,6 +86,7 @@ export function SourceCard({
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: 'ask' });
   const live = useRef(true);
+  const askedWhole = useRef(false);
   useEffect(
     () => () => {
       live.current = false;
@@ -135,6 +137,19 @@ export function SourceCard({
         skippedDuplicates: number;
         readBy: string;
       };
+      if (status.status === 'READY' && status.readBy !== 'brand.extract' && !askedWhole.current) {
+        // The worker has read it; now the whole-source reading, once.
+        askedWhole.current = true;
+        stopped = true;
+        setPhase({ kind: 'whole', sourceId: reading });
+        await fetch('/api/brand-brain/extract', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sourceId: reading }),
+        }).catch(() => null);
+        if (live.current) setPhase({ kind: 'reading', sourceId: reading, stage: 'COMPLETED' });
+        return;
+      }
       if (status.status === 'READY') {
         setPhase({
           kind: 'done',
@@ -190,18 +205,22 @@ export function SourceCard({
         </>
       ) : null}
 
-      {phase.kind === 'uploading' || phase.kind === 'reading' ? (
+      {phase.kind === 'uploading' || phase.kind === 'reading' || phase.kind === 'whole' ? (
         <>
           <b data-testid="copilot-source-status">
             {phase.kind === 'uploading'
               ? labels.uploading
-              : (labels.stage[phase.stage ?? 'QUEUED'] ?? labels.uploading)}
+              : phase.kind === 'whole'
+                ? (labels.stage['WHOLE'] ?? labels.uploading)
+                : (labels.stage[phase.stage ?? 'QUEUED'] ?? labels.uploading)}
           </b>
           <ProgressBar
             value={
               phase.kind === 'uploading'
                 ? phase.percent
-                : (STAGE_PERCENT[phase.stage ?? 'QUEUED'] ?? 10)
+                : phase.kind === 'whole'
+                  ? 90
+                  : (STAGE_PERCENT[phase.stage ?? 'QUEUED'] ?? 10)
             }
             label={labels.progressLabel.replace('{file}', file.name)}
             testId="copilot-source-progress"

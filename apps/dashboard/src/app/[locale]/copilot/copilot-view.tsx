@@ -296,6 +296,9 @@ export function CopilotView({
   const [history, setHistory] = useState<readonly HistoryRow[]>([]);
   const [search, setSearch] = useState('');
   const [attached, setAttached] = useState<File | null>(null);
+  // PR B — the turn under way, for Stop; and how many were stopped.
+  const [turn, setTurn] = useState<{ sessionId: string; idempotencyKey: string } | null>(null);
+  const [stops, setStops] = useState(0);
   const [found, setFound] = useState<readonly HistoryRow[] | null>(null);
   const [price, setPrice] = useState<string | null>(null);
 
@@ -461,15 +464,29 @@ export function CopilotView({
         { id: `u-${current.length}`, author: 'user', text: request },
       ]);
 
+      // ONE KEY PER REQUEST TEXT IN THIS CONVERSATION, so a double click
+      // replays the first turn rather than paying for a second. PR B — a
+      // stopped turn moves the counter, so asking again is a new turn.
+      const idempotencyKey = `copilot:${active}:${digest(request)}:${stops}`;
+      setTurn({ sessionId: active, idempotencyKey });
       const result = (await post('/api/copilot/turn', {
         sessionId: active,
         // NO brandId. The session owns its brand; see the turn route (P7-R1).
         request,
-        // ONE KEY PER REQUEST TEXT IN THIS CONVERSATION, so a double click
-        // replays the first turn rather than paying for a second.
-        idempotencyKey: `copilot:${active}:${digest(request)}`,
+        idempotencyKey,
       })) as PlanResponse;
 
+      // PR B — STOPPED: no answer, nothing charged, and no error to show.
+      if (
+        result.error?.code === 'CONFLICT' &&
+        (result.error.details as { reason?: unknown } | undefined)?.reason === 'stopped'
+      ) {
+        setMessages((current) => [
+          ...current,
+          { id: `a-${current.length}`, author: 'assistant', text: t('copilot.stopped') },
+        ]);
+        return;
+      }
       if (result.error?.code) {
         // A conversation the server no longer admits (expired, or the brand
         // scope narrowed) is dropped, so the next request opens a fresh one.
@@ -982,7 +999,7 @@ export function CopilotView({
           {...(sources
             ? {
                 attach: {
-                  label: t('copilot.attach'),
+                  label: t('copilot.attachFile'),
                   onFile: (file: File) => setAttached(file),
                 },
               }
@@ -1032,6 +1049,21 @@ export function CopilotView({
             labels={sourceCardLabels(t)}
             onDone={() => setAttached(null)}
           />
+        ) : null}
+        {busy && turn ? (
+          <span className="bsp-st-inline">
+            <button
+              type="button"
+              className="bsp-btn bsp-sm bsp-sec"
+              data-testid="copilot-stop"
+              onClick={() => {
+                setStops((count) => count + 1);
+                void post('/api/copilot/stop', turn);
+              }}
+            >
+              {t('copilot.stop')}
+            </button>
+          </span>
         ) : null}
         <ConversationFoot
           price={price}
@@ -1338,6 +1370,7 @@ function sourceCardLabels(t: (key: MessageKey) => string): SourceCardLabels {
       CHUNKING: t('copilot.source.stage.reading'),
       EXTRACTING_FACTS: t('copilot.source.stage.facts'),
       COMPLETED: t('copilot.source.stage.facts'),
+      WHOLE: t('copilot.source.stage.whole'),
     },
     progressLabel: t('copilot.source.progressLabel'),
     coverage: t('copilot.source.coverage'),
