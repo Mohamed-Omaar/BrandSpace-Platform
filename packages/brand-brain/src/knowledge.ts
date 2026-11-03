@@ -451,7 +451,7 @@ export class BrandKnowledgeService {
   }
 
   /**
-   * PR B (D-591) — THE ONE-TIME CLEAN-UP OF TODAY'S DUPLICATES: the brand's
+   * PR B (D-594) — THE ONE-TIME CLEAN-UP OF TODAY'S DUPLICATES: the brand's
    * active facts that say the same thing (after normalising: no list marker,
    * case, punctuation or extra space), and the waiting facts that repeat an
    * active one. Read only; `mergeDuplicates` acts on what this returns.

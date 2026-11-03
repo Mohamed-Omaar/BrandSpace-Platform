@@ -529,7 +529,7 @@ function approvalsStep(prompt: string, request: string): unknown[] {
 }
 
 /*
- * PR B (D-591) — THE WORKSPACE READS, PROPOSED AS A MODEL WOULD. A question
+ * PR B (D-594) — THE WORKSPACE READS, PROPOSED AS A MODEL WOULD. A question
  * about credits, the team, the plan, the channels or the notifications is
  * answered from the tool that reads it, never from the double's own words —
  * and a tool the prompt names as one this person may not use is still
@@ -556,7 +556,7 @@ function workspaceReadSteps(prompt: string, request: string): unknown[] {
 }
 
 /*
- * PR B (D-591) — `brand.extract`, AS A MODEL WOULD ANSWER IT. The double lists
+ * PR B (D-594) — `brand.extract`, AS A MODEL WOULD ANSWER IT. The double lists
  * the source's own sentences as facts (nothing invented), each with the area
  * its words point to and itself as the quote, so the whole-source path, the
  * coverage line and Pending can be shown without a vendor (D-13).
@@ -585,6 +585,30 @@ function extractDocument(context: readonly string[]): string {
   return JSON.stringify({ facts });
 }
 
+/*
+ * PR B — "change …" / "remove …" about a fact in the context is that fact's
+ * card, naming the id its BRAND KNOWLEDGE block shows, as a model would.
+ */
+const CHANGE_WORDS = /^(?:please\s+)?(?:change|edit|update)\b|^(?:غيّر|عدّل)/iu;
+const REMOVE_WORDS = /^(?:please\s+)?(?:remove|delete)\b|^(?:احذف|أزل)/iu;
+
+function factChangeStep(
+  prompt: string,
+  request: string,
+  context: readonly string[],
+): unknown | null {
+  const editing = CHANGE_WORDS.test(request);
+  const removing = REMOVE_WORDS.test(request);
+  if (!editing && !removing) return null;
+  const key = editing ? 'brand_brain.edit_fact' : 'brand_brain.remove_fact';
+  if (!new RegExp(`^- ${key.replace('.', '\\.')} `, 'm').test(prompt)) return null;
+  const factId = /BRAND KNOWLEDGE [A-Z_]+ v\d+ id ([0-9a-f-]{36})/u.exec(context.join('\n'))?.[1];
+  if (!factId) return null;
+  if (removing) return { toolKey: key, arguments: { factId } };
+  const body = /\bto\s+(.+)$/iu.exec(request)?.[1]?.trim() ?? request;
+  return { toolKey: key, arguments: { factId, body } };
+}
+
 function copilotDocument(
   prompt: string,
   context: readonly string[],
@@ -603,20 +627,24 @@ function copilotDocument(
   const card = save && /^- brand_brain\.add_fact /m.test(prompt);
   const text = material || 'Brand Brain has nothing on this yet.';
   const reads = workspaceReadSteps(prompt, request);
-  const steps = card
-    ? [
-        {
-          toolKey: 'brand_brain.add_fact',
-          arguments: {
-            area: /\b(?:offer|price|menu|sell)/iu.test(request) ? 'OFFERS' : 'IDENTITY',
-            title: request.replace(SAVE_WORDS, '').trim().slice(0, 80) || request.slice(0, 80),
-            body: request.replace(SAVE_WORDS, '').trim().slice(0, 2_000) || request.slice(0, 2_000),
+  const change = factChangeStep(prompt, request, context);
+  const steps = change
+    ? [change]
+    : card
+      ? [
+          {
+            toolKey: 'brand_brain.add_fact',
+            arguments: {
+              area: /\b(?:offer|price|menu|sell)/iu.test(request) ? 'OFFERS' : 'IDENTITY',
+              title: request.replace(SAVE_WORDS, '').trim().slice(0, 80) || request.slice(0, 80),
+              body:
+                request.replace(SAVE_WORDS, '').trim().slice(0, 2_000) || request.slice(0, 2_000),
+            },
           },
-        },
-      ]
-    : reads.length > 0
-      ? reads
-      : approvalsStep(prompt, request);
+        ]
+      : reads.length > 0
+        ? reads
+        : approvalsStep(prompt, request);
   return JSON.stringify({
     summary: { ar: text, en: text },
     steps,

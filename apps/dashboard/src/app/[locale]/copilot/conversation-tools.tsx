@@ -5,7 +5,7 @@ import { ConfirmDialog } from '@brandspace/ui';
 import { MoreDisclosure } from '../../../components/more-disclosure';
 
 /**
- * PR B (D-591) — THE ONE CONVERSATION'S OWN CONTROLS: search inside it,
+ * PR B (D-594) — THE ONE CONVERSATION'S OWN CONTROLS: search inside it,
  * "New topic", and "Clear conversation" (behind ⋯, with a confirmation), plus
  * the line under the composer: what this message will cost and how long the
  * conversation is kept.

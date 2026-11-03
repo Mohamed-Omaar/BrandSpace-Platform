@@ -23,7 +23,7 @@ import {
 } from './fixtures';
 
 /**
- * PR B (D-591) — THE DUPLICATES FIX.
+ * PR B (D-594) — THE DUPLICATES FIX.
  *
  *   1. Extraction strips a leading bullet or dash: "- Open daily" is "Open daily".
  *   2. A fact equal to one the brand already has (after normalising) is LINKED

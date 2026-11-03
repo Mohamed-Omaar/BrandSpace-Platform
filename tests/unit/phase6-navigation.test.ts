@@ -79,7 +79,7 @@ describe('P6-04 · every navigation entry is placed exactly once', () => {
     // home (Media's Generate tab) was ported, and Marketing Intelligence when
     // Performance's Insights was. The count still guards against a silent cull
     // — of the CURRENT list.
-    // PR B (D-591): the one assistant's page, "Copilot", right under Home.
+    // PR B (D-594): the one assistant's page, "Copilot", right under Home.
     expect(navHrefs()).toEqual([
       '/overview',
       '/copilot',

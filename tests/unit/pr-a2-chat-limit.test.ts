@@ -39,7 +39,7 @@ describe('PR A2 — the AI budget message in Copilot and Brand Brain chat', () =
     );
     expect(copilot).toMatch(/aiLimitMessage\([\s\S]*statusMessage\(errorCode, locale\)/);
     expect(copilot).toContain('setErrorDetails(result.error.details ?? null)');
-    // PR B (D-591) — Brand Brain's chat is retired: its questions are the
+    // PR B (D-594) — Brand Brain's chat is retired: its questions are the
     // Copilot's, so the Copilot's own reading above is the one that answers.
     expect(existsSync('apps/dashboard/src/app/[locale]/brand-brain/brand-chat.tsx')).toBe(false);
     expect(

@@ -220,7 +220,7 @@ export function CopilotView({
   /** Omitted where no real balance can be read. Nothing is invented (§2.2). */
   readonly creditsLabel: string | null;
   /**
-   * PR B (D-591) — the screen's own refusal (E6) per permission this member
+   * PR B (D-594) — the screen's own refusal (E6) per permission this member
    * lacks, so "show me our billing" is refused in the words Billing uses.
    */
   readonly denials?: Readonly<Record<string, string>>;
@@ -288,7 +288,7 @@ export function CopilotView({
   const [now, setNow] = useState(() => Date.now());
 
   /*
-   * PR B (D-591) — THE ONE CONVERSATION. It is opened as soon as the Copilot
+   * PR B (D-594) — THE ONE CONVERSATION. It is opened as soon as the Copilot
    * is (free: no model is called), its history is read back — the whole
    * conversation, grouped by day, with the "New topic" dividers — and read
    * again after every reply, so what the person sees is what was stored.
@@ -1224,7 +1224,7 @@ function InspectionLines({
       }
       break;
     /*
-     * PR B (D-591) — THE WORKSPACE READS. Every number with its period (or
+     * PR B (D-594) — THE WORKSPACE READS. Every number with its period (or
      * "as of" for a count now) and the place it was read from, so a figure in
      * the conversation is always traceable to a screen.
      */

@@ -279,7 +279,7 @@ describe('D8 — the Copilot answers from the same facts and never saves one', (
         where: { workspaceId: fixtures.a.workspaceId },
       }),
     ).toBe(candidatesBefore);
-    // PR B (D-591) — and the prompt tells a member who may edit facts that a
+    // PR B (D-594) — and the prompt tells a member who may edit facts that a
     // save is proposed as a CARD they confirm; nothing is saved before. (A
     // model that still answers with `saveFact`, as here, is handed off.)
     expect(model.calls[0]).toContain('propose brand_brain.add_fact');

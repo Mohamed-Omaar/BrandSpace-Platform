@@ -10,7 +10,7 @@ const log = createLogger({ context: { component: 'dashboard.brand-brain.source-s
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * PR B (D-591) — WHERE ONE ADDED FILE IS, for the Copilot's Add card: its
+ * PR B (D-594) — WHERE ONE ADDED FILE IS, for the Copilot's Add card: its
  * stage, then the coverage line ("Read 6 pages, found 18 facts, skipped 3
  * because they are already in Brand Brain") and whether `brand.extract` read
  * it or today's extraction did. `brand_brain.read`, the caller's workspace and

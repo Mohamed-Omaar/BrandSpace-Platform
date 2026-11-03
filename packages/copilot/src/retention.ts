@@ -28,7 +28,7 @@ import type { CopilotPolicy } from './policy';
  *     lying about. Its token hash is cleared at the same moment, which is the
  *     part that matters.
  *
- *   - `copilot_session` — NOT archived (PR B, D-591): one continuous
+ *   - `copilot_session` — NOT archived (PR B, D-594): one continuous
  *     conversation per person per brand. Its rolling SUMMARY is cleared once
  *     the newest message it covers has expired.
  *
@@ -130,7 +130,7 @@ export async function pruneCopilot(input: {
 
   /*
    * PR B — THE CONVERSATION IS NEVER ARCHIVED AS A WHOLE. There is one
-   * continuous conversation per person per brand (D-591); its messages keep
+   * continuous conversation per person per brand (D-594); its messages keep
    * their own windows (above). What expires with them is the ROLLING SUMMARY,
    * which quotes them: cleared, and stamped like a purged body, once the
    * newest message it covers is past its window.

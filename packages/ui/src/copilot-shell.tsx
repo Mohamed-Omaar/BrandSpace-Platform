@@ -53,7 +53,7 @@ export interface CopilotMessage {
   readonly author: 'user' | 'assistant';
   readonly text: string;
   /**
-   * PR B (D-591) — the one continuous conversation also shows a day label
+   * PR B (D-594) — the one continuous conversation also shows a day label
    * ("Yesterday", "Today") above each day's first message, and a "New topic"
    * divider where the person started one. Both are rows of the log, not
    * bubbles; `text` is their translated label. Absent means a message.

@@ -850,7 +850,7 @@ export class BrandIngestionService {
   /**
    * The PENDING candidates of one source, replaced by `facts`: a reviewed
    * candidate is a decision and stays; a fact the brand already has is linked
-   * (PR B, D-591). Shared by the worker's read and `reExtract`.
+   * (PR B, D-594). Shared by the worker's read and `reExtract`.
    */
   async #storeCandidates(
     target: { readonly documentId: string; readonly brandId: string },
@@ -868,7 +868,7 @@ export class BrandIngestionService {
     const chunkIdByIndex = new Map(storedChunks.map((c) => [c.chunkIndex, c.id]));
 
     /*
-     * PR B (D-591) — A FACT THE BRAND ALREADY HAS IS LINKED, NOT ADDED.
+     * PR B (D-594) — A FACT THE BRAND ALREADY HAS IS LINKED, NOT ADDED.
      * Compared after normalising (no list marker, case, punctuation or extra
      * space). The new file is recorded as another place the fact was found:
      * a candidate already SUPERSEDED, pointing at the fact, so Sources still
@@ -964,13 +964,52 @@ export class BrandIngestionService {
   }
 
   /**
-   * PR B (D-591) — READ A SOURCE WHOLE WITH `brand.extract`, AFTER the worker's
+   * PR B (D-594) — READ A SOURCE WHOLE WITH `brand.extract`, AFTER the worker's
    * read: the API, which holds the AI gateway (F-07: a worker may not), calls
    * `ModelFactExtractor.prepare` outside any transaction and then this, which
    * replaces the source's PENDING keyword candidates with the model's and
    * records the AI request on its job. Nothing prepared (unavailable, failed),
    * nothing changes. A source already read by the model is not read again.
    */
+  /**
+   * PR B — the text of one READY source, for `brand.extract`: inside the
+   * ingestion pipeline, the one place raw chunks are read (Q14/Q20), and
+   * inside the caller's BrandScope. Null when there is nothing to read, or it
+   * was already read whole (its job records the AI request).
+   */
+  async sourceForWholeReading(input: {
+    readonly documentId: string;
+    readonly actorBrandScope: readonly string[];
+  }): Promise<{
+    readonly id: string;
+    readonly text: string;
+    readonly alreadyRead: boolean;
+  } | null> {
+    const document = await this.#db.brandSourceDocument.findFirst({
+      where: {
+        id: input.documentId,
+        status: 'READY',
+        deletedAt: null,
+        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+      },
+      select: {
+        id: true,
+        ingestionJobs: { orderBy: { queuedAt: 'desc' }, take: 1, select: { aiRequestId: true } },
+      },
+    });
+    if (!document) return null;
+    const chunks = await this.#db.brandSourceChunk.findMany({
+      where: { sourceDocumentId: document.id },
+      orderBy: { chunkIndex: 'asc' },
+      select: { text: true },
+    });
+    return {
+      id: document.id,
+      alreadyRead: Boolean(document.ingestionJobs[0]?.aiRequestId),
+      text: chunks.map((chunk) => chunk.text).join('\n\n'),
+    };
+  }
+
   async reExtract(input: {
     readonly documentId: string;
     readonly actorBrandScope: readonly string[];

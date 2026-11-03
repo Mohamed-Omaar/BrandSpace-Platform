@@ -301,41 +301,34 @@ test.describe('Arabic renders the same design, mirrored', () => {
   });
 });
 
-/* --- chat ---------------------------------------------------------------- */
+/* --- asking: the Copilot (PR B, D-594) ------------------------------------ */
 
-test.describe('Talk with the brand is the prototype’s chat card', () => {
-  test('the centre opens it, alone, at the prototype’s fixed height', async ({ page }) => {
+test.describe('the orb centre asks the Copilot (the chat card is retired)', () => {
+  test('the centre opens the Copilot side panel over the page; the hero stays', async ({
+    page,
+  }) => {
     await signIn(page, 'en');
-
     await page.getByTestId('orb-center').click();
-    const chat = page.getByTestId('brand-chat');
-    await expect(chat).toBeVisible();
-
-    // The prototype's chat tab is the card on its own (lines 899–925): the
-    // hero and the grid give way to it, and it does not float over the page.
-    await expect(page.getByTestId('brand-brain-hero')).toHaveCount(0);
-    await expect(page.getByTestId('tab-chat')).toHaveAttribute('aria-selected', 'true');
-    expect(await style(chat, 'position')).toBe('static');
-    expect(Math.abs((await box(chat)).height - scaled(PROTO.chatHeight))).toBeLessThanOrEqual(0.5);
-
-    await shot(page, 'chat-open-desktop-en.png', chat);
+    const drawer = page.getByTestId('copilot-drawer');
+    await expect(drawer).toBeVisible();
+    // No chat card replaces the hero: the page stays, the panel floats beside it.
+    await expect(page.getByTestId('brand-brain-hero')).toBeVisible();
+    await expect(page.getByTestId('brand-chat')).toHaveCount(0);
+    await expect(page.getByTestId('tab-chat')).toHaveCount(0);
   });
 
   test('the panel does not grow when a message is sent', async ({ page }) => {
     await signIn(page, 'en');
     await page.getByTestId('orb-center').click();
-
-    const chat = page.getByTestId('brand-chat');
-    await expect(chat).toBeVisible();
-    const before = await box(chat);
-
-    await page.fill('[data-testid="chat-input"]', 'What is our positioning?');
-    await page.getByTestId('chat-send').click();
-    await expect(
-      page.getByTestId('chat-insufficient').or(page.getByTestId('chat-message-assistant')).first(),
-    ).toBeVisible({ timeout: 20_000 });
-
-    const after = await box(chat);
+    const drawer = page.getByTestId('copilot-drawer');
+    await expect(drawer).toBeVisible();
+    const before = await box(drawer);
+    await drawer.getByTestId('copilot-request').fill('What is our positioning?');
+    await drawer.getByTestId('copilot-propose').click();
+    await expect(drawer.getByTestId('copilot-message-assistant').last()).toBeVisible({
+      timeout: 20_000,
+    });
+    const after = await box(drawer);
     expect(Math.abs(after.height - before.height)).toBeLessThan(2);
   });
 });

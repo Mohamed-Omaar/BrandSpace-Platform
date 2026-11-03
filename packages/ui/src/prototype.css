@@ -13848,7 +13848,7 @@ select.bs-select.bsp-chevron {
   }
 }
 
-/* PR B (D-591) — the one continuous Copilot conversation: a day label above each
+/* PR B (D-594) — the one continuous Copilot conversation: a day label above each
    day's first message, and the "New topic" divider (a rule with its label in the
    middle). Composed from the log's own tokens; no new colour or size. */
 .bs-cpb-day {

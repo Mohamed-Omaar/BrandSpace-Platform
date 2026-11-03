@@ -281,7 +281,7 @@ export interface TurnResult {
    * `missing` when one matches) instead of the model's words.
    */
   /**
-   * PR B (D-591) — `permission_denied` when the request asked for a workspace
+   * PR B (D-594) — `permission_denied` when the request asked for a workspace
    * read this member may not open (Billing without `billing.read`): the
    * dashboard says what the screen itself says, and nothing runs.
    */
@@ -1526,7 +1526,7 @@ export class CopilotOrchestrator {
         ? 'If the request asks what the brand itself is, sells, charges, says or believes, set "brandBrainQuestion" to true and answer ONLY from the BRAND BRAIN CONTEXT, naming the knowledge area each fact comes from; if it is not there, say Brand Brain does not have it.'
         : '',
       /*
-       * PR B (D-591) — A FACT IS A CARD. With `brand_brain.edit` the request
+       * PR B (D-594) — A FACT IS A CARD. With `brand_brain.edit` the request
        * to save, change or remove a fact is proposed as that step, which the
        * person confirms; without it, D8's hand-over to Brand Brain stands.
        */

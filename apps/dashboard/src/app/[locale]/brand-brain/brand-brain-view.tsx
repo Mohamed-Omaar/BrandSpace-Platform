@@ -391,7 +391,7 @@ export function BrandBrainView({
   }, []);
 
   /*
-   * PR B (D-591) — ONE ASSISTANT. "Ask the brand", the orb's centre and an
+   * PR B (D-594) — ONE ASSISTANT. "Ask the brand", the orb's centre and an
    * area's "Ask Copilot" open the Copilot's side panel on this page (Brand
    * Brain is its surface, this brand its brand), an area's question put in the
    * box and never sent. Where no panel answers the request, the Copilot page
@@ -1143,7 +1143,7 @@ function ConfidentCard({
 }
 
 /**
- * PR B (D-591) — THE ONE-TIME CLEAN-UP OF TODAY'S DUPLICATES: shown only while
+ * PR B (D-594) — THE ONE-TIME CLEAN-UP OF TODAY'S DUPLICATES: shown only while
  * there are some, to a member who may approve facts, and merged only after the
  * shared confirmation. An APPROVED DESIGN-SYSTEM EXTENSION (CLAUDE.md §4.2),
  * composed of the bulk card's own classes and `ConfirmDialog`.

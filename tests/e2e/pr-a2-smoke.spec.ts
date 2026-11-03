@@ -17,7 +17,7 @@ import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from '.
  *      exists." (the double fills every argument the tool list asks for, as a
  *      real model does, so a prompt that asks for `brandId` fails here);
  *   4. an edit chip (Shorter) edits the caption and shows before/after with Undo;
- *   5. a Brand Brain chat message is answered.
+ *   5. a Copilot message about the brand is answered (PR B: one assistant).
  *
  * Each step asserts what the product guarantees, not what the double writes.
  */
@@ -205,24 +205,18 @@ test.describe('PR A2 — the five-step AI smoke (fake provider)', () => {
     await expect(page.getByTestId('studio-spent-toast')).toHaveCount(0);
   });
 
-  test('5 · a Brand Brain chat message is answered', async ({ page }) => {
+  test('5 · a Copilot message about the brand is answered (PR B: one assistant)', async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
+    // "Ask the brand" is the Copilot now (the Brand Brain chat is retired).
     await page.getByTestId('orb-center').click();
-    const panel = page.getByTestId('brand-chat');
-    await expect(panel).toBeVisible();
-    await page.fill('[data-testid="chat-input"]', 'Hello! What is our brand colour?');
-    await page.getByTestId('chat-send').click();
-    await expect
-      .poll(
-        async () =>
-          (await panel.getByTestId('chat-message-assistant').count()) +
-          (await panel.getByTestId('chat-error').count()),
-        { timeout: 60_000 },
-      )
-      .toBeGreaterThan(0);
-    await expect(panel.getByTestId('chat-error')).toHaveCount(0);
-    await expect(panel.getByTestId('chat-message-assistant').last()).not.toHaveText('');
+    const drawer = page.getByTestId('copilot-drawer');
+    await expect(drawer).toBeVisible();
+    await drawer.getByTestId('copilot-request').fill('Hello! What is our brand colour?');
+    await askCopilot(page);
+    await expect(drawer.getByTestId('copilot-message-assistant').last()).not.toHaveText('');
   });
 });

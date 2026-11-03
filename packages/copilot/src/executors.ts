@@ -647,7 +647,7 @@ const automationCreateRule: ToolExecutor = async (context, args) => {
 };
 
 // ---------------------------------------------------------------------------
-// PR B (D-591) — the workspace reads. Every result says WHERE its numbers come
+// PR B (D-594) — the workspace reads. Every result says WHERE its numbers come
 // from (`source`, a stable code the dashboard words) and WHEN they cover
 // (`period`, or `asOf` for a count at this moment), so a figure the Copilot
 // shows is never the model's.
@@ -834,7 +834,7 @@ const notificationsRecent: ToolExecutor = async (context, args) => {
 };
 
 // ---------------------------------------------------------------------------
-// PR B (D-591) — Brand Brain facts, from a confirmed card only.
+// PR B (D-594) — Brand Brain facts, from a confirmed card only.
 // ---------------------------------------------------------------------------
 
 const ARABIC = /[\u0600-\u06FF]/;

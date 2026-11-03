@@ -95,7 +95,7 @@ const REASONING_TASK_KEYS = ['strategy.generate', 'plan.monthly', 'analytics.exp
 const CONTENT_TASK_KEY = 'caption.generate';
 /** PR A2 (item 10) — a translation is routed and priced as its own task. */
 const TRANSLATE_TASK_KEY = 'content.translate';
-/** PR B (D-591) — whole-source fact extraction, on the same development double. */
+/** PR B (D-594) — whole-source fact extraction, on the same development double. */
 const EXTRACT_TASK_KEY = 'brand.extract';
 /**
  * PHASE 2B-3 PR 6 — DRAFT_IDEAS's task. Development and E2E only: production's

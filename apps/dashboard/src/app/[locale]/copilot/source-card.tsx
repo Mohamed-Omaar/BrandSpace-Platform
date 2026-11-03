@@ -7,7 +7,7 @@ import { sendWithProgress } from '../../../components/upload-field';
 import { approveSourceFactsAction } from '../brand-brain/actions';
 
 /**
- * PR B (D-591) — A FILE GIVEN TO THE COPILOT IS A CARD FIRST.
+ * PR B (D-594) — A FILE GIVEN TO THE COPILOT IS A CARD FIRST.
  *
  *   1. "Add <file> to Brand Brain?" with Add / Not now. NOTHING is stored,
  *      fetched or read before Add: the file stays in this browser tab, and

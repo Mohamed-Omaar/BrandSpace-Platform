@@ -2574,3 +2574,24 @@ draft alike.
   drawer's geometry); the media drawer's Estimate and Generate buttons are one size.
 - **Waiting states** (spinner, progress bar, elapsed time, waiting buttons) are design-system
   extensions (§4.2), built from existing tokens; the prototype draws none.
+
+### 6.3.80 PR B — one assistant (D-594)
+
+APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2), composed of the shared card, chip, button, hint and
+control classes, `MoreDisclosure`, `ConfirmDialog` and `ProgressBar`; no inline style, no new
+colour, no new class family:
+
+- **The one conversation's controls** (`copilot/conversation-tools.tsx`): search inside it,
+  "+ Attach a file", "New topic", "Clear conversation" behind ⋯ with a confirmation; under the
+  composer, the message's price and the retention line. Day labels and the New topic divider
+  (`.bs-cpb-day`, `.bs-cpb-topic`, hairline on `--bs-table-rule`) in the shared Copilot shell.
+  Stop beside the composer while a turn is under way.
+- **The Add card for a file** (`copilot/source-card.tsx`): Add / Not now, then the shared
+  progress bar with a status line and a detail line, then the coverage line and "Approve all, or
+  review them?".
+- **Brand Brain**: the "Talk with the brand" tab (the prototype's chat card, lines 899–925) is
+  REMOVED by owner decision; asking opens the Copilot's side panel, which keeps its own
+  prototype geometry. The Knowledge strip's "Approve all" and the one-time duplicates card reuse
+  the bulk card's classes. The side panel's "Open in Copilot page" is a shared chip.
+- **Workspace reads** under "What the Copilot found": one line per number and a "Source: … ·
+  period" line, in the inspection list's existing caption style.

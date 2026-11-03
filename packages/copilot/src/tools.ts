@@ -177,7 +177,7 @@ export const COPILOT_TOOLS = [
   },
 
   /*
-   * PR B (D-591) — THE WORKSPACE READS. "How many credits do we have?" and
+   * PR B (D-594) — THE WORKSPACE READS. "How many credits do we have?" and
    * "who is on my team?" are answered from these, never from the model: every
    * number carries the period it covers and the source it was read from.
    * Each asks the SAME permission as the screen that shows it, so a member who
@@ -238,7 +238,7 @@ export const COPILOT_TOOLS = [
 
   // --- B. INTERNAL_REVERSIBLE ----------------------------------------------
   /*
-   * PR B (D-591) — A FACT IS PROPOSED AS A CARD. The Copilot never writes
+   * PR B (D-594) — A FACT IS PROPOSED AS A CARD. The Copilot never writes
    * Brand Brain on its own: a fact typed in the conversation, an edit and a
    * removal each become a card the person confirms, and the step then runs
    * with THEIR permission — `brand_brain.edit` to propose; with
@@ -487,7 +487,7 @@ export function requiresConfirmation(actionClass: CopilotActionClass): boolean {
  * keeps the model from proposing plans that can only fail.
  */
 /**
- * PR B (D-591) — the workspace reads: a request for one the member may not
+ * PR B (D-594) — the workspace reads: a request for one the member may not
  * open is refused in the screen's words (`permission_denied`), not hidden.
  */
 export const WORKSPACE_READ_KEYS: ReadonlySet<string> = new Set([

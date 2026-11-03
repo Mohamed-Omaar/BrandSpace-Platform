@@ -80,7 +80,7 @@ describe('M4 — the asks-first expiry index', () => {
       '20261101090000_ai_output_failure_classes',
       // P1: each person's light / dark / device choice (D-592).
       '20261102090000_user_colour_scheme',
-      // PR B: one Copilot conversation per person per brand (D-591).
+      // PR B: one Copilot conversation per person per brand (D-594).
       '20261102120000_one_assistant',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261013090000_brand_scope_not_null');

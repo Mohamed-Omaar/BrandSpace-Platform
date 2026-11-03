@@ -284,10 +284,10 @@ test.describe('Item 2 · D1 tabs', () => {
       await page.getByTestId('tab-sources').click();
       await expect(page.getByTestId('sources-card')).toBeVisible();
 
-      // "Talk with the brand" is the prototype's chat card, on its own.
-      await page.getByTestId('tab-chat').click();
-      await expect(page.getByTestId('brand-chat')).toBeVisible();
-      await expect(page.getByTestId('area-grid')).toHaveCount(0);
+      // PR B (D-594) — "Talk with the brand" is retired: asking is the
+      // Copilot's, so the three tabs are Knowledge, Look & voice and Sources.
+      await expect(page.getByTestId('tab-chat')).toHaveCount(0);
+      await expect(page.getByRole('tab')).toHaveCount(3);
 
       // The address survives a reload.
       await openBrandBrain(page, locale, 'sources');
@@ -359,7 +359,7 @@ test.describe('Item 2 · D4 the one review inbox', () => {
     await openBrandBrain(page);
 
     await expect(page.getByTestId('review-inbox-count')).toHaveText(
-      '2 facts waiting for your review',
+      '2 facts waiting for your approval',
     );
     // The prototype's banner opens the one review card.
     await openReview(page);
@@ -380,7 +380,7 @@ test.describe('Item 2 · D4 the one review inbox', () => {
     await page.getByTestId(`accept-${high}`).click();
     await page.waitForURL(/ok=CANDIDATE_ACCEPTED/);
     await expect(page.getByTestId('review-inbox-count')).toHaveText(
-      '1 facts waiting for your review',
+      '1 facts waiting for your approval',
     );
     // The card stays open across its own post.
     await expect(page.getByTestId(`intel-${low}`)).toBeVisible();
@@ -412,14 +412,14 @@ test.describe('Item 2 · D4 the one review inbox', () => {
     await page.getByTestId('accept-confident-cancel').click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByTestId('review-inbox-count')).toHaveText(
-      '3 facts waiting for your review',
+      '3 facts waiting for your approval',
     );
 
     await page.getByTestId('accept-confident-open').click();
     await page.getByTestId('accept-confident-confirm').click();
     await page.waitForURL(/ok=CANDIDATES_ACCEPTED/);
     await expect(page.getByTestId('review-inbox-count')).toHaveText(
-      '1 facts waiting for your review',
+      '1 facts waiting for your approval',
     );
     await openReview(page);
     await expect(page.getByTestId(`intel-${lowId}`)).toBeVisible();
