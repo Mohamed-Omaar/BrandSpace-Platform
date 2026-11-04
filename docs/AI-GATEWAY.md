@@ -689,6 +689,17 @@ sequenceDiagram
   unless it was grounded on Brand Brain facts. Every answer stores its citations (`[]` when it was
   given none); an answer from before PR U (`citations` null) counts as grounded.
 
+### 13.4a Brand facts in a turn (PR 2, D-598)
+
+- A question that shares no word with any fact is given the brand's usable facts in precedence
+  order instead (`writingGroundingWithoutQuestion`), within the same budget; the turn also carries
+  a fenced list of facts approved in the last day (titles and areas, at most 8).
+- The BRAND PROFILE (name, colours, fonts, logo, website) answers its own questions and is never
+  asked for. The `brand_brain_missing` notice replaces the model's answer only for a key question
+  nobody answered, or a brand with no usable fact at all.
+- Edit chips (D-598 amends D-590): asked for 30%, accepted at 15%; "unchanged" at similarity
+  ≥ 0.985; one retry with a stronger instruction under its own key.
+
 ### 13.5 Attempt limits and image timeouts (PR 1, D-597)
 
 - One provider attempt is limited by the task rule's `parameters.attemptTimeoutMs` when set;

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { ProgressBar } from '@brandspace/ui';
 import { sendWithProgress } from '../../../components/upload-field';
-import { approveSourceFactsAction } from '../brand-brain/actions';
+import { approveSourceFactsAction, rejectSourceFactsAction } from '../brand-brain/actions';
 
 /**
  * PR B (D-594) — A FILE GIVEN TO THE COPILOT IS A CARD FIRST.
@@ -51,6 +51,11 @@ export interface SourceCardLabels {
    * the general "on our side" reason.
    */
   readonly failureReason: (reason: string | null) => string;
+  /** PR 2 (D-598) — the facts' list, Reject all, and an already-added file. */
+  readonly rejectAll: string;
+  readonly rejected: string;
+  readonly alreadyAdded: string;
+  readonly foundTitles: string;
 }
 
 type Phase =
@@ -65,7 +70,11 @@ type Phase =
       readonly found: number;
       readonly skipped: number;
       readonly keyword: boolean;
+      /** PR 2 — the waiting facts, by title (up to 10). */
+      readonly titles: readonly string[];
     }
+  | { readonly kind: 'rejected'; readonly rejected: number }
+  | { readonly kind: 'already' }
   | { readonly kind: 'approved'; readonly accepted: number }
   | { readonly kind: 'failed'; readonly refused: boolean; readonly reason: string | null };
 
@@ -87,6 +96,8 @@ interface SourceStatus {
   readonly readBy: string;
   /** PR U — the stored reason key while FAILED or QUARANTINED, else null. */
   readonly failureReason?: string | null;
+  /** PR 2 — the waiting facts' titles. */
+  readonly pendingTitles?: readonly string[];
 }
 
 async function sourceStatus(id: string): Promise<SourceStatus | null> {
@@ -147,6 +158,11 @@ export function SourceCard({
       const location = typeof outcome['location'] === 'string' ? outcome['location'] : '';
       const params = new URL(location, window.location.origin).searchParams;
       const sourceId = params.get('source');
+      // PR 2 (D-598): a file already in Brand Brain is said so, not "failed".
+      if (params.get('error') === 'CONFLICT') {
+        setPhase({ kind: 'already' });
+        return;
+      }
       if (!sourceId || params.get('error')) {
         // A refused or already-failed row carries its reason: read it once.
         const reason = sourceId ? ((await sourceStatus(sourceId))?.failureReason ?? null) : null;
@@ -190,6 +206,7 @@ export function SourceCard({
           found: status.found,
           skipped: status.skippedDuplicates,
           keyword: status.readBy !== 'brand.extract',
+          titles: status.pendingTitles ?? [],
         });
       } else if (status.status === 'FAILED' || status.status === 'QUARANTINED') {
         setPhase({ kind: 'failed', refused: false, reason: status.failureReason ?? null });
@@ -208,6 +225,10 @@ export function SourceCard({
   const approve = async (sourceId: string) => {
     const outcome = await approveSourceFactsAction({ locale, brandId, documentId: sourceId });
     if ('accepted' in outcome) setPhase({ kind: 'approved', accepted: outcome.accepted });
+  };
+  const reject = async (sourceId: string) => {
+    const outcome = await rejectSourceFactsAction({ locale, brandId, documentId: sourceId });
+    if ('rejected' in outcome) setPhase({ kind: 'rejected', rejected: outcome.rejected });
   };
 
   return (
@@ -289,6 +310,16 @@ export function SourceCard({
               {labels.todaysExtraction}
             </span>
           ) : null}
+          {phase.found > 0 && phase.titles.length > 0 ? (
+            <>
+              <span className="bsp-st-hint">{labels.foundTitles}</span>
+              <ul data-testid="copilot-source-titles" dir="auto">
+                {phase.titles.map((title, index) => (
+                  <li key={`${index}-${title}`}>{title}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
           {phase.found > 0 ? (
             <>
               <span>{labels.approveOrReview}</span>
@@ -310,6 +341,16 @@ export function SourceCard({
                 >
                   {labels.review}
                 </Link>
+                {canReview ? (
+                  <button
+                    type="button"
+                    className="bsp-btn bsp-sm bsp-sec"
+                    data-testid="copilot-source-reject-all"
+                    onClick={() => void reject(phase.sourceId)}
+                  >
+                    {labels.rejectAll}
+                  </button>
+                ) : null}
               </span>
             </>
           ) : null}
@@ -320,6 +361,16 @@ export function SourceCard({
         <b data-testid="copilot-source-approved">
           {labels.approved.replace('{count}', String(phase.accepted))}
         </b>
+      ) : null}
+
+      {phase.kind === 'rejected' ? (
+        <b data-testid="copilot-source-rejected">
+          {labels.rejected.replace('{count}', String(phase.rejected))}
+        </b>
+      ) : null}
+
+      {phase.kind === 'already' ? (
+        <b data-testid="copilot-source-already">{labels.alreadyAdded}</b>
       ) : null}
 
       {phase.kind === 'failed' ? (

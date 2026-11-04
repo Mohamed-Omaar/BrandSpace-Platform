@@ -1,6 +1,15 @@
 'use client';
 
-import { useCallback, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import {
   colorTokens,
   layoutTokens,
@@ -127,6 +136,8 @@ export interface CopilotLabels {
   readonly suggestionsLabel: string;
   readonly conversationLabel: string;
   readonly streaming: string;
+  /** PR 2 (D-598) — the button back to the newest message, when scrolled up. */
+  readonly newMessage?: string;
   readonly errorTitle: string;
   readonly errorBody: string;
   readonly insufficientCreditsTitle: string;
@@ -486,6 +497,7 @@ export function CopilotBody({
 }) {
   const promptId = useId();
   const live = composer !== undefined;
+  const log = useStickToBottom(messages);
 
   return (
     <div
@@ -570,6 +582,8 @@ export function CopilotBody({
         // flags this as `scrollable-region-focusable`, and it did.
         tabIndex={0}
         className="bs-cpb-log"
+        ref={log.ref}
+        onScroll={log.onScroll}
         style={{
           overflowY: 'auto',
           padding: spacingTokens.md,
@@ -719,6 +733,16 @@ export function CopilotBody({
               </Button>
             </div>
           </section>
+        ) : null}
+        {log.unseen ? (
+          <button
+            type="button"
+            className="bs-cpb-newer"
+            data-testid="copilot-new-message"
+            onClick={log.toBottom}
+          >
+            {labels.newMessage ?? '↓'}
+          </button>
         ) : null}
       </div>
 
@@ -1184,4 +1208,66 @@ export function CopilotLauncher({
       {label}
     </button>
   );
+}
+
+/** How close to the bottom still counts as "at the bottom", in pixels. */
+const STICK_SLACK_PX = 48;
+
+/**
+ * PR 2 (D-598) — THE CONVERSATION STAYS AT ITS NEWEST MESSAGE.
+ *
+ * Staging: after sending, the new bubble was cut off below and the reader had
+ * to scroll; the side panel opened at the top of a long history. Now the log
+ * sticks to the bottom — when it opens, when the person sends (their own
+ * message is the newest), while the reply arrives and when it lands — unless
+ * the person has scrolled up to read, in which case it stays where they are
+ * and offers "New message ↓". Any growth of the log (a card loading, an
+ * answer arriving) is watched, not only new messages.
+ */
+function useStickToBottom(messages: readonly CopilotMessage[]) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const stick = useRef(true);
+  const [unseen, setUnseen] = useState(false);
+
+  const toBottom = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    stick.current = true;
+    setUnseen(false);
+  }, []);
+
+  const onScroll = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_SLACK_PX;
+    stick.current = atBottom;
+    if (atBottom) setUnseen(false);
+  }, []);
+
+  // Sending: the person's own new message brings the log back down.
+  const last = messages[messages.length - 1];
+  const lastKey = last ? `${last.id}:${last.author}` : '';
+  useLayoutEffect(() => {
+    if (last?.author === 'user') stick.current = true;
+    if (stick.current) toBottom();
+    else if (lastKey) setUnseen(true);
+    // The newest message's identity is the dependency.
+  }, [lastKey, toBottom]);
+
+  // Any other growth: cards, the waiting line, a streamed answer.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof MutationObserver === 'undefined') return;
+    const observer = new MutationObserver(() => {
+      if (stick.current) el.scrollTop = el.scrollHeight;
+      else setUnseen(true);
+    });
+    observer.observe(el, { childList: true, subtree: true, characterData: true });
+    // Open at the newest message (the panel used to open at the top).
+    el.scrollTop = el.scrollHeight;
+    return () => observer.disconnect();
+  }, []);
+
+  return { ref, onScroll, unseen, toBottom };
 }

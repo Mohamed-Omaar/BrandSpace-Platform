@@ -211,6 +211,9 @@ type ScopedDb = Parameters<Parameters<typeof withWorkspace>[1]>[0];
 let nextOutput = '';
 /** D-300 — the prompt the provider last received, so a test can read what was asked. */
 let lastPrompt = '';
+/** PR 2 (D-598) — answers taken in order before `nextOutput`, and every prompt seen. */
+const queuedOutputs: string[] = [];
+const prompts: string[] = [];
 
 /**
  * A provider that returns exactly what the test scripted.
@@ -241,11 +244,13 @@ class ScriptedTextAdapter implements AiProviderAdapter {
   }): Promise<TextResult> {
     const contextChars = (request.untrustedContext ?? []).reduce((n, c) => n + c.length, 0);
     lastPrompt = request.prompt;
+    prompts.push(request.prompt);
+    const text = queuedOutputs.shift() ?? nextOutput;
     return {
-      text: nextOutput,
+      text,
       usage: {
         promptTokens: Math.ceil((request.prompt.length + contextChars) / 4),
-        completionTokens: Math.ceil(nextOutput.length / 4),
+        completionTokens: Math.ceil(text.length / 4),
       },
       modelKey: request.modelKey,
     };
@@ -1627,6 +1632,34 @@ describe('PR A2 (item 10) — an AI edit does what its button says, or costs not
     const result = await tool(variantId, 'shorten');
     expect(result.variant.body).toBe('Spring collection: in stores Friday.');
     expect(result.creditsChargedMilli).toBeGreaterThan(0n);
+  });
+
+  it('PR 2: a refused edit is asked for once more, with a stronger instruction, and charged once', async () => {
+    const variantId = await draftWith(original);
+    const before = await wallet();
+    prompts.length = 0;
+    // First answer: not shorter enough. Second (the retry): clearly shorter.
+    queuedOutputs.push(
+      JSON.stringify({ body: original.slice(0, original.length - 5), hashtags: [] }),
+      JSON.stringify({ body: 'Spring collection: in every store Friday.', hashtags: [] }),
+    );
+    const result = await tool(variantId, 'shorten');
+    expect(result.variant.body).toBe('Spring collection: in every store Friday.');
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain('Your previous answer was not short enough.');
+    const after = await wallet();
+    expect((before?.balanceMilliCredits ?? 0n) - (after?.balanceMilliCredits ?? 0n)).toBe(
+      result.creditsChargedMilli,
+    );
+    expect(result.creditsChargedMilli).toBeGreaterThan(0n);
+  });
+
+  it('PR 2: a 20%-shorter answer is a usable result and is accepted', async () => {
+    const variantId = await draftWith(original);
+    const shorter = [...original].slice(0, Math.floor([...original].length * 0.8)).join('');
+    nextOutput = JSON.stringify({ body: shorter, hashtags: [] });
+    const result = await tool(variantId, 'shorten');
+    expect(result.variant.body).toBe(shorter);
   });
 
   it('Shorter states the measurable target in its instruction', async () => {

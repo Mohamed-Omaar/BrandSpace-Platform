@@ -3249,7 +3249,10 @@ export const messages = {
     'copilot.attachments': 'المرفقات',
     'copilot.suggestions': 'اقتراحات',
     'copilot.conversation': 'المحادثة',
-    'copilot.working': 'جارٍ إعداد خطة…',
+    'copilot.working': 'جارٍ تنفيذ الخطة…',
+    // PR 2 (D-598)
+    'copilot.thinking': 'يفكّر…',
+    'copilot.newMessage': 'رسالة جديدة ↓',
     'copilot.workingOn': 'العمل على: {screen}',
     'copilot.askPlaceholder': 'اسأل أو اطلب شيئًا…',
     'copilot.hello':
@@ -3289,6 +3292,11 @@ export const messages = {
     // PR U — said after the reason, which now comes from `bb.failure.*`.
     'copilot.source.failed': 'لم يُحتسب أي رصيد.',
     'copilot.source.refused': 'لا يمكن إضافة هذا الملف إلى عقل العلامة.',
+    // PR 2 (D-598)
+    'copilot.source.rejectAll': 'رفض الكل',
+    'copilot.source.rejected': 'رُفضت {count} حقائق.',
+    'copilot.source.alreadyAdded': 'هذا الملف موجود بالفعل في عقل العلامة.',
+    'copilot.source.foundTitles': 'الحقائق التي وجدناها:',
     'copilot.pageAsk.content': 'هل أكتب النص والوسوم لهذا المنشور؟',
     'copilot.pageAsk.contentPrompt': 'اكتب النص والوسوم لهذا المنشور.',
     'copilot.openInPage': 'افتح في صفحة المساعد',
@@ -7762,7 +7770,10 @@ export const messages = {
     'copilot.attachments': 'Attachments',
     'copilot.suggestions': 'Suggestions',
     'copilot.conversation': 'Conversation',
-    'copilot.working': 'Working on a plan…',
+    'copilot.working': 'Working on the plan…',
+    // PR 2 (D-598)
+    'copilot.thinking': 'Thinking…',
+    'copilot.newMessage': 'New message ↓',
     'copilot.workingOn': 'Working on: {screen}',
     'copilot.askPlaceholder': 'Ask or request something…',
     'copilot.hello':
@@ -7801,6 +7812,11 @@ export const messages = {
     // PR U — said after the reason, which now comes from `bb.failure.*`.
     'copilot.source.failed': 'No credits were used.',
     'copilot.source.refused': 'This file cannot be added to Brand Brain.',
+    // PR 2 (D-598)
+    'copilot.source.rejectAll': 'Reject all',
+    'copilot.source.rejected': '{count} facts rejected.',
+    'copilot.source.alreadyAdded': 'This file is already in Brand Brain.',
+    'copilot.source.foundTitles': 'The facts we found:',
     'copilot.pageAsk.content': 'Shall I write the caption and hashtags for this post?',
     'copilot.pageAsk.contentPrompt': 'Write the caption and hashtags for this post.',
     'copilot.openInPage': 'Open in Copilot page',

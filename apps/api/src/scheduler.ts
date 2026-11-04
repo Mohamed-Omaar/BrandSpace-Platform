@@ -106,6 +106,7 @@ import {
   CreativeGenerationJobs,
   findStaleCreativeJobs,
   runCreativeGenerationJob,
+  type CreativeJobRunHost,
 } from '@brandspace/creative';
 import { creativeJobHost } from './routes/creative';
 import {
@@ -326,9 +327,16 @@ export interface SchedulerOptions {
    * database.
    */
   readonly publishingPolicy?: PublishingPolicy;
+  /**
+   * PR 2 — how an image job is run by the recovery sweep. Defaults to the
+   * API's own host (its gateway, its object store); injected by a test that
+   * routes `image.generate` to the deterministic provider.
+   */
+  readonly creativeJobHost?: (workspaceId: string, planKey: string | null) => CreativeJobRunHost;
 }
 
 export class MaintenanceScheduler {
+  readonly #creativeJobHost: (workspaceId: string, planKey: string | null) => CreativeJobRunHost;
   readonly #environment: Environment;
   readonly #clock: Clock;
   readonly #timers: NodeJS.Timeout[] = [];
@@ -343,6 +351,7 @@ export class MaintenanceScheduler {
     this.#clock = options.clock ?? systemClock;
     this.#socialApplications = options.socialApplications ?? applicationResolver();
     this.#injectedPublishingPolicy = options.publishingPolicy;
+    this.#creativeJobHost = options.creativeJobHost ?? creativeJobHost;
   }
 
   /** The activated publishing policy, unless one was injected. */
@@ -2522,7 +2531,7 @@ export class MaintenanceScheduler {
           { prisma: getPrisma() },
         );
         const outcome = await runCreativeGenerationJob(
-          { ...creativeJobHost(job.workspaceId, planKey), clock: this.#clock },
+          { ...this.#creativeJobHost(job.workspaceId, planKey), clock: this.#clock },
           job.id,
           { staleBefore: runningBefore },
         );

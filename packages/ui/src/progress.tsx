@@ -40,15 +40,33 @@ export function ProgressBar({
  * has taken so far, ticking once a second. A polite live region, so a screen
  * reader hears the label once rather than every tick.
  */
+/**
+ * PR 2 (D-598) — THE THINKING DOTS: three dots (ink, purple, yellow) rising in
+ * turn, ported from the landing page the owner chose (`.bs-dots` in
+ * tokens.css). Decorative: the words beside it carry the meaning.
+ */
+export function ThinkingDots({ testId = 'thinking-dots' }: { readonly testId?: string }) {
+  return (
+    <span className="bs-dots" aria-hidden="true" data-testid={testId}>
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
 export function WorkingStatus({
   label,
   since,
   testId = 'working',
+  indicator = 'spinner',
 }: {
   readonly label: string;
   /** `Date.now()` when the work started. */
   readonly since: number;
   readonly testId?: string;
+  /** PR 2 — the Copilot waits with the thinking dots; everything else spins. */
+  readonly indicator?: 'spinner' | 'dots';
 }) {
   const [now, setNow] = useState(since);
   useEffect(() => {
@@ -58,7 +76,7 @@ export function WorkingStatus({
   }, [since]);
   return (
     <span className="bs-working" role="status" aria-live="polite" data-testid={testId}>
-      <Spinner />
+      {indicator === 'dots' ? <ThinkingDots testId={`${testId}-dots`} /> : <Spinner />}
       <span>{label}</span>
       <span className="bs-working-time" data-testid={`${testId}-time`} aria-hidden="true">
         {elapsedText(since, now)}

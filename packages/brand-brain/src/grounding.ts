@@ -219,6 +219,30 @@ export async function writingFactsInAreas(
 }
 
 /**
+ * PR 2 (D-598) — WHAT BRAND BRAIN GAINED RECENTLY, for the Copilot: the
+ * titles and areas of usable facts changed since `since`, newest first.
+ * Right after "4 facts approved." the person asks «اية هما» and the Copilot
+ * must be able to say which. The writing rules apply as everywhere here:
+ * usable facts only, and nothing when "Use Brand Brain" is off.
+ */
+export async function recentlyApprovedFacts(
+  db: TenantScopedClient,
+  request: { readonly brandId: string; readonly since: Date; readonly maxItems: number },
+  clock: Clock = systemClock,
+) {
+  return db.brandKnowledgeItem.findMany({
+    where: {
+      brandId: request.brandId,
+      updatedAt: { gte: request.since },
+      ...(await writingKnowledgeWhere(db, clock)),
+    },
+    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    take: request.maxItems,
+    select: { area: true, title: true },
+  });
+}
+
+/**
  * STRATEGY: the KEYS of the content pillars a brand declared — its usable
  * STRATEGY facts that are not goals. Keys only: a gap is "no post used this
  * pillar", and a post carries the pillar's key.

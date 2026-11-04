@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { unstable_rethrow } from 'next/navigation';
-import { DUPLICATE_OF_EXISTING } from '@brandspace/brand-brain';
+import { DUPLICATE_OF_EXISTING, localizedFrom } from '@brandspace/brand-brain';
 import { brandIdQueryFilter, createLogger, internalErrorFields } from '@brandspace/shared';
 import { inWorkspace, resolveApiWorkspace } from '../../../../server/customer-context';
 
@@ -42,7 +42,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         },
       });
       if (!document) return null;
-      const [pending, linked] = await Promise.all([
+      const [pending, linked, waiting] = await Promise.all([
         db.brandKnowledgeCandidate.count({ where: { sourceDocumentId: id, status: 'PENDING' } }),
         db.brandKnowledgeCandidate.count({
           where: {
@@ -50,6 +50,14 @@ export async function GET(request: Request): Promise<NextResponse> {
             status: 'SUPERSEDED',
             reviewReason: DUPLICATE_OF_EXISTING,
           },
+        }),
+        // PR 2 (D-598) — the facts waiting for approval, by title, so the
+        // Copilot's card can show what Approve all / Reject all would decide.
+        db.brandKnowledgeCandidate.findMany({
+          where: { sourceDocumentId: id, status: 'PENDING' },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 10,
+          select: { extractedTitle: true },
         }),
       ]);
       const job = document.ingestionJobs[0];
@@ -60,6 +68,12 @@ export async function GET(request: Request): Promise<NextResponse> {
         found: pending,
         skippedDuplicates: linked,
         readBy: job?.aiRequestId ? 'brand.extract' : 'keyword',
+        pendingTitles: waiting
+          .map((row) => {
+            const title = localizedFrom(row.extractedTitle);
+            return (title.en ?? title.ar ?? '').slice(0, 120);
+          })
+          .filter((title) => title !== ''),
         // PR U — the stored reason KEY (never a sentence), so the Copilot's
         // file card can say why in the reader's language.
         failureReason:

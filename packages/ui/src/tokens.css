@@ -3184,6 +3184,64 @@ select option {
   gap: var(--bs-space-sm);
   color: var(--bs-text-secondary);
 }
+/*
+ * PR 2 (D-598) — THE THINKING DOTS, PORTED FROM THE LANDING PAGE.
+ * Source: Mohamed-Omaar/Brandspace-Landing-page `index.html` lines 29-35
+ * (`.dots`, `@keyframes pulse`), the owner's chosen waiting look. Every value
+ * is the landing's own, as a token; the three colours are the brand ink,
+ * purple and yellow tokens (#111114, #7935fe, #ffdd15 — the landing's
+ * `--ink`, `--purple`, `--yellow`). Reduced motion stops the movement.
+ */
+:root {
+  --bs-dots-size: 8px;
+  --bs-dots-gap: 7px;
+  --bs-dots-lift: -7px;
+  --bs-dots-rest: 0.18;
+  --bs-dots-cycle: 1.35s;
+  --bs-dots-step: 0.16s;
+  --bs-dots-ease: ease-in-out;
+}
+@keyframes bs-dots-pulse {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: var(--bs-dots-rest);
+  }
+  50% {
+    transform: translateY(var(--bs-dots-lift));
+    opacity: 1;
+  }
+}
+.bs-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bs-dots-gap);
+  flex: none;
+}
+.bs-dots > i {
+  inline-size: var(--bs-dots-size);
+  block-size: var(--bs-dots-size);
+  border-radius: var(--bs-radius-full);
+  background: var(--bs-text-primary);
+  opacity: var(--bs-dots-rest);
+  animation-name: bs-dots-pulse;
+  animation-duration: var(--bs-dots-cycle);
+  animation-timing-function: var(--bs-dots-ease);
+  animation-iteration-count: infinite;
+}
+.bs-dots > i:nth-child(2) {
+  animation-delay: var(--bs-dots-step);
+  background: var(--bs-brand-purple);
+}
+.bs-dots > i:nth-child(3) {
+  animation-delay: calc(var(--bs-dots-step) * 2);
+  background: var(--bs-brand-yellow);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bs-dots > i {
+    animation-name: none;
+  }
+}
 button[data-pending] {
   display: inline-flex;
   align-items: center;

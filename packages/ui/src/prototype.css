@@ -13943,6 +13943,29 @@ select.bs-select.bsp-chevron {
   background: var(--bs-surface-lavender);
 }
 
+/*
+ * PR 2 (D-598) — "New message ↓": shown only when the reader has scrolled up
+ * and something new arrived. Pinned to the bottom of the log while it
+ * scrolls; the brand's primary button colours, from tokens.
+ */
+.bs-cpb-newer {
+  position: sticky;
+  inset-block-end: var(--bs-space-sm);
+  justify-self: center;
+  padding-block: var(--bs-space-xs);
+  padding-inline: var(--bs-space-sm);
+  border: 0;
+  border-radius: var(--bs-radius-full);
+  background: var(--bs-brand-purple);
+  color: var(--bs-brand-purple-ink);
+  box-shadow: var(--bs-shadow-card);
+  font: inherit;
+  cursor: pointer;
+}
+.bs-cpb-newer:focus-visible {
+  outline: var(--bs-field-border-2) solid var(--bs-focus-ring);
+}
+
 /* The composer's attach and price, beside Send. */
 .bs-cpb-attach {
   position: relative;
