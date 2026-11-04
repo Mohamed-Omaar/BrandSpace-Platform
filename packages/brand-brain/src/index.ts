@@ -212,6 +212,7 @@ export {
   rewriteGroundingFor,
   usableFactsForDisplay,
   writingFactsInAreas,
+  recentlyApprovedFacts,
   writingGoal,
   writingGroundingWithoutQuestion,
 } from './grounding';

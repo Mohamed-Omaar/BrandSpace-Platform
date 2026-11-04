@@ -5,6 +5,7 @@ import {
   measurableDirective,
   refuseBeforeCall,
   similarity,
+  strongerDirective,
   taskKeyForTool,
 } from '@brandspace/content';
 
@@ -17,14 +18,21 @@ import {
 const before = 'a'.repeat(100);
 
 describe('PR A2 (item 10) — what each AI edit must achieve', () => {
-  it('Shorter: at most 70% of the characters', () => {
-    expect(checkEdit('shorten', before, 'b'.repeat(70), 2200)).toBeNull();
-    expect(checkEdit('shorten', before, 'b'.repeat(71), 2200)).toBe('EDIT_NOT_SHORTER');
+  // PR 2 (D-598): the instruction asks for 30%; an answer is ACCEPTED at 15%.
+  it('Shorter: accepted at most 85% of the characters', () => {
+    expect(checkEdit('shorten', before, 'b'.repeat(85), 2200)).toBeNull();
+    expect(checkEdit('shorten', before, 'b'.repeat(86), 2200)).toBe('EDIT_NOT_SHORTER');
   });
 
-  it('Longer: at least 130% of the characters', () => {
-    expect(checkEdit('expand', before, 'b'.repeat(130), 2200)).toBeNull();
-    expect(checkEdit('expand', before, 'b'.repeat(129), 2200)).toBe('EDIT_NOT_LONGER');
+  it('Longer: accepted at least 115% of the characters', () => {
+    expect(checkEdit('expand', before, 'b'.repeat(115), 2200)).toBeNull();
+    expect(checkEdit('expand', before, 'b'.repeat(114), 2200)).toBe('EDIT_NOT_LONGER');
+  });
+
+  it('PR 2: the retry says plainly what the first answer got wrong', () => {
+    expect(strongerDirective('shorten', 'EDIT_NOT_SHORTER')).toContain('not short enough');
+    expect(strongerDirective('expand', 'EDIT_NOT_LONGER')).toContain('not long enough');
+    expect(strongerDirective('tone', 'EDIT_NO_CHANGE')).toContain('requested tone');
   });
 
   it('counts characters as a reader does (Arabic and emoji are one each)', () => {

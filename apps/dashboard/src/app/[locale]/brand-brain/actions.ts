@@ -779,6 +779,45 @@ export async function removeSourceAction(formData: FormData): Promise<void> {
 }
 
 /**
+ * PR 2 (D-598) — "Reject all" FOR ONE ADDED FILE, beside Approve all on the
+ * Copilot's card. The same review right and the same per-fact path as the
+ * Knowledge screen's Reject (each candidate audited `brand_brain.candidate.*`);
+ * nothing becomes knowledge, and the file stays as a source.
+ */
+export async function rejectSourceFactsAction(input: {
+  readonly locale: string;
+  readonly brandId: string;
+  readonly documentId: string;
+}): Promise<{ readonly rejected: number } | { readonly error: string }> {
+  try {
+    const session = await requireWorkspaceAction(input.locale, 'brand_brain.review');
+    return await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy, db }) => {
+      const pending = await db.brandKnowledgeCandidate.findMany({
+        where: {
+          brandId: input.brandId,
+          sourceDocumentId: input.documentId,
+          status: 'PENDING',
+        },
+        select: { id: true },
+      });
+      const staleness = (await policy()).staleness;
+      for (const row of pending) {
+        await knowledge.reviewCandidate({
+          candidateId: row.id,
+          decision: 'reject',
+          reason: 'rejected_in_copilot',
+          actor: knowledgeActor(session),
+          policy: staleness,
+        });
+      }
+      return { rejected: pending.length };
+    });
+  } catch (error: unknown) {
+    return { error: isAppError(error) ? error.code : 'INTERNAL' };
+  }
+}
+
+/**
  * PR B (D-594) — "Approve all" FOR ONE ADDED FILE, from the Copilot's Add card.
  * The person's own `brand_brain.review` (as on the Knowledge strip); every
  * waiting fact of that file, whatever its confidence; the server still skips a

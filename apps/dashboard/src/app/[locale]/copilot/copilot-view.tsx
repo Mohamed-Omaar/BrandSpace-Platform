@@ -305,6 +305,8 @@ export function CopilotView({
   const [turn, setTurn] = useState<{ sessionId: string; idempotencyKey: string } | null>(null);
   const [stops, setStops] = useState(0);
   const [turnStartedAt, setTurnStartedAt] = useState(0);
+  // PR 2 (D-598): a turn is "Thinking…"; only a confirmed plan is "Working on the plan…".
+  const [waitingFor, setWaitingFor] = useState<'reply' | 'plan'>('reply');
   // PR B — ONE KEY PER PAGE LOAD: a double click replays the turn, while the
   // same words asked again after a reload or a Clear are a new request (the
   // gateway's own replay outlives the cleared messages).
@@ -474,6 +476,7 @@ export function CopilotView({
     if (request.trim().length === 0 || busy) return;
     setBusy(true);
     setTurnStartedAt(Date.now());
+    setWaitingFor('reply');
     setErrorCode(null);
     setErrorDetails(null);
     setExecution(null);
@@ -553,6 +556,8 @@ export function CopilotView({
   const confirm = async (): Promise<void> => {
     if (!plan?.planId || !plan.planHash || busy) return;
     setBusy(true);
+    setWaitingFor('plan');
+    setTurnStartedAt(Date.now());
     setErrorCode(null);
     setErrorDetails(null);
     try {
@@ -1104,9 +1109,10 @@ export function CopilotView({
           }
           waiting={
             <WorkingStatus
-              label={labels.streaming}
+              label={waitingFor === 'plan' ? t('copilot.working') : labels.streaming}
               since={turnStartedAt}
               testId="copilot-working"
+              indicator="dots"
             />
           }
           composer={{
@@ -1468,5 +1474,9 @@ function sourceCardLabels(t: (key: MessageKey) => string): SourceCardLabels {
     failed: t('copilot.source.failed'),
     refused: t('copilot.source.refused'),
     failureReason: (reason) => sourceFailureText(reason, t),
+    rejectAll: t('copilot.source.rejectAll'),
+    rejected: t('copilot.source.rejected'),
+    alreadyAdded: t('copilot.source.alreadyAdded'),
+    foundTitles: t('copilot.source.foundTitles'),
   };
 }

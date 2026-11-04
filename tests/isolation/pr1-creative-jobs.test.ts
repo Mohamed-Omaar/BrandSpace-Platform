@@ -593,3 +593,69 @@ describe('PR 1 · the scheduler sweep', () => {
     expect(imageCalls()).toBe(calls);
   });
 });
+
+describe('PR 1 · carried into PR 2: the scheduler, end to end', () => {
+  it('a QUEUED job left over a minute is run by the sweep, charged exactly once; a second sweep does nothing', async () => {
+    const { MaintenanceScheduler } = await import('../../apps/api/src/scheduler');
+    const scheduler = new MaintenanceScheduler({
+      environment: 'DEVELOPMENT',
+      creativeJobHost: (workspaceId) => host(workspaceId, fixtures.a.userId),
+    });
+    const before = await balance();
+    const calls = imageCalls();
+    const { job } = await enqueueA({ contentVariantId: fixtures.a.contentVariantId });
+    // The in-process start was lost (a restart): the row sat QUEUED.
+    await platform.creativeGenerationJob.update({
+      where: { id: job.id },
+      data: { createdAt: new Date(Date.now() - 5 * 60_000) },
+    });
+
+    expect(await scheduler.recoverCreativeJobs(500)).toBeGreaterThanOrEqual(1);
+    const row = await jobRow(job.id);
+    expect(row).toMatchObject({ status: 'SUCCEEDED', attempts: 1 });
+    expect(row.attachedAt).not.toBeNull();
+    expect(imageCalls()).toBe(calls + 1);
+    const charged = before - (await balance());
+    expect(charged).toBe(row.creditsChargedMilli);
+
+    // Swept again: nothing to do, nothing charged, no provider call.
+    await scheduler.recoverCreativeJobs(500);
+    expect(imageCalls()).toBe(calls + 1);
+    expect(before - (await balance())).toBe(charged);
+    expect(await jobRow(job.id)).toMatchObject({ status: 'SUCCEEDED', attempts: 1 });
+  });
+
+  it('the scheduler purge deletes a finished job past the workspace’s AI-content retention, brief and all', async () => {
+    const { MaintenanceScheduler } = await import('../../apps/api/src/scheduler');
+    const done = await enqueueA();
+    await runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), done.job.id);
+    const open = await enqueueA();
+    const workspace = await platform.workspace.findUniqueOrThrow({
+      where: { id: fixtures.a.workspaceId },
+      select: { aiContentRetentionDays: true },
+    });
+    // The workspace's own retention setting, and a job finished long ago.
+    await platform.workspace.update({
+      where: { id: fixtures.a.workspaceId },
+      data: { aiContentRetentionDays: 30 },
+    });
+    await platform.creativeGenerationJob.update({
+      where: { id: done.job.id },
+      data: { completedAt: new Date(Date.now() - 400 * 24 * 3600_000) },
+    });
+    try {
+      const purged = await new MaintenanceScheduler({
+        environment: 'DEVELOPMENT',
+      }).purgeCreativeJobs(500);
+      expect(purged).toBeGreaterThanOrEqual(1);
+      expect(await platform.creativeGenerationJob.count({ where: { id: done.job.id } })).toBe(0);
+      // An unfinished job, and its brief, are never purged.
+      expect(await platform.creativeGenerationJob.count({ where: { id: open.job.id } })).toBe(1);
+    } finally {
+      await platform.workspace.update({
+        where: { id: fixtures.a.workspaceId },
+        data: { aiContentRetentionDays: workspace.aiContentRetentionDays },
+      });
+    }
+  });
+});

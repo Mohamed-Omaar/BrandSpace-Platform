@@ -154,6 +154,17 @@ const RETRYABLE_REASONS: ReadonlySet<string> = new Set([
   'stuck_timeout',
 ]);
 
+/**
+ * PR 2 (D-598) — failures that were ours, not the file's: adding the same
+ * file again reads it again (`receive`).
+ */
+const OUR_SIDE_FAILURES: ReadonlySet<string> = new Set([
+  'reader_unavailable',
+  'extraction_failed',
+  'extraction_timed_out',
+  'stuck_timeout',
+]);
+
 export interface ProcessResult {
   readonly documentId: string;
   readonly status: BrandSourceDocument['status'];
@@ -265,6 +276,28 @@ export class BrandIngestionService {
     const duplicate = await this.#liveDuplicate(input.brandId, checksum);
     if (duplicate) {
       if (duplicate.status !== 'FAILED') throw duplicateUpload();
+      /*
+       * PR 2 (D-598) — THE SAME FILE AGAIN, AFTER OUR OWN FAILURE, IS READ
+       * AGAIN. On staging the VETS VAN PDF failed three times on Node 20
+       * (`extraction_failed`); adding it again returned that old FAILED row,
+       * nothing ran, nothing was logged, and the Copilot's card said "failed".
+       * A failure on OUR side (the reader, a timeout, a stuck job) is not the
+       * file's: a new read starts, exactly as Read again would. A failure that
+       * IS the file's (damaged, scanned, wrong type) still answers with its
+       * reason, because reading it again reaches the same answer.
+       */
+      if (
+        OUR_SIDE_FAILURES.has(duplicate.failureMessage ?? '') &&
+        duplicate.byteSize > 0 &&
+        duplicate.storageKey !== ''
+      ) {
+        const again = await this.readAgain({
+          documentId: duplicate.id,
+          actorUserId: input.actorUserId,
+          actorBrandScope: input.actorBrandScope,
+        });
+        return { outcome: 'queued', document: again.document, job: again.job };
+      }
       return {
         outcome: 'existing',
         document: duplicate,

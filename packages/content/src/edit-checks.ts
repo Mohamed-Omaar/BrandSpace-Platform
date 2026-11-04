@@ -23,7 +23,17 @@ export const SHORTER_MAX_RATIO = 0.7;
 /** Longer reaches at least this share of the characters. */
 export const LONGER_MIN_RATIO = 1.3;
 /** At or above this similarity, two captions are "nearly identical". */
-export const NEAR_IDENTICAL_SIMILARITY = 0.97;
+export const NEAR_IDENTICAL_SIMILARITY = 0.985;
+
+/*
+ * PR 2 (D-598) — WHAT IS ASKED FOR AND WHAT IS ACCEPTED ARE DIFFERENT NUMBERS.
+ * The instruction still asks for 30% (`SHORTER_MAX_RATIO`, `LONGER_MIN_RATIO`);
+ * an answer is ACCEPTED once it is clearly shorter or longer — 15% — because
+ * a 20%-shorter caption is a usable result, and on staging three of them were
+ * thrown away as OUTPUT_INVALID. "Unchanged" means 98.5% the same characters.
+ */
+export const ACCEPT_SHORTER_MAX_RATIO = 0.85;
+export const ACCEPT_LONGER_MIN_RATIO = 1.15;
 
 /** Why an edit was not charged, as a stable code a screen chooses words by. */
 export type EditRejection =
@@ -137,12 +147,15 @@ export function checkEdit(
   platformMaxChars: number,
 ): EditRejection | null {
   if (!REWRITING.has(tool)) return null;
-  const target = editTarget(tool, before, platformMaxChars);
+  const was = charCount(before);
   const length = charCount(after);
-  if (tool === 'shorten' && target.maxChars !== null && length > target.maxChars) {
+  if (tool === 'shorten' && length > Math.floor(was * ACCEPT_SHORTER_MAX_RATIO)) {
     return 'EDIT_NOT_SHORTER';
   }
-  if (tool === 'expand' && target.minChars !== null && length < target.minChars) {
+  if (
+    tool === 'expand' &&
+    length < Math.min(Math.ceil(was * ACCEPT_LONGER_MIN_RATIO), platformMaxChars)
+  ) {
     return 'EDIT_NOT_LONGER';
   }
   if (similarity(before, after) >= NEAR_IDENTICAL_SIMILARITY) return 'EDIT_NO_CHANGE';
@@ -168,3 +181,23 @@ export const EDIT_REJECTION_REASON: Readonly<Record<EditRejection, string>> = {
   EDIT_CANNOT_GROW: 'The caption cannot grow by 30% inside the platform limit.',
   EDIT_STALE: 'The caption on screen is not the saved caption.',
 };
+
+/**
+ * PR 2 (D-598) — THE ONE RETRY'S INSTRUCTION. Said plainly what the first
+ * answer got wrong and what this one must do; the measurable target is
+ * restated by `measurableDirective` in the same prompt.
+ */
+export function strongerDirective(tool: string, rejection: EditRejection): string {
+  switch (rejection) {
+    case 'EDIT_NOT_SHORTER':
+      return 'Your previous answer was not short enough. Cut whole phrases and filler words now; the result must be clearly shorter than the caption.';
+    case 'EDIT_NOT_LONGER':
+      return 'Your previous answer was not long enough. Add one or two full sentences now; the result must be clearly longer than the caption.';
+    case 'EDIT_NO_CHANGE':
+      return tool === 'tone'
+        ? 'Your previous answer kept almost the same words. Rewrite it now with a clearly different opening, word choice and sentence shape in the requested tone.'
+        : 'Your previous answer kept almost the same words. Rewrite it now with clearly different wording and sentence order, keeping every fact.';
+    default:
+      return '';
+  }
+}

@@ -21,7 +21,9 @@ export function copilotLabels(locale: string, userName: string): CopilotLabels {
     attachmentsLabel: t('copilot.attachments'),
     suggestionsLabel: t('copilot.suggestions'),
     conversationLabel: t('copilot.conversation'),
-    streaming: t('copilot.working'),
+    // PR 2 (D-598): a turn is "Thinking…"; "Working on the plan…" is the confirm's.
+    streaming: t('copilot.thinking'),
+    newMessage: t('copilot.newMessage'),
     errorTitle: t('copilot.errorTitle'),
     errorBody: t('copilot.failed'),
     insufficientCreditsTitle: t('copilot.insufficientCreditsTitle'),

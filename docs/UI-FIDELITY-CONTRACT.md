@@ -2636,3 +2636,16 @@ with "You can leave this page; the image will be added to this post when it's re
 minutes of polling it shows "Still working on the image. Refresh the page to check.", and a failure
 shows its reason (`creative.job.failed.*`). The Creative Studio page shows the same `WorkingStatus`
 under Generate, in the existing `.bsp-gen-hint` style. No new class, colour or layout.
+
+**PR 2 (D-598) — the conversation and its waiting look.** APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2):
+
+- `ThinkingDots` (`.bs-dots`): ported exactly from the landing page the owner chose
+  (`Brandspace-Landing-page` `index.html` lines 29-35), every value a token
+  (`--bs-dots-*`, `--bs-text-primary`, `--bs-brand-purple`, `--bs-brand-yellow`); reduced motion
+  stops it. The Copilot's waiting line is #112's `WorkingStatus` with the dots in place of the
+  spinner, reading "Thinking…" / «يفكّر…»; "Working on the plan…" only while a confirmed plan runs.
+- "New message ↓" (`.bs-cpb-newer`): a sticky pill at the bottom of the log, the primary button's
+  tokens, shown only when the reader has scrolled up and something new arrived.
+- The file card lists the waiting facts' titles (a plain list in the card's own text style) and
+  adds "Reject all" in the existing secondary button style beside Approve all and Review; an
+  already-added file reads "This file is already in Brand Brain."

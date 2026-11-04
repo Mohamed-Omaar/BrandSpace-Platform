@@ -30,6 +30,10 @@ import {
   type KeyQuestion,
   type MissingKnowledge,
   TenantBrandBrainPolicySource,
+  asksAboutProfile,
+  localizedFrom,
+  recentlyApprovedFacts,
+  writingGroundingWithoutQuestion,
 } from '@brandspace/brand-brain';
 import {
   brandQueryFilter,
@@ -294,6 +298,10 @@ export function groundedOnBrandBrain(citations: unknown): boolean {
   return !Array.isArray(citations) || citations.length > 0;
 }
 
+/** PR 2 — the "approved in the last day" block's bounds. */
+const RECENT_APPROVAL_MS = 24 * 3600_000;
+const RECENT_APPROVAL_LINES = 8;
+
 /** PR B — the rolling summary's bounds: one short line per turn, the newest kept. */
 const SUMMARY_LINE_CHARS = 200;
 const SUMMARY_MAX_LINES = 40;
@@ -413,6 +421,10 @@ interface PreparedTurn {
   readonly correlationId: string;
   readonly brandBrain: boolean;
   readonly grounding: Grounding | null;
+  /** PR 2 — no fact shared a word with the request (the overview was given instead). */
+  readonly lexicalMiss: boolean;
+  /** PR 2 — the brand profile (colours, fonts, logo, name) was in the context. */
+  readonly hasProfile: boolean;
   /** PR U — the language the reply is written and stored in. */
   readonly language: 'ar' | 'en';
   readonly gateway: AiGateway;
@@ -870,7 +882,7 @@ export class CopilotOrchestrator {
   }): Promise<AiQuote> {
     const brandId = await this.#admitBrand(input.brandId, input.authorization);
     const brandBrain = await this.#brandBrainEnabled(brandId);
-    const grounding = await this.#context(brandId, input.request, brandBrain);
+    const { grounding } = await this.#context(brandId, input.request, brandBrain);
     const context =
       grounding && grounding.items.length > 0
         ? fenceUntrusted('BRAND BRAIN CONTEXT', grounding.contextText)
@@ -1150,7 +1162,7 @@ export class CopilotOrchestrator {
     const history = remembered.turns.filter(
       (turn) => brandBrain || turn.role !== 'ASSISTANT' || !turn.groundedOnBrandBrain,
     );
-    const grounding = await this.#context(brandId, input.request, brandBrain);
+    const { grounding, lexicalMiss } = await this.#context(brandId, input.request, brandBrain);
     const context =
       grounding && grounding.items.length > 0
         ? fenceUntrusted('BRAND BRAIN CONTEXT', grounding.contextText)
@@ -1158,6 +1170,7 @@ export class CopilotOrchestrator {
     const subject = await this.#subjectContext(session, brandId);
 
     const profile = brandId ? brandProfileBlock(await brandProfileFor(this.#db, brandId)) : null;
+    const recent = brandId && brandBrain ? await this.#recentlyApproved(brandId) : null;
     const language = replyLanguage(input.request, remembered.turns);
     const productFacts = await this.#productFacts();
     return {
@@ -1166,6 +1179,8 @@ export class CopilotOrchestrator {
       correlationId,
       brandBrain,
       grounding,
+      lexicalMiss,
+      hasProfile: profile !== null,
       language,
       gateway: this.#gateway,
       request: {
@@ -1194,6 +1209,8 @@ export class CopilotOrchestrator {
               : []),
             // PR A2 (item 9): the brand profile, approved and read-only.
             ...(profile ? [profile] : []),
+            // PR 2: what was approved in the last day ("which are they?").
+            ...(recent ? [recent] : []),
             ...(subject ? [subject.fenced] : []),
             ...(context ? [context] : []),
           ],
@@ -1208,7 +1225,8 @@ export class CopilotOrchestrator {
     result: AiGatewayResult,
     parsed: AcceptedPlan,
   ): Promise<TurnResult> {
-    const { session, brandId, correlationId, brandBrain, grounding } = prepared;
+    const { session, brandId, correlationId, brandBrain, grounding, lexicalMiss, hasProfile } =
+      prepared;
     const answer = answerText(parsed, prepared.language);
 
     /*
@@ -1259,16 +1277,35 @@ export class CopilotOrchestrator {
      * words: never the model's guess. With the switch off, D-355's notice.
      */
     const factAreas = grounding ? areasOf(grounding) : [];
+    /*
+     * PR 2 (D-598) — THE NOTICE REPLACES THE ANSWER, SO IT IS NARROW. Only a
+     * brand question that matched no fact by its words AND names a key
+     * question the brand has not answered (prices, say) gets "Brand Brain
+     * does not have that yet"; a question the profile answers (colours,
+     * fonts, logo, name, website) never does. Everything else is the model's
+     * answer from the facts it was given — the overview when no word matched.
+     */
+    const profileAnswers = hasProfile && asksAboutProfile(input.request);
+    const missing =
+      brandBrain &&
+      parsed.brandBrainQuestion &&
+      !saveFact &&
+      !profileAnswers &&
+      (lexicalMiss || factAreas.length === 0) &&
+      brandId !== null
+        ? await this.#missing(brandId, input.request, input.keyQuestions)
+        : null;
     const notice =
       !brandBrain && parsed.brandBrainQuestion
         ? ('brand_brain_off' as const)
-        : brandBrain && parsed.brandBrainQuestion && !saveFact && factAreas.length === 0
+        : missing !== null ||
+            (brandBrain &&
+              parsed.brandBrainQuestion &&
+              !saveFact &&
+              !profileAnswers &&
+              factAreas.length === 0)
           ? ('brand_brain_missing' as const)
           : null;
-    const missing =
-      notice === 'brand_brain_missing' && brandId !== null
-        ? await this.#missing(brandId, input.request, input.keyQuestions)
-        : null;
 
     const deniedToolKeys: string[] = [];
     for (const step of notice || saveFact ? [] : parsed.steps) {
@@ -1399,21 +1436,51 @@ export class CopilotOrchestrator {
     brandId: string | null,
     question: string,
     brandBrain: boolean,
-  ): Promise<Grounding | null> {
+  ): Promise<{ readonly grounding: Grounding | null; readonly lexicalMiss: boolean }> {
     // Switched off: not even read (Phase 2C D9).
-    if (!brandId || !brandBrain) return null;
+    if (!brandId || !brandBrain) return { grounding: null, lexicalMiss: false };
+    const maxChars = Math.floor(this.#policy.conversation.maxContextChars / 2);
     const grounding = await groundingFor(
       this.#db,
-      {
-        brandId,
-        question,
-        purpose: 'writing',
-        maxItems: 10,
-        maxChars: Math.floor(this.#policy.conversation.maxContextChars / 2),
-      },
+      { brandId, question, purpose: 'writing', maxItems: 10, maxChars },
       this.#clock,
     );
-    return grounding.enabled ? grounding : null;
+    if (!grounding.enabled) return { grounding: null, lexicalMiss: false };
+    if (grounding.items.length > 0) return { grounding, lexicalMiss: false };
+    /*
+     * PR 2 (D-598) — NO SHARED WORD IS NOT "NO FACTS". The retriever is
+     * lexical: «اية هما», «كلمني عن البراند» or an Arabic question about
+     * English facts shares no word with them, and the Copilot was told the
+     * brand had nothing. The brand's usable facts are given instead, in
+     * precedence order, within the same budget and the same writing rules.
+     */
+    const overview = await writingGroundingWithoutQuestion(
+      this.#db,
+      { brandId, maxItems: 12, maxChars },
+      this.#clock,
+    );
+    return { grounding: overview.enabled ? overview : null, lexicalMiss: true };
+  }
+
+  /**
+   * PR 2 (D-598) — WHAT BRAND BRAIN GAINED IN THE LAST DAY, by title and
+   * area: right after "4 facts approved." the person asks «اية هما» and the
+   * Copilot must be able to say which. Fenced like every other brand text;
+   * only usable (ACTIVE) facts, and only while "Use Brand Brain" is on.
+   */
+  async #recentlyApproved(brandId: string): Promise<string | null> {
+    const since = new Date(this.#clock.now().getTime() - RECENT_APPROVAL_MS);
+    const rows = await recentlyApprovedFacts(
+      this.#db,
+      { brandId, since, maxItems: RECENT_APPROVAL_LINES },
+      this.#clock,
+    );
+    if (rows.length === 0) return null;
+    const lines = rows.map((row) => {
+      const title = localizedFrom(row.title);
+      return `- ${row.area}: ${(title.en ?? title.ar ?? '').slice(0, 160)}`;
+    });
+    return fenceUntrusted('BRAND BRAIN — APPROVED IN THE LAST DAY', lines.join('\n'));
   }
 
   /** PR U — the PRODUCT FACTS lines for this turn. */
@@ -1681,7 +1748,7 @@ export class CopilotOrchestrator {
        * fact is never performed here — it is flagged for Brand Brain.
        */
       brandBound && brandBrain
-        ? 'If the request asks what the brand itself is, sells, charges, says or believes, set "brandBrainQuestion" to true and answer ONLY from the BRAND BRAIN CONTEXT, naming the knowledge area each fact comes from; if it is not there, say Brand Brain does not have it.'
+        ? 'If the request asks what the brand itself is, sells, charges, says or believes, set "brandBrainQuestion" to true and answer ONLY from the BRAND BRAIN CONTEXT (naming the knowledge area each fact comes from) and the BRAND PROFILE. The BRAND PROFILE is the brand\'s own settings — its name, colours, fonts, logo and website: you already have them, so never ask the person to send them. If neither has the answer, say Brand Brain does not have it yet and ask for it in one sentence.'
         : '',
       /*
        * PR B (D-594) — A FACT IS A CARD. With `brand_brain.edit` the request

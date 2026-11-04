@@ -60,6 +60,7 @@ import {
   checkHashtags,
   EDIT_REJECTION_REASON,
   measurableDirective,
+  strongerDirective,
   refuseBeforeCall,
   type EditRejection,
 } from './edit-checks';
@@ -665,52 +666,75 @@ export class ContentStudioService extends ContentLibraryService {
         });
       });
 
-    const result = await gateway.execute({
-      workspaceId: prepared.workspaceId,
-      userId: input.actorUserId,
-      taskKey: taskKeyForTool(input.tool),
-      planKey: input.planKey,
-      /*
-       * D10 — A REWRITE OF THE SAME CHANGES IS THE SAME REQUEST. Its key is
-       * derived on the server from the variant and the exact changes being
-       * answered, so a double click, a retry or a second tab reaches the SAME
-       * gateway request — one reservation, one charge — whatever key the
-       * browser sent. Every other tool keeps the client's key.
-       */
-      idempotencyKey: refreshKey ?? `content-tool:${input.idempotencyKey}`,
-      input: request,
-      accept: async (output) => {
-        parsed = parse(output);
+    const attemptWith = (stronger: string | null) =>
+      gateway.execute({
+        workspaceId: prepared.workspaceId,
+        userId: input.actorUserId,
+        taskKey: taskKeyForTool(input.tool),
+        planKey: input.planKey,
         /*
-         * PR A2 (item 10) — DID THE EDIT DO ITS JOB? Checked before the charge:
-         * not 30% shorter or longer, or nearly the same words, is released.
+         * D10 — A REWRITE OF THE SAME CHANGES IS THE SAME REQUEST. Its key is
+         * derived on the server from the variant and the exact changes being
+         * answered, so a double click, a retry or a second tab reaches the SAME
+         * gateway request — one reservation, one charge — whatever key the
+         * browser sent. Every other tool keeps the client's key.
          */
-        const produced = parsed.variants[0];
-        rejection = produced
-          ? input.tool === 'hashtags'
-            ? checkHashtags(variant.hashtags, produced.hashtags)
-            : checkEdit(input.tool, variant.body ?? '', produced.body, platform.maxBodyChars)
-          : null;
-        if (rejection) throw new OutputRejectedError(EDIT_REJECTION_REASON[rejection]);
-        const current = await run((studio) =>
-          studio.db.contentVariant.findUnique({
-            where: { id: variant.id },
-            select: { body: true, updatedAt: true },
-          }),
-        );
-        if (
-          !current ||
-          current.body !== variant.body ||
-          current.updatedAt.getTime() !== variant.updatedAt.getTime()
-        ) {
-          throw new OutputRejectedError(
-            'The post changed while the model was working.',
-            'The post changed while the AI was working, so nothing was charged. Please try again.',
+        idempotencyKey: `${refreshKey ?? `content-tool:${input.idempotencyKey}`}${stronger ? ':retry' : ''}`,
+        input:
+          stronger && request.kind === 'text'
+            ? { ...request, prompt: `${request.prompt}\n\n${stronger}` }
+            : request,
+        accept: async (output) => {
+          parsed = parse(output);
+          /*
+           * PR A2 (item 10) — DID THE EDIT DO ITS JOB? Checked before the charge:
+           * not 30% shorter or longer, or nearly the same words, is released.
+           */
+          const produced = parsed.variants[0];
+          rejection = produced
+            ? input.tool === 'hashtags'
+              ? checkHashtags(variant.hashtags, produced.hashtags)
+              : checkEdit(input.tool, variant.body ?? '', produced.body, platform.maxBodyChars)
+            : null;
+          if (rejection) throw new OutputRejectedError(EDIT_REJECTION_REASON[rejection]);
+          const current = await run((studio) =>
+            studio.db.contentVariant.findUnique({
+              where: { id: variant.id },
+              select: { body: true, updatedAt: true },
+            }),
           );
-        }
-      },
-    });
+          if (
+            !current ||
+            current.body !== variant.body ||
+            current.updatedAt.getTime() !== variant.updatedAt.getTime()
+          ) {
+            throw new OutputRejectedError(
+              'The post changed while the model was working.',
+              'The post changed while the AI was working, so nothing was charged. Please try again.',
+            );
+          }
+        },
+      });
 
+    let result = await attemptWith(null);
+    /*
+     * PR 2 (D-598) — ONE RETRY, WITH A STRONGER INSTRUCTION. An edit the
+     * checks refused (not shorter, not longer, the same words) is asked for
+     * once more, saying what was wrong, under its own key. The refused
+     * attempt was released, not charged; the second is charged only if it
+     * passes. Hashtags and a stale post are not retried.
+     */
+    if (
+      rejection &&
+      rejection !== 'EDIT_STALE' &&
+      input.tool !== 'hashtags' &&
+      result.status !== 'SUCCEEDED'
+    ) {
+      const first: EditRejection = rejection;
+      rejection = null;
+      parsed = null;
+      result = await attemptWith(strongerDirective(input.tool, first));
+    }
     if (rejection && result.status !== 'SUCCEEDED') throw editRefused(rejection);
     if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
       throw generationFailed(result.failureMessage);
