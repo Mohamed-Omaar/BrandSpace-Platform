@@ -4,6 +4,7 @@ import {
   createObjectStore,
   extractSourceDocument,
   extractorRegistryFor,
+  failureLogFields,
   type ObjectStore,
 } from '@brandspace/brand-brain';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
@@ -111,6 +112,15 @@ export async function processIngestionJob(payload: IngestSourceDocumentPayload):
     chunks: result.chunksCreated,
     candidates: result.candidatesCreated,
     ...(result.failureMessage ? { failureReason: result.failureMessage } : {}),
+    /*
+     * PR U — WHY IT FAILED, for the operator: stage, error class (and the
+     * wrapped cause's), a short code, type and size in bytes. Never the
+     * error's message, the file name or any content (`FailureDiagnostic`).
+     * The same fields for PDF, Word, PowerPoint and text.
+     */
+    ...failureLogFields(result.diagnostic ?? (outcome.ok ? undefined : outcome.diagnostic)),
+    attempt: started.attempt,
+    maxAttempts: started.maxAttempts,
   });
 }
 

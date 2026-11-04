@@ -4,7 +4,7 @@
   "private": true,
   "description": "BrandSpace \u2014 bilingual multi-tenant AI brand and social media operating system",
   "engines": {
-    "node": ">=20.11.0",
+    "node": ">=22.13.0 <23",
     "pnpm": ">=9"
   },
   "packageManager": "pnpm@10.33.0",

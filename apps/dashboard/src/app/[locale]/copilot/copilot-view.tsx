@@ -25,6 +25,7 @@ import { type DateFormatterLike, whenFormatter } from '../../../server/prototype
 import { aiLimitMessage } from '../../../components/ai-limit';
 import { ConversationFoot, ConversationTools } from './conversation-tools';
 import { SourceCard, type SourceCardLabels } from './source-card';
+import { sourceFailureText } from '../../../server/source-failure';
 
 /**
  * THE COPILOT, WIRED TO A REAL PROVIDER FOR THE FIRST TIME.
@@ -693,7 +694,11 @@ export function CopilotView({
         </Banner>
       ) : null}
       {plan && steps.length === 0 ? (
-        <div data-testid="copilot-answered" style={{ display: 'grid', gap: spacingTokens.sm }}>
+        <div
+          data-testid="copilot-answered"
+          dir="auto"
+          style={{ display: 'grid', gap: spacingTokens.sm }}
+        >
           {/* D8 — where the brand facts in this answer came from. */}
           {(plan.brandFactAreas?.length ?? 0) > 0 && !plan.notice ? (
             <p
@@ -818,6 +823,7 @@ export function CopilotView({
                   key={step.ordinal}
                   style={{ ...typographyTokens.bodySm }}
                   data-testid={`copilot-step-${step.ordinal}`}
+                  dir="auto"
                 >
                   <strong>{t(`copilot.tool.${step.messageKey}` as MessageKey)}</strong>{' '}
                   <span style={{ color: colorTokens.textSecondary }}>
@@ -907,7 +913,11 @@ export function CopilotView({
           ) : null}
 
           {execution ? (
-            <div style={{ display: 'grid', gap: spacingTokens.sm }} data-testid="copilot-result">
+            <div
+              style={{ display: 'grid', gap: spacingTokens.sm }}
+              data-testid="copilot-result"
+              dir="auto"
+            >
               <StatusBadge
                 tone={executionTone}
                 label={tOr(
@@ -1173,7 +1183,11 @@ function InspectionResults({
   locale: string;
 }) {
   return (
-    <section data-testid="copilot-inspection" style={{ display: 'grid', gap: spacingTokens.sm }}>
+    <section
+      data-testid="copilot-inspection"
+      dir="auto"
+      style={{ display: 'grid', gap: spacingTokens.sm }}
+    >
       <h3 style={{ margin: 0, ...typographyTokens.label }}>{title}</h3>
       {calls.map((call) => (
         <div key={call.ordinal} style={{ display: 'grid', gap: 'var(--bsp-rem-0-25)' }}>
@@ -1453,5 +1467,6 @@ function sourceCardLabels(t: (key: MessageKey) => string): SourceCardLabels {
     approved: t('copilot.source.approved'),
     failed: t('copilot.source.failed'),
     refused: t('copilot.source.refused'),
+    failureReason: (reason) => sourceFailureText(reason, t),
   };
 }

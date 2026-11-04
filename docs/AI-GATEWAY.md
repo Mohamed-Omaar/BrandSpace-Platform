@@ -669,6 +669,26 @@ sequenceDiagram
 
 ---
 
+### 13.4 What the model is given, and what it answers (PR U, D-596)
+
+- **One reply** (`"reply"`), in the person's language: Arabic letters → Arabic (the one formal
+  Arabic, D-474); three or more Latin words → English; a shorter follow-up ("PDF?", "ok") keeps
+  the language of the person's previous message. It is stored once and returned in both keys of
+  `summary`, so the plan record and every screen show what the person was answered in. A reply
+  recorded in the earlier two-language format (`summary.ar` / `summary.en`) is still read.
+- **Length**: the model is asked for about 120 words; a longer reply is cut at a sentence end at
+  1,200 characters (`REPLY_MAX_CHARS`) rather than failing the turn. The output budget stays the
+  route's `maxOutputTokens` (configuration; 800 by default).
+- **How to talk** (`CONVERSATION_RULES`): length matches the question; lists only when useful;
+  never repeat what was already said; at most one clarifying question.
+- **PRODUCT FACTS** (`packages/copilot/src/product-facts.ts`): the file types Brand Brain reads, the
+  size, page and per-brand limits, built at each turn from the activated `brand-brain`
+  configuration. Product questions are answered from these lines only; when the configuration
+  cannot be read, the model is told to say it is not sure.
+- **History with Brand Brain off**: the person's words are always kept; an earlier answer is kept
+  unless it was grounded on Brand Brain facts. Every answer stores its citations (`[]` when it was
+  given none); an answer from before PR U (`citations` null) counts as grounded.
+
 ## 14. Brand Brain Retrieval and Write-Back
 
 > **NON-NEGOTIABLE PRINCIPLE (D-63, D-64).**

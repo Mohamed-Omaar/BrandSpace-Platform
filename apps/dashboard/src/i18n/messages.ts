@@ -1374,10 +1374,16 @@ export const messages = {
     'bb.failure.pdf_unreadable': 'تعذّر فتح ملف PDF هذا. قد يكون تالفًا أو محميًا بكلمة مرور.',
     'bb.failure.pdf_has_no_text_layer':
       'يبدو أن ملف PDF هذا صورة ممسوحة ضوئيًا بلا طبقة نصية. ارفع نسخة نصية منه.',
-    'bb.failure.extraction_timed_out': 'استغرقت قراءة هذا الملف وقتًا أطول من المسموح.',
-    'bb.failure.extraction_failed': 'تعذّرت معالجة هذا الملف. حاول رفعه مرة أخرى.',
-    'bb.failure.object_missing': 'تعذّر قراءة الملف المرفوع.',
-    'bb.failure.stuck_timeout': 'استغرقت معالجة هذا الملف وقتًا أطول من المسموح.',
+    'bb.failure.extraction_timed_out':
+      'استغرقت قراءة هذا الملف وقتًا أطول من المسموح. ارفع ملفًا أصغر أو قسّمه إلى أجزاء.',
+    'bb.failure.extraction_failed':
+      'حدثت مشكلة من جهتنا أثناء قراءة هذا الملف، وليست في ملفك. حاول مرة أخرى بعد دقائق، وإن تكررت فتواصل مع الدعم.',
+    // PR U — the reader itself could not run: ours, never the file's.
+    'bb.failure.reader_unavailable':
+      'تعذّرت قراءة هذا الملف بسبب مشكلة من جهتنا، وليست في ملفك. حاول مرة أخرى بعد دقائق.',
+    'bb.failure.object_missing': 'لم يصل الملف المرفوع إلى التخزين. ارفعه مرة أخرى.',
+    'bb.failure.stuck_timeout':
+      'توقفت معالجة هذا الملف لأنها استغرقت وقتًا طويلًا. حاول مرة أخرى، أو ارفع ملفًا أصغر.',
     // Phase 2C-4 — refused at upload, by the bytes themselves.
     'bb.failure.file_too_large': 'هذا الملف أكبر من الحجم المسموح به للمصادر.',
     'bb.failure.ooxml_content_types_missing': 'هذا الملف ليس مستند Word أو PowerPoint سليمًا.',
@@ -3259,7 +3265,8 @@ export const messages = {
     'copilot.source.approveAll': 'اعتماد الكل',
     'copilot.source.review': 'مراجعتها',
     'copilot.source.approved': 'تم اعتماد {count} معلومات.',
-    'copilot.source.failed': 'تعذّرت قراءة هذا الملف. لم يُحتسب أي رصيد.',
+    // PR U — said after the reason, which now comes from `bb.failure.*`.
+    'copilot.source.failed': 'لم يُحتسب أي رصيد.',
     'copilot.source.refused': 'لا يمكن إضافة هذا الملف إلى عقل العلامة.',
     'copilot.pageAsk.content': 'هل أكتب النص والوسوم لهذا المنشور؟',
     'copilot.pageAsk.contentPrompt': 'اكتب النص والوسوم لهذا المنشور.',
@@ -5790,10 +5797,16 @@ export const messages = {
       'This PDF could not be opened. It may be damaged or password-protected.',
     'bb.failure.pdf_has_no_text_layer':
       'This PDF looks like a scan with no text layer. Upload a text version instead.',
-    'bb.failure.extraction_timed_out': 'This file took longer to read than we allow.',
-    'bb.failure.extraction_failed': 'This file could not be processed. Try uploading it again.',
-    'bb.failure.object_missing': 'The uploaded file could not be read.',
-    'bb.failure.stuck_timeout': 'This file took longer to process than we allow.',
+    'bb.failure.extraction_timed_out':
+      'This file took too long to read. Upload a smaller file, or split it into parts.',
+    'bb.failure.extraction_failed':
+      'Something went wrong on our side while reading this file, not with your file. Try again in a few minutes; if it happens again, contact support.',
+    // PR U — the reader itself could not run: ours, never the file's.
+    'bb.failure.reader_unavailable':
+      "We couldn't read this file because of a problem on our side, not with your file. Try again in a few minutes.",
+    'bb.failure.object_missing': "The uploaded file didn't reach our storage. Upload it again.",
+    'bb.failure.stuck_timeout':
+      'Reading this file took too long and was stopped. Try again, or upload a smaller file.',
     // Phase 2C-4 — refused at upload, by the bytes themselves.
     'bb.failure.file_too_large': 'This file is larger than the size allowed for sources.',
     'bb.failure.ooxml_content_types_missing': 'This is not a valid Word or PowerPoint document.',
@@ -7741,7 +7754,8 @@ export const messages = {
     'copilot.source.approveAll': 'Approve all',
     'copilot.source.review': 'Review them',
     'copilot.source.approved': '{count} facts approved.',
-    'copilot.source.failed': 'This file could not be read. No credits were used.',
+    // PR U — said after the reason, which now comes from `bb.failure.*`.
+    'copilot.source.failed': 'No credits were used.',
     'copilot.source.refused': 'This file cannot be added to Brand Brain.',
     'copilot.pageAsk.content': 'Shall I write the caption and hashtags for this post?',
     'copilot.pageAsk.contentPrompt': 'Write the caption and hashtags for this post.',

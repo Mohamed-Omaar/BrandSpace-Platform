@@ -45,6 +45,12 @@ export interface SourceCardLabels {
   readonly approved: string;
   readonly failed: string;
   readonly refused: string;
+  /**
+   * PR U — WHY, in plain words: a stored reason key (`bb.failure.*`) in the
+   * reader's language. `null` (the upload itself did not arrive) reads as
+   * the general "on our side" reason.
+   */
+  readonly failureReason: (reason: string | null) => string;
 }
 
 type Phase =
@@ -61,7 +67,7 @@ type Phase =
       readonly keyword: boolean;
     }
   | { readonly kind: 'approved'; readonly accepted: number }
-  | { readonly kind: 'failed'; readonly refused: boolean };
+  | { readonly kind: 'failed'; readonly refused: boolean; readonly reason: string | null };
 
 const STAGE_PERCENT: Readonly<Record<string, number>> = {
   QUEUED: 10,
@@ -70,6 +76,26 @@ const STAGE_PERCENT: Readonly<Record<string, number>> = {
   EXTRACTING_FACTS: 80,
   COMPLETED: 100,
 };
+
+/** One source's reading state, as `/api/brand-brain/source` reports it. */
+interface SourceStatus {
+  readonly status: string;
+  readonly stage: string | null;
+  readonly pages: number | null;
+  readonly found: number;
+  readonly skippedDuplicates: number;
+  readonly readBy: string;
+  /** PR U — the stored reason key while FAILED or QUARANTINED, else null. */
+  readonly failureReason?: string | null;
+}
+
+async function sourceStatus(id: string): Promise<SourceStatus | null> {
+  const response = await fetch(`/api/brand-brain/source?id=${encodeURIComponent(id)}`, {
+    cache: 'no-store',
+  }).catch(() => null);
+  if (!response?.ok) return null;
+  return (await response.json().catch(() => null)) as SourceStatus | null;
+}
 
 export function SourceCard({
   file,
@@ -122,12 +148,16 @@ export function SourceCard({
       const params = new URL(location, window.location.origin).searchParams;
       const sourceId = params.get('source');
       if (!sourceId || params.get('error')) {
-        setPhase({ kind: 'failed', refused: params.get('error') === 'SOURCE_REFUSED' });
+        // A refused or already-failed row carries its reason: read it once.
+        const reason = sourceId ? ((await sourceStatus(sourceId))?.failureReason ?? null) : null;
+        if (live.current) {
+          setPhase({ kind: 'failed', refused: params.get('error') === 'SOURCE_REFUSED', reason });
+        }
         return;
       }
       setPhase({ kind: 'reading', sourceId, stage: 'QUEUED' });
     } catch {
-      setPhase({ kind: 'failed', refused: false });
+      setPhase({ kind: 'failed', refused: false, reason: null });
     }
   };
 
@@ -137,18 +167,8 @@ export function SourceCard({
     if (!reading) return;
     let stopped = false;
     const tick = async () => {
-      const response = await fetch(`/api/brand-brain/source?id=${encodeURIComponent(reading)}`, {
-        cache: 'no-store',
-      }).catch(() => null);
-      if (stopped || !response?.ok) return;
-      const status = (await response.json()) as {
-        status: string;
-        stage: string | null;
-        pages: number | null;
-        found: number;
-        skippedDuplicates: number;
-        readBy: string;
-      };
+      const status = await sourceStatus(reading);
+      if (stopped || !status) return;
       if (status.status === 'READY' && status.readBy !== 'brand.extract' && !askedWhole.current) {
         // The worker has read it; now the whole-source reading, once.
         askedWhole.current = true;
@@ -172,7 +192,7 @@ export function SourceCard({
           keyword: status.readBy !== 'brand.extract',
         });
       } else if (status.status === 'FAILED' || status.status === 'QUARANTINED') {
-        setPhase({ kind: 'failed', refused: false });
+        setPhase({ kind: 'failed', refused: false, reason: status.failureReason ?? null });
       } else {
         setPhase({ kind: 'reading', sourceId: reading, stage: status.stage });
       }
@@ -195,6 +215,7 @@ export function SourceCard({
       ref={card}
       className="bs-cpb-card"
       data-testid="copilot-source-card"
+      dir="auto"
       aria-live="polite"
     >
       {phase.kind === 'ask' ? (
@@ -302,7 +323,11 @@ export function SourceCard({
       ) : null}
 
       {phase.kind === 'failed' ? (
-        <b data-testid="copilot-source-failed">{phase.refused ? labels.refused : labels.failed}</b>
+        <b data-testid="copilot-source-failed" dir="auto">
+          {phase.refused && !phase.reason
+            ? labels.refused
+            : `${labels.failureReason(phase.reason)} ${labels.failed}`}
+        </b>
       ) : null}
     </section>
   );

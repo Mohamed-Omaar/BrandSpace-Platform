@@ -2622,3 +2622,10 @@ of another component carries them: `.bs-cpb-card` (the file card: `--bs-surface-
   beside the credits and the close, named and with a tooltip in the same words.
 - **Workspace reads** under "What the Copilot found": one line per number and a "Source: … ·
   period" line, in the inspection list's existing caption style.
+
+**PR U (D-596) — direction and failure wording.** Every Copilot bubble, card (plan step, result,
+inspection, answer, file card, tool card, approval), suggestion, the search box and the composer
+carry `dir="auto"`, on the page and in the panel: Arabic in the English UI reads right to left
+(its "؟" at the end), English in the Arabic UI left to right (`tests/e2e/pr-u-copilot-direction.spec.ts`).
+No geometry, colour or class changes. A failed file card shows the stored reason in plain words
+(`bb.failure.*`) followed by "No credits were used."

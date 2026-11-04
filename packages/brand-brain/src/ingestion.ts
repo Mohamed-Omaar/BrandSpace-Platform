@@ -148,6 +148,8 @@ export interface ReceiveResult {
 const RETRYABLE_REASONS: ReadonlySet<string> = new Set([
   'extraction_failed',
   'extraction_timed_out',
+  // PR U — the reader could not run; a fixed runtime makes the next attempt work.
+  'reader_unavailable',
   'object_missing',
   'stuck_timeout',
 ]);
@@ -158,6 +160,8 @@ export interface ProcessResult {
   readonly chunksCreated: number;
   readonly candidatesCreated: number;
   readonly failureMessage: string | null;
+  /** PR U — why the save step failed, for the operator log only. */
+  readonly diagnostic?: FailureDiagnostic;
 }
 
 /** PR B — the review reason of a candidate that was a fact the brand already had. */
@@ -833,17 +837,24 @@ export class BrandIngestionService {
         candidatesCreated: created,
         failureMessage: null,
       };
-    } catch {
+    } catch (error: unknown) {
       // Chunking and proposing are our own code over text already read; a
       // failure here is ours, stored as the general reason key, never as the
       // error's words.
-      return this.#fail(
+      const failed = await this.#fail(
         started.jobId,
         started.documentId,
         'extraction_failed',
         'extraction_failed',
         started.attempt >= started.maxAttempts,
       );
+      return {
+        ...failed,
+        diagnostic: failureDiagnostic('save', error, {
+          mimeType: started.mimeType,
+          sizeBytes: null,
+        }),
+      };
     }
   }
 
@@ -1186,7 +1197,74 @@ export interface StartedIngestion {
 /** What the extraction produced: the text, or a stable reason and whether it is final. */
 export type ExtractionOutcome =
   | { readonly ok: true; readonly extracted: ExtractedText }
-  | { readonly ok: false; readonly reason: string; readonly terminal: boolean };
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      readonly terminal: boolean;
+      /** PR U — for the operator log; absent when nothing was read (removed, not claimed). */
+      readonly diagnostic?: FailureDiagnostic;
+    };
+
+/**
+ * PR U — WHY ONE FILE FAILED, FOR THE OPERATOR AND NOBODY ELSE.
+ *
+ * The same fields for every format (PDF, Word, PowerPoint, text), because they
+ * are taken at the registry boundary rather than inside one extractor. Only
+ * NAMES and NUMBERS: the error's class (and its cause's, when an extractor
+ * wrapped it), a code when it is a short identifier, the declared type and the
+ * size in bytes. Never the error's message, the file name or any content: a
+ * parser's message can quote the bytes it choked on.
+ */
+export interface FailureDiagnostic {
+  /** Where it failed: reading the stored bytes, parsing them, or saving the result. */
+  readonly stage: 'read' | 'parse' | 'save';
+  readonly errorClass: string;
+  readonly causeClass?: string;
+  readonly errorCode?: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number | null;
+}
+
+/** PR U — a diagnostic's fields, flat, for one worker log line. */
+export function failureLogFields(
+  diagnostic: FailureDiagnostic | undefined,
+): Record<string, string | number> {
+  if (!diagnostic) return {};
+  return {
+    failureStage: diagnostic.stage,
+    errorClass: diagnostic.errorClass,
+    ...(diagnostic.causeClass ? { causeClass: diagnostic.causeClass } : {}),
+    ...(diagnostic.errorCode ? { errorCode: diagnostic.errorCode } : {}),
+    mimeType: diagnostic.mimeType,
+    ...(diagnostic.sizeBytes === null ? {} : { sizeBytes: diagnostic.sizeBytes }),
+  };
+}
+
+const SAFE_CODE = /^[A-Za-z0-9_.-]{1,64}$/;
+
+function className(value: unknown): string {
+  if (value instanceof Error) return value.name || value.constructor.name || 'Error';
+  return value === null ? 'null' : typeof value;
+}
+
+export function failureDiagnostic(
+  stage: FailureDiagnostic['stage'],
+  error: unknown,
+  file: { readonly mimeType: string; readonly sizeBytes: number | null },
+): FailureDiagnostic {
+  const cause = error instanceof Error ? error.cause : undefined;
+  const code = error instanceof Error ? (error as { code?: unknown }).code : undefined;
+  const reason = error instanceof ExtractionFailedError ? error.reason : undefined;
+  const chosen = typeof code === 'string' && SAFE_CODE.test(code) ? code : reason;
+  return {
+    stage,
+    errorClass: className(error),
+    ...(cause !== undefined ? { causeClass: className(cause) } : {}),
+    ...(chosen ? { errorCode: chosen } : {}),
+    mimeType: file.mimeType,
+    sizeBytes: file.sizeBytes,
+  };
+}
 
 /**
  * PHASE 2 of 3 — read the stored bytes and extract their text, with NO
@@ -1211,15 +1289,22 @@ export async function extractSourceDocument(input: {
   if (input.started.removed) return { ok: false, reason: 'source_removed', terminal: true };
   // Nothing was claimed, so nothing is read (D-413); `finishProcessing` writes nothing.
   if (!input.started.claimed) return { ok: false, reason: 'not_claimed', terminal: true };
+  const file = { mimeType: input.started.mimeType, sizeBytes: null };
   let bytes: Uint8Array | null;
   try {
     bytes = await input.store.get(input.started.storageKey);
-  } catch {
-    return { ok: false, reason: 'extraction_failed', terminal: false };
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      reason: 'extraction_failed',
+      terminal: false,
+      diagnostic: failureDiagnostic('read', error, file),
+    };
   }
   // The row exists and the object does not. Retrying cannot fix it.
   if (!bytes) return { ok: false, reason: 'object_missing', terminal: true };
 
+  const read = { mimeType: input.started.mimeType, sizeBytes: bytes.byteLength };
   try {
     const extracted = await input.extractors.extract({
       bytes,
@@ -1228,13 +1313,20 @@ export async function extractSourceDocument(input: {
     });
     return { ok: true, extracted };
   } catch (error: unknown) {
+    const diagnostic = failureDiagnostic('parse', error, read);
     if (error instanceof ExtractionUnsupportedError) {
-      return { ok: false, reason: 'unsupported_format', terminal: true };
+      return { ok: false, reason: 'unsupported_format', terminal: true, diagnostic };
     }
     if (error instanceof ExtractionFailedError) {
-      return { ok: false, reason: error.reason, terminal: false };
+      return { ok: false, reason: error.reason, terminal: false, diagnostic };
     }
-    return { ok: false, reason: 'extraction_failed', terminal: false };
+    /*
+     * PR U — AN ERROR NO EXTRACTOR CLASSIFIED is the reader's (a TypeError
+     * from a missing runtime feature, a library bug), not the file's: it is
+     * `reader_unavailable`, retried with the configured backoff and told to
+     * the customer as our problem, never as a damaged file.
+     */
+    return { ok: false, reason: 'reader_unavailable', terminal: false, diagnostic };
   }
 }
 

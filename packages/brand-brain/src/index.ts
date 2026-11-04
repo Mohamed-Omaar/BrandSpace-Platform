@@ -148,6 +148,8 @@ export {
   BrandIngestionService,
   DUPLICATE_OF_EXISTING,
   extractSourceDocument,
+  failureDiagnostic,
+  failureLogFields,
   findStuckIngestionJobs,
   findUnclaimedIngestionJobs,
   INGESTION_WORKER_LOCK_SECONDS,
@@ -156,6 +158,7 @@ export {
 } from './ingestion';
 export type {
   ExtractionOutcome,
+  FailureDiagnostic,
   IngestionPolicy,
   IngestionServiceOptions,
   ProcessResult,

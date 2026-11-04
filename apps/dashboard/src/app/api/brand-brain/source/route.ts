@@ -33,6 +33,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         select: {
           status: true,
           pageCount: true,
+          failureMessage: true,
           ingestionJobs: {
             orderBy: { queuedAt: 'desc' },
             take: 1,
@@ -59,6 +60,12 @@ export async function GET(request: Request): Promise<NextResponse> {
         found: pending,
         skippedDuplicates: linked,
         readBy: job?.aiRequestId ? 'brand.extract' : 'keyword',
+        // PR U — the stored reason KEY (never a sentence), so the Copilot's
+        // file card can say why in the reader's language.
+        failureReason:
+          document.status === 'FAILED' || document.status === 'QUARANTINED'
+            ? document.failureMessage
+            : null,
       };
     });
     if (!status) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
