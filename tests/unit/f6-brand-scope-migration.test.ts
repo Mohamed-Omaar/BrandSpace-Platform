@@ -97,6 +97,8 @@ describe('F6 — the brandScope migration', () => {
       '20261103090200_audit_event_workspace_actor_action_index',
       // PR B: one Copilot conversation per person per brand (D-594).
       '20261103120000_one_assistant',
+      // PR 1 (D-597): image generation as a background job.
+      '20261104090000_creative_generation_job',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe(
       '20261012092000_publish_job_published_population_index',

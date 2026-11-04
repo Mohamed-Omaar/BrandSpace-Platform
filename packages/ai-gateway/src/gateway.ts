@@ -35,10 +35,9 @@ import {
   OutputRejectedError,
   AI_NOT_AVAILABLE_MESSAGE,
   customerMessageFor,
-  isFallbackEligible,
-  isRetryable,
   type AiFailureClass,
 } from './errors';
+import { attemptTimeoutMsFor, fallsBackAfter, retriesAfter } from './attempt-policy';
 import {
   creditsChargedMilli,
   estimateReservationMilli,
@@ -901,6 +900,8 @@ export class AiGateway {
       'The chain produced no attempt.',
     );
     let lastProviderKey: string | null = null;
+    // PR 1 — the limit the last attempt ran under, for the request's log line.
+    let lastAttemptMs: number | null = null;
 
     for (const modelKey of chain) {
       const model = config.models.find((m) => m.key === modelKey);
@@ -972,7 +973,10 @@ export class AiGateway {
         // budget is what REMAINS, so retries cannot extend it. D-573: one
         // attempt is also capped by the provider's own `timeoutMs`, so a slow
         // provider leaves time for the next model in the chain.
-        const attemptMs = Math.min(remainingMs, provider.timeoutMs);
+        // PR 1 (Images) — the task's own attempt limit where it has one (180 s
+        // for an image by default), else the provider's (`attempt-policy.ts`).
+        const attemptMs = Math.min(remainingMs, attemptTimeoutMsFor(route, provider.timeoutMs));
+        lastAttemptMs = attemptMs;
         const timer = setTimeout(() => controller.abort(), attemptMs);
         try {
           /*
@@ -1064,7 +1068,8 @@ export class AiGateway {
           const failureClass = failureClassOf(error);
           const attemptsLeft = attempt < route.retryPolicy.maxAttempts;
 
-          if (isRetryable(failureClass) && attemptsLeft) {
+          // PR 1 — an image TIMEOUT is never retried (`retriesAfter`).
+          if (retriesAfter(failureClass, route.modality) && attemptsLeft) {
             retries += 1;
             const slept = await this.#backoff(route.retryPolicy, attempt, deadline);
             // Backoff that would outrun the deadline is not worth taking: stop
@@ -1079,12 +1084,22 @@ export class AiGateway {
         }
         if (success) {
           await this.#settleAndRecord(success);
+          log.info('ai request succeeded', {
+            requestId,
+            taskKey: request.taskKey,
+            modelKey,
+            attempts: attempted.length,
+            retries,
+            attemptTimeoutMs: attemptMs,
+            latencyMs: success.latencyMs,
+          });
           return this.#recordedResult(requestId, success.output);
         }
       }
 
       const failureClass = failureClassOf(lastError);
-      if (!isFallbackEligible(failureClass)) {
+      // PR 1 — nor sent down the chain (`fallsBackAfter`).
+      if (!fallsBackAfter(failureClass, route.modality)) {
         // Deterministic refusals and our own account failures stop here. Trying
         // another model would either fail identically or hide the problem.
         break;
@@ -1098,6 +1113,7 @@ export class AiGateway {
       startedAt,
       request,
       providerKey: lastProviderKey,
+      attemptTimeoutMs: lastAttemptMs,
     });
     return this.#recordedResult(requestId);
   }
@@ -1136,6 +1152,8 @@ export class AiGateway {
       startedAt: Date;
       request: AiGatewayRequest;
       providerKey: string | null;
+      /** PR 1 — the limit the last attempt ran under (null: none started). */
+      attemptTimeoutMs?: number | null;
     },
   ): Promise<void> {
     const modelKey = context.attempted[context.attempted.length - 1] ?? '';
@@ -1156,6 +1174,11 @@ export class AiGateway {
         : undefined,
       context.retries,
       context.request.input,
+      {
+        taskKey: context.request.taskKey,
+        attempts: context.attempted.length,
+        attemptTimeoutMs: context.attemptTimeoutMs ?? null,
+      },
     );
   }
 
@@ -1346,6 +1369,7 @@ export class AiGateway {
     },
     retries = 0,
     input?: AiInput,
+    attemptLog?: AttemptLog,
   ): Promise<void> {
     if (reservationId) {
       /*
@@ -1391,6 +1415,7 @@ export class AiGateway {
       ...(ledgerContext ? { ledgerContext } : {}),
       retries,
       ...(input ? { input } : {}),
+      ...(attemptLog ? { attemptLog } : {}),
     });
   }
 
@@ -1410,6 +1435,7 @@ export class AiGateway {
       };
       retries?: number;
       input?: AiInput;
+      attemptLog?: AttemptLog;
     },
   ): Promise<void> {
     const status = failureClass === 'TIMEOUT' ? 'TIMEOUT' : 'FAILED';
@@ -1422,6 +1448,15 @@ export class AiGateway {
       failureClass,
       providerErrorCode: detail.code,
       failureReason: detail.reason,
+      // PR 1 — how many attempts ran, and under what limit each.
+      ...(extra?.attemptLog
+        ? {
+            taskKey: extra.attemptLog.taskKey,
+            attempts: extra.attemptLog.attempts,
+            retries: extra.retries ?? 0,
+            attemptTimeoutMs: extra.attemptLog.attemptTimeoutMs,
+          }
+        : {}),
     });
 
     await this.#prisma.$transaction(async (tx) => {
@@ -1923,6 +1958,13 @@ function quotesInput(reason: string, input: AiInput): boolean {
 
 /** L-13 — how many times the success bookkeeping is tried before the sweep takes over. */
 const SETTLE_BOOKKEEPING_ATTEMPTS = 3;
+
+/** PR 1 — what the request's log line says about its attempts. */
+interface AttemptLog {
+  readonly taskKey: string;
+  readonly attempts: number;
+  readonly attemptTimeoutMs: number | null;
+}
 
 interface SettleArgs {
   readonly requestId: string;

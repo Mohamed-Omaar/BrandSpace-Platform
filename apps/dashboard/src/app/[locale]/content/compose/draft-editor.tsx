@@ -27,11 +27,12 @@ import {
   inlineActionsFor,
   parseHashtags,
   previewFormatFor,
+  spentMessage,
   variantIssues,
   type EditorIssue,
 } from '../../../../server/composer-editor';
 import { useRouter } from 'next/navigation';
-import { ChipListbox, SegmentPill, WorkingStatus, type MediaSeed } from '@brandspace/ui';
+import { ChipListbox, SegmentPill, WorkingStatus, showToast, type MediaSeed } from '@brandspace/ui';
 import { ChannelMark, PostArt } from '../../calendar/prototype-calendar';
 import type { MediaOptionView } from './media-picker';
 import { MediaSlides } from './media-slides';
@@ -55,6 +56,10 @@ import type {
   VariantKnowledgeView,
 } from './composer-view';
 import { SubmitButton } from '../../../../components/pending-submit';
+import { useCreativeJob, type CreativeJobState } from '../../../../components/creative-job';
+
+/** PR 1 (D-597) — one entry of `/api/creative/jobs`. */
+type CreativeJobListItem = CreativeJobState & { readonly createdAt: string };
 
 /**
  * THE DRAFT EDITOR — the prototype's Studio (`Main.dc.html` lines 329–537,
@@ -927,42 +932,78 @@ export function DraftEditor({
     uploadReason && draft.variants[0] ? { variantId: draft.variants[0].id, replace: null } : null,
   );
   /*
-   * AN IMAGE GENERATED FROM THE DRAWER IS ATTACHED THE MOMENT IT IS USABLE.
-   * It is an ordinary asset going through the same scan, so it is not in the
-   * library list yet; the page is re-read every few seconds until it is, then
-   * it joins the variant's slides (still unsaved, like any other change).
+   * PR 1 (D-597) — AN IMAGE ASKED FOR FROM THE DRAWER IS A BACKGROUND JOB.
+   *
+   * The API attaches it to this variant ON THE SERVER when it is ready, even
+   * if this editor is closed, audited; the post still needs its approval to
+   * publish. Here the job is only followed — by its own small status route,
+   * never by re-rendering the page — and shown. When it lands, an unsaved
+   * edit of the same variant takes the image too (a later Save must not drop
+   * what the server attached), and the page is read once.
    */
   const [pending, setPending] = useState<{
     variantId: string;
-    assetId: string;
-    tries: number;
+    jobId: string;
     /** P1: when the image was asked for, for the elapsed time. */
     since: number;
   } | null>(null);
+  const [jobFailure, setJobFailure] = useState<{ variantId: string; reason: string } | null>(null);
+  const followed = useCreativeJob(pending?.jobId ?? null, { locale });
+
+  // Back on the page: an image still being made for this post is shown again.
   useEffect(() => {
-    if (!pending) return;
-    if (mediaOptions.some((option) => option.id === pending.assetId)) {
-      const variant = draft.variants.find((row) => row.id === pending.variantId);
-      if (variant) {
-        setEdits((current) => {
-          const base = liveOf(current, variant);
-          if (base.assetIds.includes(pending.assetId)) return current;
-          return {
-            ...current,
-            [variant.id]: { ...base, assetIds: [...base.assetIds, pending.assetId] },
-          };
-        });
-      }
+    if (!canGenerateMedia || draft.variants.length === 0) return;
+    const query = new URLSearchParams({
+      brandId: draft.brandId,
+      contentVariantIds: draft.variants.map((variant) => variant.id).join(','),
+      unfinished: '1',
+    });
+    let stopped = false;
+    void fetch(`/api/creative/jobs?${query.toString()}`, { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { jobs?: CreativeJobListItem[] } | null) => {
+        const job = payload?.jobs?.find((entry) => entry.contentVariantId);
+        if (stopped || !job?.contentVariantId) return;
+        setPending(
+          (current) =>
+            current ?? {
+              variantId: job.contentVariantId as string,
+              jobId: job.id,
+              since: Date.parse(job.createdAt) || Date.now(),
+            },
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      stopped = true;
+    };
+    // Once per post: the variants of an open draft do not change identity.
+  }, [draft.id]);
+
+  useEffect(() => {
+    const job = followed.job;
+    if (!pending || !job || job.id !== pending.jobId) return;
+    if (job.status === 'SUCCEEDED' && job.assetId) {
+      const assetId = job.assetId;
+      const variantId = pending.variantId;
+      setEdits((current) => {
+        const base = current[variantId];
+        if (!base || base.assetIds.includes(assetId)) return current;
+        return { ...current, [variantId]: { ...base, assetIds: [...base.assetIds, assetId] } };
+      });
+      // S6 (final review) — the image names what it cost (nothing for a replay).
+      const spent = spentMessage(job.creditsChargedMilli, t);
+      if (spent) showToast({ tone: 'success', message: spent, testId: 'studio-spent-toast' });
       setPending(null);
-      return;
-    }
-    if (pending.tries >= 40) return;
-    const timer = window.setTimeout(() => {
-      setPending((current) => (current ? { ...current, tries: current.tries + 1 } : current));
       router.refresh();
-    }, 3_000);
-    return () => window.clearTimeout(timer);
-  }, [pending, mediaOptions, router, draft.variants]);
+    } else if (job.status === 'FAILED') {
+      setJobFailure({
+        variantId: pending.variantId,
+        reason: job.failureReason ?? 'generation_failed',
+      });
+      setPending(null);
+    }
+  }, [followed.job, pending, router, t]);
 
   const drawerVariant = drawer
     ? draft.variants.find((variant) => variant.id === drawer.variantId)
@@ -2611,16 +2652,29 @@ export function DraftEditor({
                       }
                     />
                     {pending?.variantId === variant.id ? (
-                      <p className="bsp-st-hint">
-                        <WorkingStatus
-                          testId="media-generating"
-                          since={pending.since}
-                          label={
-                            (pending.tries >= 40
-                              ? t['editor.media.generateSlow']
-                              : t['editor.media.generating']) ?? ''
-                          }
-                        />
+                      <p className="bsp-st-hint" data-testid="media-job">
+                        {followed.stale ? (
+                          <span data-testid="media-generating-stale">
+                            {t['editor.media.generateStale']}
+                          </span>
+                        ) : (
+                          <>
+                            <WorkingStatus
+                              testId="media-generating"
+                              since={pending.since}
+                              label={t['editor.media.generating'] ?? ''}
+                            />{' '}
+                            <span data-testid="media-generating-leave">
+                              {t['editor.media.leaveOk']}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    ) : null}
+                    {jobFailure?.variantId === variant.id ? (
+                      <p className="bsp-st-hint" role="alert" data-testid="media-generate-failed">
+                        {t[`creative.job.failed.${jobFailure.reason}`] ??
+                          t['creative.job.failed.generation_failed']}
                       </p>
                     ) : null}
                   </div>
@@ -3332,10 +3386,11 @@ export function DraftEditor({
             change(drawerVariant, { assetIds: next });
             setDrawer(null);
           }}
-          onGenerated={(assetId) => {
-            setPending({ variantId: drawerVariant.id, assetId, tries: 0, since: Date.now() });
+          variantId={drawerVariant.id}
+          onGenerated={(jobId) => {
+            setJobFailure(null);
+            setPending({ variantId: drawerVariant.id, jobId, since: Date.now() });
             setDrawer(null);
-            router.refresh();
           }}
         />
       ) : null}

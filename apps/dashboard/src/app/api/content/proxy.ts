@@ -64,3 +64,34 @@ export async function proxyToApi(request: Request, upstreamPath: string): Promis
     return NextResponse.json({ error: { code: 'INTERNAL' } }, { status: 502 });
   }
 }
+
+/**
+ * PR 1 (D-597) — a GET to the API with the customer's session, the same
+ * single forwarded credential as `proxyToApi`. For reads only (a job's
+ * state); never cached.
+ */
+export async function getFromApi(upstreamPath: string): Promise<NextResponse> {
+  const base = process.env['BRANDSPACE_API_URL'];
+  if (!base) {
+    log.warn('BRANDSPACE_API_URL is not configured; the Content Studio is unavailable');
+    return NextResponse.json({ error: { code: 'INTERNAL' } }, { status: 503 });
+  }
+  const store = await cookies();
+  const token = store.get(CUSTOMER_REALM.cookieName)?.value;
+  if (!token) return NextResponse.json({ error: { code: 'UNAUTHENTICATED' } }, { status: 401 });
+  try {
+    const upstream = await fetch(`${base.replace(/\/$/, '')}${upstreamPath}`, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+    const payload: unknown = await upstream.json().catch(() => ({ error: { code: 'INTERNAL' } }));
+    return NextResponse.json(payload, {
+      status: upstream.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  } catch (error: unknown) {
+    log.error('content upstream failed', { upstreamPath, ...internalErrorFields(error) });
+    return NextResponse.json({ error: { code: 'INTERNAL' } }, { status: 502 });
+  }
+}

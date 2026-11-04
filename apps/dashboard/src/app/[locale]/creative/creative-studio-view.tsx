@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { formatCredits as formatCreditDisplay } from '../../../server/composer-editor';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { AssetMedia, SegmentPill } from '@brandspace/ui';
+import { AssetMedia, SegmentPill, WorkingStatus } from '@brandspace/ui';
+import { useCreativeJob } from '../../../components/creative-job';
 
 /**
  * THE AI CREATIVE STUDIO, AS A CUSTOMER USES IT (AC-28).
@@ -77,14 +78,22 @@ export interface CreativeStudioLabels {
   readonly aiPaused?: string;
   /** The prototype's purple line, the brand named: "Uses … from Brand Brain." */
   readonly usesBrand?: string;
+  /** PR 1 (D-597) — the image is a background job. */
+  readonly leaveOk: string;
+  readonly stillWorking: string;
+  /** A finished job's failure, by its reason key (`creative.job.failed.*`). */
+  readonly jobFailed: Readonly<Record<string, string>>;
 }
 
 /** The customer-safe codes the API can return, mapped to something readable. */
 /** PR A (item 6, F-106) — the provider's image quality values, in the order shown. */
+/** PR 1 (D-597) — a finished image is shown again on return for this long. */
+const RESUME_FINISHED_MS = 30 * 60_000;
+
 const IMAGE_QUALITIES = ['low', 'medium', 'high'] as const;
 type ImageQualityChoice = (typeof IMAGE_QUALITIES)[number];
 
-const FAILURE_KEYS: Readonly<Record<string, keyof CreativeStudioLabels>> = {
+const FAILURE_KEYS: Readonly<Record<string, keyof Omit<CreativeStudioLabels, 'jobFailed'>>> = {
   INSUFFICIENT_CREDITS: 'insufficientCredits',
   QUOTA_EXCEEDED: 'insufficientCredits',
   AI_PAUSED: 'aiPaused',
@@ -148,6 +157,15 @@ export function CreativeStudioView({
   const [failure, setFailure] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<string | null>(null);
   const [result, setResult] = useState<CreativeResultView | null>(initialResult);
+  /*
+   * PR 1 (D-597) — THE IMAGE IS A BACKGROUND JOB. `generate` gets its id at
+   * once; the job is followed by its own status route (never by re-reading
+   * the page) and its result shown when it is ready. Leaving and coming back
+   * picks up an unfinished one.
+   */
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobSince, setJobSince] = useState(0);
+  const followed = useCreativeJob(jobId, { locale });
 
   const post = useCallback(
     async (path: string, body: unknown): Promise<Record<string, unknown>> => {
@@ -220,6 +238,7 @@ export function CreativeStudioView({
       inFlight.current = true;
       setBusy(true);
       setFailure(null);
+      let started = false;
 
       const signature = `${targetFormatKey}::${quality}::${brief.trim()}`;
       if (attempt.current?.signature !== signature) {
@@ -236,26 +255,12 @@ export function CreativeStudioView({
           // ref rather than minted here (AC-28.6).
           idempotencyKey,
         });
-        setResult({
-          assetId: String(payload['assetId'] ?? ''),
-          formatKey: String(payload['formatKey'] ?? targetFormatKey),
-          previewToken:
-            typeof payload['previewToken'] === 'string' ? payload['previewToken'] : null,
-          name: String(payload['name'] ?? ''),
-        });
-        // The library's storage figures and the asset list have both moved.
-        router.refresh();
-        /*
-         * THE ATTEMPT IS OVER, SO ITS KEY IS SPENT. Pressing generate again on
-         * the same brief means another image and must reach the provider; a key
-         * kept past its success would replay the first one for ever.
-         *
-         * A FAILURE DELIBERATELY KEEPS THE KEY. Nothing was charged — the
-         * gateway releases the reservation — and the reader pressing the button
-         * again means "that one, again", so the same key lets the gateway
-         * answer for the attempt rather than opening a second one.
-         */
-        attempt.current = null;
+        if (typeof payload['jobId'] === 'string') {
+          // Busy until the job finishes; `followed` below takes it from here.
+          started = true;
+          setJobSince(Date.now());
+          setJobId(payload['jobId']);
+        }
       } catch (error: unknown) {
         const code = error instanceof Error ? error.message : 'INTERNAL';
         if (code.startsWith('LIMIT:')) {
@@ -266,11 +271,84 @@ export function CreativeStudioView({
         setFailure((key ? labels[key] : undefined) ?? labels.failed);
       } finally {
         inFlight.current = false;
-        setBusy(false);
+        if (!started) setBusy(false);
       }
     },
-    [brandId, brief, busy, labels, post, router],
+    [brandId, brief, busy, labels, post],
   );
+
+  /*
+   * THE JOB'S OWN STATE, NEVER A GUESS. A finished job spends its key either
+   * way: a success means "another image" next time, and a failure (nothing
+   * charged) needs a NEW job, because the same key answers with the same
+   * finished job.
+   */
+  useEffect(() => {
+    const job = followed.job;
+    if (!job || job.id !== jobId) return;
+    if (job.status === 'SUCCEEDED' && job.assetId) {
+      setResult({
+        assetId: job.assetId,
+        formatKey: job.formatKey,
+        previewToken: followed.previewToken,
+        name: followed.name ?? '',
+      });
+      attempt.current = null;
+      setJobId(null);
+      setBusy(false);
+      // The library's storage figures and the asset list have both moved.
+      router.refresh();
+    } else if (job.status === 'FAILED') {
+      setFailure(labels.jobFailed[job.failureReason ?? ''] ?? labels.failed);
+      attempt.current = null;
+      setJobId(null);
+      setBusy(false);
+    }
+  }, [followed, jobId, labels, router]);
+  useEffect(() => {
+    if (followed.stale) setBusy(false);
+  }, [followed.stale]);
+
+  /*
+   * Back on the page: the newest image asked for HERE (not from a post) is
+   * followed again while it is still being made, and shown if it finished in
+   * the last 30 minutes, so "leave and come back" finds the result.
+   */
+  useEffect(() => {
+    let stopped = false;
+    const query = new URLSearchParams({ brandId });
+    void fetch(`/api/creative/jobs?${query.toString()}`, { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (
+          payload: {
+            jobs?: {
+              id: string;
+              status: string;
+              contentVariantId: string | null;
+              createdAt: string;
+              completedAt: string | null;
+            }[];
+          } | null,
+        ) => {
+          const job = payload?.jobs?.find((entry) => entry.contentVariantId === null);
+          if (stopped || !job) return;
+          const unfinished = job.status === 'QUEUED' || job.status === 'RUNNING';
+          const recent =
+            job.status === 'SUCCEEDED' &&
+            job.completedAt !== null &&
+            Date.now() - Date.parse(job.completedAt) < RESUME_FINISHED_MS;
+          if (!unfinished && !recent) return;
+          setJobSince(Date.parse(job.createdAt) || Date.now());
+          setJobId((current) => current ?? job.id);
+          if (unfinished) setBusy(true);
+        },
+      )
+      .catch(() => undefined);
+    return () => {
+      stopped = true;
+    };
+  }, [brandId]);
 
   /**
    * THE FRAME THE RESULT IS SHOWN IN IS THE RESULT'S OWN (AC-28.2).
@@ -446,6 +524,21 @@ export function CreativeStudioView({
               </span>
             ) : null}
           </button>
+          {jobId && !followed.stale ? (
+            <p className="bsp-gen-hint" data-testid="creative-job-working" aria-live="polite">
+              <WorkingStatus
+                testId="creative-job-status"
+                since={jobSince}
+                label={labels.generating}
+              />{' '}
+              {labels.leaveOk}
+            </p>
+          ) : null}
+          {jobId && followed.stale ? (
+            <p className="bsp-gen-hint" data-testid="creative-job-stale" aria-live="polite">
+              {labels.stillWorking}
+            </p>
+          ) : null}
         </section>
 
         {/* -------------------------------------------------- the result --- */}

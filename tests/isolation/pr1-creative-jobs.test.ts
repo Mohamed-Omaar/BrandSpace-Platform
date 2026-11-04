@@ -1,0 +1,595 @@
+import { randomUUID } from 'node:crypto';
+import type { PrismaClient } from '@prisma/client';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
+import { AiGateway, MockProviderAdapter, type AiConfiguration } from '@brandspace/ai-gateway';
+import { AssetUploadService, TenantAssetPolicySource } from '@brandspace/assets';
+import { CreditLedgerService, UsageService } from '@brandspace/entitlements';
+import {
+  CREATIVE_JOB_MAX_ATTEMPTS,
+  CreativeGenerationJobs,
+  CreativeStudioService,
+  findStaleCreativeJobs,
+  runCreativeGenerationJob,
+  type CreativeJobRunHost,
+} from '@brandspace/creative';
+import { createObjectStore } from '@brandspace/storage';
+import { appRoleClient, createIsolationFixtures, platformRoleClient } from './fixtures';
+import type { IsolationFixtures } from './fixtures';
+
+/**
+ * PR 1 (Images, D-597) — AN IMAGE IS A BACKGROUND JOB.
+ *
+ *   - a job is QUEUED at once and finished by a run, SUCCEEDED or FAILED;
+ *   - a job asked for from a post attaches its image to that variant on the
+ *     server, once, audited — with nobody's editor open;
+ *   - a second run, the recovery sweep, or two runners at once NEVER charge
+ *     twice and never make a second image;
+ *   - a failed generation charges nothing and attaches nothing;
+ *   - a finished job is deleted on the content retention schedule;
+ *   - TENANT ISOLATION: another workspace's job cannot be read, listed,
+ *     counted, updated, deleted or run, and another workspace's (or brand's)
+ *     variant cannot be the target.
+ */
+
+let app: PrismaClient;
+let platform: PrismaClient;
+let fixtures: IsolationFixtures;
+let mock: MockProviderAdapter;
+let gateway: AiGateway;
+
+const inWs = <T>(workspaceId: string, fn: (db: TenantScopedClient) => Promise<T>) =>
+  withWorkspace(workspaceId, fn as never, { prisma: app }) as Promise<T>;
+const inA = <T>(fn: (db: TenantScopedClient) => Promise<T>) => inWs(fixtures.a.workspaceId, fn);
+const inB = <T>(fn: (db: TenantScopedClient) => Promise<T>) => inWs(fixtures.b.workspaceId, fn);
+
+const MODEL_KEY = 'mock-image-pr1';
+
+function aiConfiguration(): AiConfiguration {
+  return {
+    providers: [
+      {
+        key: 'mock',
+        baseUrl: 'https://mock.invalid',
+        apiKeySecretRef: null,
+        status: 'active',
+        timeoutMs: 30_000,
+      },
+    ],
+    models: [
+      {
+        key: MODEL_KEY,
+        providerKey: 'mock',
+        modality: 'image',
+        qualityTier: 'balanced',
+        status: 'available',
+        disableSwitch: false,
+      },
+    ],
+    costBases: [
+      {
+        modelKey: MODEL_KEY,
+        inputCostPerUnitMicroMinor: 0,
+        outputCostPerUnitMicroMinor: 40_000,
+        costUnit: 'image',
+        costCurrency: 'USD',
+      },
+    ],
+    routingRules: [
+      {
+        taskKey: 'image.generate',
+        scope: 'global',
+        planKey: null,
+        workspaceId: null,
+        primaryModelKey: MODEL_KEY,
+        fallbackModelKeys: [],
+        timeoutMs: 10_000,
+        maxCostPerRequestMinor: null,
+        priority: 0,
+        parameters: {
+          temperature: 0.4,
+          maxOutputTokens: 256,
+          promptTemplateVersion: 1,
+          persistOutput: false,
+          outputRetentionDays: null,
+        },
+        retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
+        moderateInput: false,
+        moderationModelKey: null,
+      },
+    ],
+    creditRules: [
+      {
+        taskKey: 'image.generate',
+        modelKey: MODEL_KEY,
+        baseMilliCredits: 400,
+        perUnitMilliCredits: 0,
+        unit: 'image',
+      },
+    ],
+    budgets: {
+      defaults: {
+        creditsPerDayMilli: null,
+        creditsPerMonthMilli: null,
+        maxConcurrentRequests: null,
+      },
+      perPlan: [],
+    },
+  };
+}
+
+const IDENTITY = {
+  name: 'Creative Alpha',
+  industry: 'Coffee',
+  description: 'A speciality roastery.',
+  palette: ['#7935FE', '#FFDD15'],
+  typography: ['Inter'],
+  knowledge: [],
+};
+
+let revoked = false;
+
+function host(workspaceId: string, userId: string): CreativeJobRunHost {
+  return {
+    workspaceId,
+    planKey: null,
+    inWorkspace: (fn) => inWs(workspaceId, fn),
+    studioFor: async (db) =>
+      new CreativeStudioService({
+        db,
+        workspaceId,
+        gateway,
+        uploads: new AssetUploadService({
+          db,
+          workspaceId,
+          store: createObjectStore({ appEnv: 'test' }),
+          policy: await new TenantAssetPolicySource(db, 'DEVELOPMENT').load(),
+          usage: new UsageService({ prisma: db as unknown as PrismaClient }),
+          storageLimitGb: null,
+        }),
+      }),
+    identityFor: async () => IDENTITY,
+    authorize: async () =>
+      revoked ? null : { userId, permissionKeys: ['assets.upload', 'assets.read'], brandScope: [] },
+  };
+}
+
+const enqueueA = (overrides: { contentVariantId?: string; brandId?: string } = {}) =>
+  inA((db) =>
+    new CreativeGenerationJobs({ db, workspaceId: fixtures.a.workspaceId }).enqueue({
+      brandId: overrides.brandId ?? fixtures.a.brandId,
+      requestedByUserId: fixtures.a.userId,
+      brandScope: [],
+      idempotencyKey: `pr1-${randomUUID()}`,
+      // A distinct brief per job: the deterministic provider draws the same
+      // bytes for the same prompt, and the library refuses a duplicate file.
+      brief: `A van at sunrise, warm light (${randomUUID().slice(0, 8)}).`,
+      formatKey: 'square',
+      ...(overrides.contentVariantId ? { contentVariantId: overrides.contentVariantId } : {}),
+    }),
+  );
+
+const jobRow = (id: string) => platform.creativeGenerationJob.findUniqueOrThrow({ where: { id } });
+const balance = async () =>
+  (
+    await platform.creditWallet.findUniqueOrThrow({
+      where: { workspaceId: fixtures.a.workspaceId },
+    })
+  ).balanceMilliCredits;
+const imageCalls = () => mock.calls.filter((call) => call.operation === 'generateImage').length;
+const variantAssets = async () =>
+  (
+    await platform.contentVariant.findUniqueOrThrow({
+      where: { id: fixtures.a.contentVariantId },
+      select: { assetIds: true },
+    })
+  ).assetIds;
+
+beforeAll(async () => {
+  app = appRoleClient();
+  platform = platformRoleClient();
+  fixtures = await createIsolationFixtures(app);
+
+  const ledger = new CreditLedgerService({ prisma: platform });
+  mock = new MockProviderAdapter({});
+  gateway = new AiGateway({
+    prisma: platform,
+    ledger,
+    adapters: new Map([['mock', mock]]),
+    configuration: { load: async () => aiConfiguration() },
+    credentials: { resolve: async () => null },
+    environment: 'DEVELOPMENT',
+  });
+  await platform.creditWallet.upsert({
+    where: { workspaceId: fixtures.a.workspaceId },
+    create: { workspaceId: fixtures.a.workspaceId },
+    update: {},
+  });
+  await ledger.grant({
+    workspaceId: fixtures.a.workspaceId,
+    source: 'PLAN_GRANT',
+    credits: 5_000,
+    reason: 'pr1 creative jobs allowance',
+    idempotencyKey: `pr1-jobs-grant-${fixtures.a.workspaceId}`,
+  });
+}, 90_000);
+
+afterAll(async () => {
+  await app?.$disconnect();
+  await platform?.$disconnect();
+});
+
+describe('PR 1 · a job, end to end', () => {
+  it('is QUEUED at once, then SUCCEEDED with an image, charged once', async () => {
+    const before = await balance();
+    const { job, created } = await enqueueA();
+    expect(created).toBe(true);
+    expect(job.status).toBe('QUEUED');
+
+    const outcome = await runCreativeGenerationJob(
+      host(fixtures.a.workspaceId, fixtures.a.userId),
+      job.id,
+    );
+    expect(outcome).toBe('succeeded');
+    const row = await jobRow(job.id);
+    expect(row).toMatchObject({ status: 'SUCCEEDED', attempts: 1, failureReason: null });
+    expect(row.assetId).not.toBeNull();
+    expect(row.completedAt).not.toBeNull();
+    const spent = before - (await balance());
+    expect(spent).toBeGreaterThan(0n);
+    expect(row.creditsChargedMilli).toBe(spent);
+  });
+
+  it('a job asked for from a post attaches the image to that variant, once, audited', async () => {
+    const before = await variantAssets();
+    const { job } = await enqueueA({ contentVariantId: fixtures.a.contentVariantId });
+    await runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), job.id);
+
+    const row = await jobRow(job.id);
+    expect(row.status).toBe('SUCCEEDED');
+    expect(row.attachedAt).not.toBeNull();
+    const after = await variantAssets();
+    expect(after).toEqual([...before, row.assetId]);
+    expect(
+      await platform.auditEvent.count({
+        where: {
+          workspaceId: fixtures.a.workspaceId,
+          action: 'content.media.attached_by_generation',
+          resourceId: fixtures.a.contentVariantId,
+        },
+      }),
+    ).toBeGreaterThanOrEqual(1);
+    // Attaching changes media, never the post's status.
+    const item = await platform.contentItem.findUniqueOrThrow({
+      where: { id: fixtures.a.contentItemId },
+      select: { status: true },
+    });
+    expect(item.status).toBe('DRAFT');
+  });
+
+  it('the same key returns the same job; another person or brand gets a miss', async () => {
+    const key = `pr1-${randomUUID()}`;
+    const ask = (userId: string, brandId: string) =>
+      inA((db) =>
+        new CreativeGenerationJobs({ db, workspaceId: fixtures.a.workspaceId }).enqueue({
+          brandId,
+          requestedByUserId: userId,
+          brandScope: [],
+          idempotencyKey: key,
+          brief: 'Same ask twice.',
+          formatKey: 'square',
+        }),
+      );
+    const first = await ask(fixtures.a.userId, fixtures.a.brandId);
+    const again = await ask(fixtures.a.userId, fixtures.a.brandId);
+    expect(again).toEqual({ job: first.job, created: false });
+    await expect(ask(randomUUID(), fixtures.a.brandId)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+});
+
+describe('PR 1 · never charged twice', () => {
+  it('a second run of a finished job does nothing', async () => {
+    const { job } = await enqueueA();
+    await runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), job.id);
+    const calls = imageCalls();
+    const after = await balance();
+    expect(
+      await runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), job.id),
+    ).toBe('skipped');
+    expect(imageCalls()).toBe(calls);
+    expect(await balance()).toBe(after);
+  });
+
+  it('two runners at once: one wins, one image, one charge', async () => {
+    const before = await balance();
+    const calls = imageCalls();
+    const { job } = await enqueueA();
+    const outcomes = await Promise.all([
+      runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), job.id),
+      runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), job.id),
+    ]);
+    expect([...outcomes].sort()).toEqual(['skipped', 'succeeded']);
+    expect(imageCalls()).toBe(calls + 1);
+    const row = await jobRow(job.id);
+    expect(before - (await balance())).toBe(row.creditsChargedMilli);
+  });
+
+  it('RECOVERY: a job that died after the image was made is finished without a second charge', async () => {
+    const before = await balance();
+    const { job } = await enqueueA({ contentVariantId: fixtures.a.contentVariantId });
+    const first = host(fixtures.a.workspaceId, fixtures.a.userId);
+    // The process "dies" after the image is stored but before the job is
+    // finished: claimed, generated with the job's own key, never finished.
+    const claimed = await inA((db) =>
+      new CreativeGenerationJobs({ db, workspaceId: fixtures.a.workspaceId }).claim(job.id),
+    );
+    expect(claimed?.status).toBe('RUNNING');
+    // The generation itself happens (same key the job will use).
+    await CreativeStudioService.generateWith(
+      (fn) => first.inWorkspace(async (db) => fn(await first.studioFor(db))),
+      {
+        brandId: fixtures.a.brandId,
+        brief: (await jobRow(job.id)).brief,
+        formatKey: 'square',
+        identity: IDENTITY,
+        idempotencyKey: (await jobRow(job.id)).idempotencyKey,
+        actorUserId: fixtures.a.userId,
+        planKey: null,
+        actor: { userId: fixtures.a.userId, permissionKeys: ['assets.upload'], brandScope: [] },
+      },
+    );
+    const charged = before - (await balance());
+    const calls = imageCalls();
+    // Make the claim look silent for 20 minutes, then sweep.
+    await platform.creativeGenerationJob.update({
+      where: { id: job.id },
+      data: { startedAt: new Date(Date.now() - 20 * 60_000) },
+    });
+    const stale = await findStaleCreativeJobs(platform as never, {
+      queuedBefore: new Date(Date.now() - 60_000),
+      runningBefore: new Date(Date.now() - 15 * 60_000),
+      limit: 50,
+    });
+    expect(stale.map((entry) => entry.id)).toContain(job.id);
+    const outcome = await runCreativeGenerationJob(first, job.id, {
+      staleBefore: new Date(Date.now() - 15 * 60_000),
+    });
+    expect(outcome).toBe('succeeded');
+    expect(imageCalls()).toBe(calls); // no second provider call
+    expect(before - (await balance())).toBe(charged); // no second charge
+    const row = await jobRow(job.id);
+    expect(row).toMatchObject({ status: 'SUCCEEDED', attempts: 2 });
+    // The recovered job still lands in the post.
+    expect(row.attachedAt).not.toBeNull();
+    expect(await variantAssets()).toContain(row.assetId);
+  });
+
+  it('RECOVERY: a job claimed the maximum number of times is failed, never run again', async () => {
+    const { job } = await enqueueA();
+    await platform.creativeGenerationJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'RUNNING',
+        attempts: CREATIVE_JOB_MAX_ATTEMPTS,
+        startedAt: new Date(Date.now() - 20 * 60_000),
+      },
+    });
+    const calls = imageCalls();
+    expect(
+      await runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), job.id, {
+        staleBefore: new Date(Date.now() - 15 * 60_000),
+      }),
+    ).toBe('skipped');
+    const failed = await inA((db) =>
+      new CreativeGenerationJobs({ db, workspaceId: fixtures.a.workspaceId }).fail(
+        { id: job.id, attempts: CREATIVE_JOB_MAX_ATTEMPTS },
+        'stuck_timeout',
+      ),
+    );
+    expect(failed).toBe(true);
+    expect(imageCalls()).toBe(calls);
+    expect(await jobRow(job.id)).toMatchObject({
+      status: 'FAILED',
+      failureReason: 'stuck_timeout',
+    });
+  });
+});
+
+describe('PR 1 · failures charge nothing and attach nothing', () => {
+  it('a provider TIMEOUT fails the job with a reason key', async () => {
+    const before = await balance();
+    const assets = await variantAssets();
+    mock.program({ failWith: 'TIMEOUT', times: 1 });
+    const { job } = await enqueueA({ contentVariantId: fixtures.a.contentVariantId });
+    const outcome = await runCreativeGenerationJob(
+      host(fixtures.a.workspaceId, fixtures.a.userId),
+      job.id,
+    );
+    expect(outcome).toBe('failed');
+    expect(await jobRow(job.id)).toMatchObject({
+      status: 'FAILED',
+      failureReason: 'generation_failed',
+      assetId: null,
+      attachedAt: null,
+    });
+    expect(await balance()).toBe(before);
+    expect(await variantAssets()).toEqual(assets);
+  });
+
+  it('a requester who lost access gets nothing made', async () => {
+    const calls = imageCalls();
+    const { job } = await enqueueA();
+    revoked = true;
+    try {
+      expect(
+        await runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), job.id),
+      ).toBe('failed');
+    } finally {
+      revoked = false;
+    }
+    expect(imageCalls()).toBe(calls);
+    expect(await jobRow(job.id)).toMatchObject({
+      status: 'FAILED',
+      failureReason: 'access_revoked',
+    });
+  });
+});
+
+describe('PR 1 · retention', () => {
+  it('a finished job past the content retention window is deleted; an unfinished one never is', async () => {
+    const done = await enqueueA();
+    await runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), done.job.id);
+    const open = await enqueueA();
+    const purged = await inA((db) =>
+      new CreativeGenerationJobs({
+        db,
+        workspaceId: fixtures.a.workspaceId,
+        clock: { now: () => new Date(Date.now() + 40 * 24 * 3600_000) },
+      }).purgeExpired({
+        // 30 days of retention, counted from when the job finished.
+        expiryFrom: (finishedAt) => new Date(finishedAt.getTime() + 30 * 24 * 3600_000),
+        limit: 500,
+      }),
+    );
+    expect(purged).toBeGreaterThanOrEqual(1);
+    expect(await platform.creativeGenerationJob.count({ where: { id: done.job.id } })).toBe(0);
+    expect(await platform.creativeGenerationJob.count({ where: { id: open.job.id } })).toBe(1);
+  });
+
+  it('no retention configured (null) keeps every job', async () => {
+    const { job } = await enqueueA();
+    await runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), job.id);
+    await inA((db) =>
+      new CreativeGenerationJobs({ db, workspaceId: fixtures.a.workspaceId }).purgeExpired({
+        expiryFrom: () => null,
+        limit: 500,
+      }),
+    );
+    expect(await platform.creativeGenerationJob.count({ where: { id: job.id } })).toBe(1);
+  });
+});
+
+describe('PR 1 · tenant isolation for creative_generation_job', () => {
+  it('B cannot read, list, count, update, delete or run A’s job', async () => {
+    const { job } = await enqueueA();
+    expect(
+      await inB((db) => db.creativeGenerationJob.findFirst({ where: { id: job.id } })),
+    ).toBeNull();
+    expect(
+      await inB((db) =>
+        db.creativeGenerationJob.findMany({ where: { workspaceId: fixtures.a.workspaceId } }),
+      ),
+    ).toEqual([]);
+    expect(await inB((db) => db.creativeGenerationJob.count({ where: { id: job.id } }))).toBe(0);
+    const updated = await inB((db) =>
+      db.creativeGenerationJob.updateMany({ where: { id: job.id }, data: { status: 'FAILED' } }),
+    );
+    expect(updated.count).toBe(0);
+    const deleted = await inB((db) =>
+      db.creativeGenerationJob.deleteMany({ where: { id: job.id } }),
+    );
+    expect(deleted.count).toBe(0);
+    // Running it from B's context claims nothing.
+    expect(
+      await runCreativeGenerationJob(host(fixtures.b.workspaceId, fixtures.b.userId), job.id),
+    ).toBe('skipped');
+    expect(await jobRow(job.id)).toMatchObject({ status: 'QUEUED', attempts: 0 });
+    // And B's service answers A's id as a miss.
+    await expect(
+      inB((db) =>
+        new CreativeGenerationJobs({ db, workspaceId: fixtures.b.workspaceId }).get(job.id, {
+          userId: fixtures.b.userId,
+          brandScope: [],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('B cannot write a row into A, nor target A’s variant', async () => {
+    await expect(
+      inB((db) =>
+        db.creativeGenerationJob.create({
+          data: {
+            workspaceId: fixtures.a.workspaceId,
+            brandId: fixtures.a.brandId,
+            idempotencyKey: `pr1-x-${randomUUID()}`,
+            brief: 'cross',
+            formatKey: 'square',
+          },
+        }),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      inB((db) =>
+        new CreativeGenerationJobs({ db, workspaceId: fixtures.b.workspaceId }).enqueue({
+          brandId: fixtures.b.brandId,
+          requestedByUserId: fixtures.b.userId,
+          brandScope: [],
+          idempotencyKey: `pr1-${randomUUID()}`,
+          brief: 'Into A’s post',
+          formatKey: 'square',
+          contentVariantId: fixtures.a.contentVariantId,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    // The composite foreign key refuses it below the service too.
+    await expect(
+      inB((db) =>
+        db.creativeGenerationJob.create({
+          data: {
+            workspaceId: fixtures.b.workspaceId,
+            brandId: fixtures.b.brandId,
+            idempotencyKey: `pr1-fk-${randomUUID()}`,
+            brief: 'fk',
+            formatKey: 'square',
+            contentVariantId: fixtures.a.contentVariantId,
+          },
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('A cannot target a variant of another of its own brands', async () => {
+    const other = await inA((db) =>
+      db.brand.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          slug: `pr1-${randomUUID().slice(0, 8)}`,
+          name: 'Other brand',
+          status: 'ACTIVE',
+        },
+        select: { id: true },
+      }),
+    );
+    await expect(
+      enqueueA({ brandId: other.id, contentVariantId: fixtures.a.contentVariantId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('PR 1 · the scheduler sweep', () => {
+  it('fails a job silent past the limit and claimed the maximum times, as stuck_timeout', async () => {
+    const { MaintenanceScheduler } = await import('../../apps/api/src/scheduler');
+    const { job } = await enqueueA();
+    await platform.creativeGenerationJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'RUNNING',
+        attempts: CREATIVE_JOB_MAX_ATTEMPTS,
+        startedAt: new Date(Date.now() - 60 * 60_000),
+      },
+    });
+    const calls = imageCalls();
+    const acted = await new MaintenanceScheduler({
+      environment: 'DEVELOPMENT',
+    }).recoverCreativeJobs(500);
+    expect(acted).toBeGreaterThanOrEqual(1);
+    expect(await jobRow(job.id)).toMatchObject({
+      status: 'FAILED',
+      failureReason: 'stuck_timeout',
+    });
+    expect(imageCalls()).toBe(calls);
+  });
+});

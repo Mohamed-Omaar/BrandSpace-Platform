@@ -2230,3 +2230,23 @@ windows older than a day, and registered apps never connected after `ai-apps.oau
 (30, audited as a count). Connections are never purged; a revoked one stays as the record. Tests:
 `tests/unit/ai-apps-migration.test.ts`, `tests/isolation/ai-apps-tables.test.ts`,
 `tests/isolation/ai-apps-sweep.test.ts`.
+
+## 23. Image generation jobs (D-597)
+
+`creative_generation_job` — TENANT, strict (`workspaceId` NOT NULL). One image asked for: who
+(`requestedByUserId`, SET NULL), which brand, the brief (customer content), format and quality, the
+optional post variant to attach to, `status` (`QUEUED` → `RUNNING` → `SUCCEEDED` | `FAILED`,
+CHECK-constrained), `attempts` (≤ 10; the code stops at 3), the image (`assetId`), the AI request,
+the credits charged, `attachedAt` and a `failureReason` key.
+
+- Composite foreign keys on (`workspaceId`, id) to `brand` (CASCADE), `content_variant`, `asset` and
+  `ai_request` (each `ON DELETE SET NULL ("column")`), so a job can only point at its own workspace's
+  rows.
+- `(workspaceId, idempotencyKey)` unique: one key, one job, one charge. A lookup by key also matches
+  the person and the brand (P7-R2).
+- Partial index on `(status, createdAt)` for unfinished jobs, for the recovery sweep; it is in the
+  migration and not in the Prisma schema, which cannot express it.
+- CHECKs: a finished job has `completedAt`; only FAILED has a reason; only SUCCEEDED is attached.
+- RLS forced; `tenant_isolation` for `brandspace_app`, `platform_access` for the sweep.
+- Retention: a finished row is deleted on the workspace's AI-content schedule, counted from
+  `completedAt` (`purgeCreativeJobs`). Credits live in the ledger, never here.

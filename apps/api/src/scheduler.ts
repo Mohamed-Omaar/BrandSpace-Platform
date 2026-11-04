@@ -95,8 +95,19 @@ import {
   TenantContentPolicySource,
   holdPostWithoutChannel,
   instantForIntent,
+  readRetentionFacts,
+  resolveContentExpiry,
   resolveContentPolicy,
 } from '@brandspace/content';
+import {
+  CREATIVE_JOB_MAX_ATTEMPTS,
+  CREATIVE_JOB_QUEUED_STALE_MS,
+  CREATIVE_JOB_RUNNING_STALE_MS,
+  CreativeGenerationJobs,
+  findStaleCreativeJobs,
+  runCreativeGenerationJob,
+} from '@brandspace/creative';
+import { creativeJobHost } from './routes/creative';
 import {
   CreditLedgerService,
   SubscriptionService,
@@ -240,6 +251,10 @@ const CYCLE_BOUNDARY_TIMEOUT_MS = 20_000;
 
 export interface MaintenanceResult {
   readonly ingestionDispatched: number;
+  /** PR 1 (D-597) — image jobs a restart left behind, finished or failed. */
+  readonly creativeJobsRecovered: number;
+  /** PR 1 (D-597) — finished image jobs past the content retention window, deleted. */
+  readonly creativeJobsPurged: number;
   /** Fix PR 1 · F2 (D-413) — silent ingestion claims handed back or failed. */
   readonly ingestionJobsRecovered: number;
   readonly chatContentPurged: number;
@@ -2464,6 +2479,103 @@ export class MaintenanceScheduler {
     return this.#aiExecutor.sweep();
   }
 
+  /**
+   * PR 1 (D-597) — FINISH OR FAIL THE IMAGE JOBS A RESTART LEFT BEHIND.
+   *
+   * QUEUED and never claimed for a minute (the in-process start was lost),
+   * or RUNNING and silent for 15 minutes (the process died mid-run; well past
+   * the image attempt's 180 s and the gateway's own deadline sweep). Each is
+   * claimed by compare-and-set inside its own workspace and run again with
+   * the SAME idempotency key, so it is never charged twice: a finished
+   * generation returns its stored image with no provider call, and the
+   * gateway replays the recorded outcome of the same AI request. A job
+   * already claimed `CREATIVE_JOB_MAX_ATTEMPTS` times fails as `stuck_timeout`.
+   */
+  async recoverCreativeJobs(limit: number): Promise<number> {
+    const now = this.#clock.now();
+    const runningBefore = new Date(now.getTime() - CREATIVE_JOB_RUNNING_STALE_MS);
+    const stale = await findStaleCreativeJobs(getPlatformClient() as never, {
+      queuedBefore: new Date(now.getTime() - CREATIVE_JOB_QUEUED_STALE_MS),
+      runningBefore,
+      limit,
+    });
+    let acted = 0;
+    for (const job of stale) {
+      try {
+        if (job.attempts >= CREATIVE_JOB_MAX_ATTEMPTS) {
+          const failed = await withWorkspace(
+            job.workspaceId,
+            async (db) =>
+              new CreativeGenerationJobs({
+                db,
+                workspaceId: job.workspaceId,
+                clock: this.#clock,
+              }).fail({ id: job.id, attempts: job.attempts }, 'stuck_timeout'),
+            { prisma: getPrisma() },
+          );
+          if (failed) acted += 1;
+          continue;
+        }
+        const planKey = await withWorkspace(
+          job.workspaceId,
+          async (db) => (await readRetentionFacts(db, job.workspaceId)).planKey,
+          { prisma: getPrisma() },
+        );
+        const outcome = await runCreativeGenerationJob(
+          { ...creativeJobHost(job.workspaceId, planKey), clock: this.#clock },
+          job.id,
+          { staleBefore: runningBefore },
+        );
+        if (outcome !== 'skipped') acted += 1;
+      } catch (error: unknown) {
+        // One job must not starve the rest (F-65).
+        log.error('could not recover a creative job', {
+          workspaceId: job.workspaceId,
+          jobId: job.id,
+          ...internalErrorFields(error),
+        });
+      }
+    }
+    return acted;
+  }
+
+  /**
+   * PR 1 (D-597) — RETENTION. A finished image job holds the brief, customer
+   * content, so it is deleted on the same schedule as the workspace's other
+   * AI content: `resolveContentExpiry` (the workspace's retention days, or the
+   * cancellation grace) counted from when the job finished. The image and the
+   * AI request outlive it.
+   */
+  async purgeCreativeJobs(batch: number): Promise<number> {
+    const platform = getPlatformClient();
+    const policy = await resolveContentPolicy(
+      new ConfigurationService({ prisma: platform }),
+      this.#environment,
+    );
+    const affected = await platform.creativeGenerationJob.findMany({
+      where: { status: { in: ['SUCCEEDED', 'FAILED'] } },
+      select: { workspaceId: true },
+      distinct: ['workspaceId'],
+      take: batch,
+    });
+    let purged = 0;
+    for (const { workspaceId } of affected) {
+      purged += await withWorkspace(
+        workspaceId,
+        async (db) => {
+          const facts = await readRetentionFacts(db, workspaceId);
+          return new CreativeGenerationJobs({ db, workspaceId, clock: this.#clock }).purgeExpired({
+            expiryFrom: (finishedAt) =>
+              resolveContentExpiry(policy, facts, { now: () => finishedAt }),
+            limit: batch,
+          });
+        },
+        { prisma: getPrisma() },
+      );
+    }
+    return purged;
+  }
+
   /** One full pass of everything. Exposed so a test can run it deterministically. */
   async runOnce(): Promise<MaintenanceResult> {
     const cadence = await this.#cadence();
@@ -2472,6 +2584,8 @@ export class MaintenanceScheduler {
       cadence.ingestionReconcileBatch,
     );
     const ingestionDispatched = await this.reconcileIngestion(cadence.ingestionReconcileBatch);
+    const creativeJobsRecovered = await this.recoverCreativeJobs(cadence.ingestionReconcileBatch);
+    const creativeJobsPurged = await this.purgeCreativeJobs(cadence.retentionPurgeBatch);
     const assetJobsRecovered = await this.recoverStuckAssetProcessing(
       cadence.ingestionReconcileBatch,
     );
@@ -2492,6 +2606,8 @@ export class MaintenanceScheduler {
     const workspacesDeleted = await this.finishWorkspaceDeletions(cadence.retentionPurgeBatch);
     return {
       ingestionDispatched,
+      creativeJobsRecovered,
+      creativeJobsPurged,
       ingestionJobsRecovered,
       chatContentPurged: purged.chat,
       gatewayOutputsPurged: purged.gateway,
@@ -2656,6 +2772,14 @@ export class MaintenanceScheduler {
      */
     every(cadence.retentionPurgeSeconds, 'ai-apps-purge', () =>
       this.purgeAiApps(cadence.retentionPurgeBatch),
+    );
+    // PR 1 (D-597): image jobs a restart left behind, on the reconcile
+    // cadence; finished ones past retention, on the purge cadence.
+    every(cadence.ingestionReconcileSeconds, 'creative-jobs-recover', () =>
+      this.recoverCreativeJobs(cadence.ingestionReconcileBatch),
+    );
+    every(cadence.retentionPurgeSeconds, 'creative-jobs-purge', () =>
+      this.purgeCreativeJobs(cadence.retentionPurgeBatch),
     );
     /*
      * THE AUTOMATION SWEEP (A1) — the timer the whole feature was missing.

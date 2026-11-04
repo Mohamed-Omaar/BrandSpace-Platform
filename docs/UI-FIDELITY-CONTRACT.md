@@ -2629,3 +2629,10 @@ carry `dir="auto"`, on the page and in the panel: Arabic in the English UI reads
 (its "؟" at the end), English in the Arabic UI left to right (`tests/e2e/pr-u-copilot-direction.spec.ts`).
 No geometry, colour or class changes. A failed file card shows the stored reason in plain words
 (`bb.failure.*`) followed by "No credits were used."
+
+**PR 1 (D-597) — an image is a background job.** APPROVED DESIGN-SYSTEM EXTENSION (§4.2): the
+media drawer closes as soon as the job is accepted, and the variant shows #112's `WorkingStatus`
+with "You can leave this page; the image will be added to this post when it's ready.". After 5
+minutes of polling it shows "Still working on the image. Refresh the page to check.", and a failure
+shows its reason (`creative.job.failed.*`). The Creative Studio page shows the same `WorkingStatus`
+under Generate, in the existing `.bsp-gen-hint` style. No new class, colour or layout.

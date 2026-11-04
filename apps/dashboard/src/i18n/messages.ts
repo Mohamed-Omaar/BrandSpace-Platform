@@ -1856,6 +1856,27 @@ export const messages = {
     'editor.media.working': 'جارٍ إنشاء الصورة…',
     'editor.media.generateSlow':
       'تستغرق صورتك وقتًا أطول من المعتاد. ستظهر في مكتبة الوسائط عندما تكون جاهزة.',
+    // PR 1 (D-597) — an image is a background job.
+    'editor.media.leaveOk': 'يمكنك مغادرة هذه الصفحة؛ ستُضاف الصورة إلى هذا المنشور عندما تجهز.',
+    'editor.media.generateStale': 'ما زلنا نعمل على الصورة. حدّث الصفحة للتحقق.',
+    'editor.media.leaveOkStudio':
+      'يمكنك مغادرة هذه الصفحة؛ ستجد الصورة هنا وفي مكتبة الوسائط عندما تجهز.',
+    'creative.job.failed.generation_failed':
+      'تعذّر إنشاء الصورة. لم يُحتسب أي رصيد. حاول مرة أخرى.',
+    'creative.job.failed.insufficient_credits':
+      'لا يوجد رصيد كافٍ لإنشاء هذه الصورة. لم يُحتسب أي رصيد.',
+    'creative.job.failed.limit_reached':
+      'بلغت مساحة العمل حدّ الاستخدام لهذه الفترة. لم يُحتسب أي رصيد.',
+    'creative.job.failed.ai_paused':
+      'الذكاء الاصطناعي متوقف مؤقتًا. لم يُحتسب أي رصيد. حاول لاحقًا.',
+    'creative.job.failed.busy': 'الخدمة مشغولة الآن. لم يُحتسب أي رصيد. حاول بعد دقيقة.',
+    'creative.job.failed.storage_full':
+      'مكتبة الوسائط ممتلئة. احذف بعض الملفات ثم حاول مرة أخرى. لم يُحتسب أي رصيد.',
+    'creative.job.failed.not_found': 'لم تعد العلامة أو المنشور موجودًا. لم يُحتسب أي رصيد.',
+    'creative.job.failed.access_revoked':
+      'لم تعد لديك صلاحية إنشاء الصور لهذه العلامة. لم يُحتسب أي رصيد.',
+    'creative.job.failed.stuck_timeout':
+      'استغرق إنشاء الصورة وقتًا طويلًا وتوقف. لم يُحتسب أي رصيد. حاول مرة أخرى.',
     'editor.preview.slide': 'الشريحة {index} من {count}',
     'editor.preview.previousSlide': 'الشريحة السابقة',
     'editor.preview.nextSlide': 'الشريحة التالية',
@@ -6292,6 +6313,29 @@ export const messages = {
     'editor.media.working': 'Generating the image…',
     'editor.media.generateSlow':
       'Your image is taking longer than usual. It will appear in the Asset Library when it is ready.',
+    // PR 1 (D-597) — an image is a background job.
+    'editor.media.leaveOk':
+      "You can leave this page; the image will be added to this post when it's ready.",
+    'editor.media.generateStale': 'Still working on the image. Refresh the page to check.',
+    'editor.media.leaveOkStudio':
+      "You can leave this page; the image will be here and in the Media library when it's ready.",
+    'creative.job.failed.generation_failed':
+      "The image couldn't be made. No credits were used. Try again.",
+    'creative.job.failed.insufficient_credits':
+      "There aren't enough credits to make this image. No credits were used.",
+    'creative.job.failed.limit_reached':
+      'This workspace has reached its usage limit for now. No credits were used.',
+    'creative.job.failed.ai_paused': 'AI is paused for now. No credits were used. Try again later.',
+    'creative.job.failed.busy':
+      'The service is busy right now. No credits were used. Try again in a minute.',
+    'creative.job.failed.storage_full':
+      'The media library is full. Remove some files and try again. No credits were used.',
+    'creative.job.failed.not_found':
+      'The brand or the post no longer exists. No credits were used.',
+    'creative.job.failed.access_revoked':
+      'You can no longer make images for this brand. No credits were used.',
+    'creative.job.failed.stuck_timeout':
+      'Making the image took too long and was stopped. No credits were used. Try again.',
     'editor.preview.slide': 'Slide {index} of {count}',
     'editor.preview.previousSlide': 'Previous slide',
     'editor.preview.nextSlide': 'Next slide',
