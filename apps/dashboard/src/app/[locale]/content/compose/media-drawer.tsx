@@ -17,7 +17,6 @@ import {
   SideSheet,
   colorTokens,
   radiusTokens,
-  showToast,
   Spinner,
   WorkingStatus,
 } from '@brandspace/ui';
@@ -28,7 +27,6 @@ import {
   fill,
   fingerprint,
   formatCredits,
-  spentMessage,
 } from '../../../../server/composer-editor';
 import type { MediaOptionView } from './media-picker';
 
@@ -73,7 +71,13 @@ export function MediaDrawer({
   initialTab = 'library',
   onPick,
   onGenerated,
+  variantId,
 }: {
+  /**
+   * PR 1 (D-597) — the post variant the image is for: the API attaches it
+   * there itself when the job finishes, even if this editor is closed.
+   */
+  readonly variantId?: string | undefined;
   /** Batch 7 (A3): what a picture or a video may be, from activated configuration. */
   readonly rules?: UploadRules | null;
   /** Why the last upload was refused: the drawer opens on the upload, saying so. */
@@ -98,7 +102,8 @@ export function MediaDrawer({
   readonly defaultFormat: string;
   readonly uploadAction: (formData: FormData) => Promise<void>;
   readonly onPick: (assetId: string) => void;
-  readonly onGenerated: (assetId: string) => void;
+  /** PR 1 (D-597) — the image is a background job: its id, at once. */
+  readonly onGenerated: (jobId: string) => void;
 }) {
   const fieldId = useId();
   const [tab, setTab] = useState<'library' | 'upload' | 'generate'>(
@@ -376,6 +381,7 @@ export function MediaDrawer({
                     brief: prompt.trim(),
                     formatKey,
                     idempotencyKey: `composer:${itemId}:${attempt}:${formatKey}:${fingerprint(prompt.trim())}`,
+                    ...(variantId ? { contentVariantId: variantId } : {}),
                   });
                 } catch {
                   // The request never arrived: the same words as a refusal,
@@ -385,14 +391,10 @@ export function MediaDrawer({
                   setBusy(false);
                   setGeneratingSince(null);
                 }
-                if (payload && typeof payload['assetId'] === 'string') {
-                  onGenerated(payload['assetId']);
-                  // S6 (final review) — the image names what it cost, as every
-                  // other paid Studio action does (nothing for a replay).
-                  const spent = spentMessage(payload['creditsChargedMilli'], t);
-                  if (spent) {
-                    showToast({ tone: 'success', message: spent, testId: 'studio-spent-toast' });
-                  }
+                // PR 1 (D-597): the answer is the job; the editor follows it, and
+                // names what it cost when it finishes (S6).
+                if (payload && typeof payload['jobId'] === 'string') {
+                  onGenerated(payload['jobId']);
                 }
               }}
             >

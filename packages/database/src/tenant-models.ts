@@ -127,6 +127,8 @@ export const STRICT_TENANT_MODELS = [
   'InsightEvidence',
   'CopilotSession',
   'CopilotMessage',
+  // PR 1 (D-597) — an image asked for, as a background job.
+  'CreativeGenerationJob',
   'CopilotActionPlan',
   'CopilotToolCall',
   'AutomationRule',
@@ -389,6 +391,7 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   InsightEvidence: 'insight_evidence',
   CopilotSession: 'copilot_session',
   CopilotMessage: 'copilot_message',
+  CreativeGenerationJob: 'creative_generation_job',
   CopilotActionPlan: 'copilot_action_plan',
   CopilotToolCall: 'copilot_tool_call',
   AutomationRule: 'automation_rule',

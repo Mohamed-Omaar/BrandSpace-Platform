@@ -689,6 +689,18 @@ sequenceDiagram
   unless it was grounded on Brand Brain facts. Every answer stores its citations (`[]` when it was
   given none); an answer from before PR U (`citations` null) counts as grounded.
 
+### 13.5 Attempt limits and image timeouts (PR 1, D-597)
+
+- One provider attempt is limited by the task rule's `parameters.attemptTimeoutMs` when set;
+  otherwise 180 s for an image task and the provider's `timeoutMs` for text. The rule's `timeoutMs`
+  still bounds the whole request.
+- An image TIMEOUT is never retried and never sent down the chain: the provider is most likely still
+  making, and billing, the image.
+- Every request log line (`ai request succeeded` / `ai request failed`) carries `attempts`,
+  `retries` and `attemptTimeoutMs`.
+- Image generation itself is a background job (`creative_generation_job`); see
+  `docs/DATABASE.md` §23.
+
 ## 14. Brand Brain Retrieval and Write-Back
 
 > **NON-NEGOTIABLE PRINCIPLE (D-63, D-64).**

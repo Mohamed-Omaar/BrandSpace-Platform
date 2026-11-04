@@ -1,19 +1,19 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import {
-  AssetUploadService,
-  TenantAssetPolicySource,
-  type AssetActor,
-  type AssetPolicy,
-} from '@brandspace/assets';
+import { AssetUploadService, TenantAssetPolicySource, type AssetPolicy } from '@brandspace/assets';
 import {
   CREATIVE_KNOWLEDGE_AREAS,
   CREATIVE_KNOWLEDGE_LINES,
+  CreativeGenerationJobs,
   CreativeStudioService,
-  type CreativeRun,
+  type BrandIdentityInput,
+  type CreativeJobRunHost,
   brandTypography,
   findCreativeFormat,
+  runCreativeGenerationJob,
 } from '@brandspace/creative';
+import { resolveLiveAuthorization } from '@brandspace/copilot';
+import { createLogger, internalErrorFields, maySpendCredits } from '@brandspace/shared';
 import { writingFactsInAreas } from '@brandspace/brand-brain';
 import { createObjectStore, type ObjectStore } from '@brandspace/storage';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
@@ -73,7 +73,22 @@ const generateSchema = z.object({
   quality: qualitySchema,
   /** A generation spends credits, so a retry must never bill twice. */
   idempotencyKey: z.string().min(8).max(200),
+  /**
+   * PR 1 (D-597) — the post variant to attach the image to, when it was
+   * asked for from a post. Checked to be this brand's variant in this
+   * workspace; anything else is the same miss as a brand out of scope.
+   */
+  contentVariantId: z.string().uuid().optional(),
 });
+
+const jobIdSchema = z.object({ id: z.string().uuid() });
+const recentSchema = z.object({
+  brandId: z.string().uuid(),
+  contentVariantIds: z.string().max(2_000).optional(),
+  unfinished: z.enum(['1']).optional(),
+});
+
+const log = createLogger({ context: { component: 'api.creative.jobs' } });
 
 let sharedStore: ObjectStore | null = null;
 
@@ -111,20 +126,12 @@ function scopedFor(db: TenantScopedClient): PrismaClient {
   return db as unknown as PrismaClient;
 }
 
-function actorOf(caller: Caller, permissionKeys: readonly string[]): AssetActor {
-  return {
-    userId: caller.userId,
-    permissionKeys,
-    brandScope: caller.brandScope,
-  };
-}
-
 /**
  * PR A (H-4) — a creative studio, and the upload path it stores through, bound
  * to ONE short tenant transaction.
  */
 async function creativeStudioFor(
-  caller: Caller,
+  caller: Pick<Caller, 'workspaceId'>,
   db: TenantScopedClient,
 ): Promise<CreativeStudioService> {
   const uploads = new AssetUploadService({
@@ -242,7 +249,14 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
     },
   );
 
-  /* AC-28.1 … AC-28.8 — one generation, end to end. */
+  /*
+   * AC-28.1 … AC-28.8, PR 1 (D-597) — ONE GENERATION, AS A BACKGROUND JOB.
+   *
+   * The request writes the job and answers 202 at once; the image is made in
+   * this process right after, and the recovery sweep (`scheduler.ts`) finishes
+   * any job a restart left behind. Nothing waits on the provider here: on
+   * staging the synchronous wait failed at 90 s (three 30 s attempts).
+   */
   route(
     app,
     'POST',
@@ -271,96 +285,112 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
         return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
       }
 
-      const facts = await workspaceFacts(caller.workspaceId);
-
       try {
-        // H-4: read the identity in one short transaction, call the provider
-        // with none open, store in another (`CreativeStudioService.generateWith`).
-        const prepared = await withWorkspace(
+        const queued = await withWorkspace(
           caller.workspaceId,
-          async (db) => {
-            /*
-             * THE IDENTITY COMES FROM THE BRAND ROW (AC-28.1), read inside the
-             * workspace so RLS constrains it. A body cannot supply a palette:
-             * the whole point is that the image looks like THIS brand.
-             */
-            const brand = await db.brand.findFirst({
-              where: { id: parsed.data.brandId, deletedAt: null },
-              select: {
-                id: true,
-                name: true,
-                industry: true,
-                description: true,
-                colorPalette: true,
-                typography: true,
-              },
-            });
-            if (!brand) return null;
-
-            /*
-             * BRAND BRAIN CONTEXT, WHERE THERE IS ANY (AC-28.1). Only APPROVED
-             * canonical knowledge, and only a handful of lines: a prompt is not
-             * a place to pour a knowledge base, and every line here is one the
-             * brand's own people wrote or accepted.
-             *
-             * PHASE 2C (Q20, D9; D-354): read through the ONE grounding layer,
-             * which applies the usable-fact rule (STALE is approved knowledge
-             * too; expired is not), the workspace's day, and the brand's "Use
-             * Brand Brain" switch — nothing at all when it is off. The studio
-             * fences the lines before they reach the prompt.
-             */
-            const knowledge = await writingFactsInAreas(db, {
-              brandId: brand.id,
-              areas: CREATIVE_KNOWLEDGE_AREAS,
-              maxItems: CREATIVE_KNOWLEDGE_LINES,
-            });
-
-            return {
-              brandId: brand.id,
-              identity: {
-                name: brand.name,
-                industry: brand.industry,
-                description: brand.description,
-                palette: stringArray(brand.colorPalette),
-                typography: brandTypography(brand.typography),
-                knowledge: knowledge
-                  .map((item) => localizedLine(item.body))
-                  .filter((line) => line !== ''),
-              },
-            };
-          },
+          async (db) =>
+            new CreativeGenerationJobs({ db, workspaceId: caller.workspaceId }).enqueue({
+              brandId: parsed.data.brandId,
+              requestedByUserId: caller.userId,
+              brandScope: caller.brandScope,
+              idempotencyKey: parsed.data.idempotencyKey,
+              brief: parsed.data.brief,
+              formatKey: parsed.data.formatKey,
+              ...(parsed.data.quality ? { quality: parsed.data.quality } : {}),
+              ...(parsed.data.contentVariantId
+                ? { contentVariantId: parsed.data.contentVariantId }
+                : {}),
+            }),
           { prisma: getPrisma() },
         );
-        if (!prepared) return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
 
-        const permissionKeys = [CREATE_PERMISSION, READ_PERMISSION];
-        const run: CreativeRun = (fn) =>
-          withWorkspace(caller.workspaceId, async (db) => fn(await creativeStudioFor(caller, db)), {
-            prisma: getPrisma(),
-          });
-        const result = await CreativeStudioService.generateWith(run, {
-          brandId: prepared.brandId,
-          brief: parsed.data.brief,
-          formatKey: parsed.data.formatKey,
-          ...(parsed.data.quality ? { quality: parsed.data.quality } : {}),
-          identity: prepared.identity,
-          idempotencyKey: parsed.data.idempotencyKey,
-          actorUserId: caller.userId,
-          planKey: facts.planKey,
-          actor: actorOf(caller, permissionKeys),
-        });
-
-        if (!result) return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
-
-        // AN ASSET ID AND A PRICE. Never a model, a provider or a prompt.
-        return reply.send({
-          assetId: result.assetId,
-          formatKey: result.format.key,
-          creditsChargedMilli: result.creditsChargedMilli.toString(),
-          replayed: result.replayed,
-        });
+        if (queued.job.status === 'QUEUED') {
+          const facts = await workspaceFacts(caller.workspaceId);
+          startCreativeJob(caller.workspaceId, queued.job.id, facts.planKey);
+        }
+        // A JOB ID AND ITS STATE. Never a model, a provider or a prompt.
+        return reply.code(202).send({ jobId: queued.job.id, job: queued.job });
       } catch (error: unknown) {
         return fail(reply, 'creative-generate', error);
+      }
+    },
+  );
+
+  /* PR 1 (D-597) — one job's state, for the person who asked. */
+  route(
+    app,
+    'GET',
+    '/v1/creative/jobs/:id',
+    {
+      scope: 'workspace',
+      permission: READ_PERMISSION,
+      rateLimit: 'read',
+      confirmation: 'not_required',
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const caller = await resolveCaller(req, reply, READ_PERMISSION);
+      if (!caller) return reply;
+      const parsed = jobIdSchema.safeParse(req.params);
+      if (!parsed.success) return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
+      try {
+        const job = await withWorkspace(
+          caller.workspaceId,
+          async (db) =>
+            new CreativeGenerationJobs({ db, workspaceId: caller.workspaceId }).get(
+              parsed.data.id,
+              {
+                userId: caller.userId,
+                brandScope: caller.brandScope,
+              },
+            ),
+          { prisma: getPrisma() },
+        );
+        return reply.header('cache-control', 'no-store').send({ job });
+      } catch (error: unknown) {
+        return fail(reply, 'creative-job', error);
+      }
+    },
+  );
+
+  /* PR 1 (D-597) — the person's recent jobs on a brand (Studio page, the editor). */
+  route(
+    app,
+    'GET',
+    '/v1/creative/jobs',
+    {
+      scope: 'workspace',
+      permission: READ_PERMISSION,
+      rateLimit: 'read',
+      confirmation: 'not_required',
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const caller = await resolveCaller(req, reply, READ_PERMISSION);
+      if (!caller) return reply;
+      const parsed = recentSchema.safeParse(req.query);
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      if (!brandInScope(caller.brandScope, parsed.data.brandId)) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
+      }
+      const variantIds = parsed.data.contentVariantIds
+        ?.split(',')
+        .map((id) => id.trim())
+        .filter((id) => z.string().uuid().safeParse(id).success)
+        .slice(0, 20);
+      try {
+        const jobs = await withWorkspace(
+          caller.workspaceId,
+          async (db) =>
+            new CreativeGenerationJobs({ db, workspaceId: caller.workspaceId }).recent({
+              userId: caller.userId,
+              brandId: parsed.data.brandId,
+              ...(variantIds ? { contentVariantIds: variantIds } : {}),
+              unfinishedOnly: parsed.data.unfinished === '1',
+            }),
+          { prisma: getPrisma() },
+        );
+        return reply.header('cache-control', 'no-store').send({ jobs });
+      } catch (error: unknown) {
+        return fail(reply, 'creative-jobs', error);
       }
     },
   );
@@ -390,4 +420,83 @@ function localizedLine(value: unknown): string {
   const en = typeof record['en'] === 'string' ? record['en'] : '';
   const ar = typeof record['ar'] === 'string' ? record['ar'] : '';
   return (en || ar).slice(0, 300);
+}
+
+/**
+ * PR 1 (D-597) — THE BRAND'S IDENTITY FOR A PROMPT (AC-28.1), read inside the
+ * workspace so RLS constrains it. A request cannot supply a palette: the
+ * point is that the image looks like THIS brand. Only APPROVED Brand Brain
+ * knowledge, a handful of lines, through the one grounding layer (Q20, D9,
+ * D-354): nothing at all when "Use Brand Brain" is off.
+ */
+export async function creativeIdentity(
+  db: TenantScopedClient,
+  brandId: string,
+): Promise<BrandIdentityInput | null> {
+  const brand = await db.brand.findFirst({
+    where: { id: brandId, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      industry: true,
+      description: true,
+      colorPalette: true,
+      typography: true,
+    },
+  });
+  if (!brand) return null;
+  const knowledge = await writingFactsInAreas(db, {
+    brandId: brand.id,
+    areas: CREATIVE_KNOWLEDGE_AREAS,
+    maxItems: CREATIVE_KNOWLEDGE_LINES,
+  });
+  return {
+    name: brand.name,
+    industry: brand.industry,
+    description: brand.description,
+    palette: stringArray(brand.colorPalette),
+    typography: brandTypography(brand.typography),
+    knowledge: knowledge.map((item) => localizedLine(item.body)).filter((line) => line !== ''),
+  };
+}
+
+/**
+ * PR 1 (D-597) — what a job run needs from this process. The requester's
+ * authorization is read LIVE when the job runs: a person removed, or no
+ * longer allowed to spend credits or upload, since asking gets nothing made.
+ */
+export function creativeJobHost(workspaceId: string, planKey: string | null): CreativeJobRunHost {
+  return {
+    workspaceId,
+    planKey,
+    inWorkspace: (fn) => withWorkspace(workspaceId, fn, { prisma: getPrisma() }),
+    studioFor: (db) => creativeStudioFor({ workspaceId }, db),
+    identityFor: creativeIdentity,
+    authorize: async (db, userId, brandId) => {
+      const live = await resolveLiveAuthorization(db, workspaceId, userId);
+      if (!live) return null;
+      if (!maySpendCredits(live.permissionKeys, CREATE_PERMISSION)) return null;
+      if (!brandInScope(live.brandScope, brandId)) return null;
+      return {
+        userId,
+        permissionKeys: [CREATE_PERMISSION, READ_PERMISSION],
+        brandScope: live.brandScope,
+      };
+    },
+  };
+}
+
+/**
+ * Start a job in this process, after the response. Never awaited by the
+ * request and never throws: a run that dies here leaves the row QUEUED or
+ * RUNNING, and the recovery sweep finishes it.
+ */
+export function startCreativeJob(workspaceId: string, jobId: string, planKey: string | null): void {
+  void runCreativeGenerationJob(creativeJobHost(workspaceId, planKey), jobId)
+    .then((outcome) => {
+      log.info('creative job finished', { workspaceId, jobId, outcome });
+    })
+    .catch((error: unknown) => {
+      log.error('creative job run failed', { workspaceId, jobId, ...internalErrorFields(error) });
+    });
 }

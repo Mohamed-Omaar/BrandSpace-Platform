@@ -65,7 +65,7 @@ describe('D-568 · the AI apps token key, scoped to the workspace', () => {
   });
 
   it('comes directly after the AI apps migration, and only the D-573 platform ceiling follows', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-10)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-11)).toEqual([
       '20261023090000_ai_app_connections',
       NAME,
       '20261027100000_ai_platform_spend_ceiling',
@@ -81,6 +81,8 @@ describe('D-568 · the AI apps token key, scoped to the workspace', () => {
       '20261103090200_audit_event_workspace_actor_action_index',
       // PR B: one Copilot conversation per person per brand (D-594).
       '20261103120000_one_assistant',
+      // PR 1 (D-597): image generation as a background job.
+      '20261104090000_creative_generation_job',
     ]);
   });
 });

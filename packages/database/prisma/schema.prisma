@@ -324,6 +324,9 @@ model User {
   aiAppConnections        AiAppConnection[] @relation("AiAppConnectionUser")
   aiAppConnectionsRevoked AiAppConnection[] @relation("AiAppConnectionRevoker")
 
+  /// PR 1 (Images) — image generation jobs (D-597).
+  creativeGenerationJobs CreativeGenerationJob[]
+
   @@index([status])
   @@map("user")
 }
@@ -574,6 +577,9 @@ model Workspace {
 
   /// D-566 — Connected AI apps (the remote MCP server).
   aiAppConnections AiAppConnection[]
+
+  /// PR 1 (Images) — image generation jobs (D-597).
+  creativeGenerationJobs CreativeGenerationJob[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1656,6 +1662,9 @@ model AiRequest {
 
   /// D-112: gives this table's workspace-scoped foreign keys something to
   /// reference. `id` is already the primary key, so this constrains nothing new.
+  /// PR 1 (Images) — image generation jobs (D-597).
+  creativeGenerationJobs CreativeGenerationJob[]
+
   @@unique([workspaceId, id], name: "ai_request_workspace_scope")
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([workspaceId, taskKey, status])
@@ -1984,6 +1993,9 @@ model Brand {
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
   memberSuggestions MemberSuggestion[]
+
+  /// PR 1 (Images) — image generation jobs (D-597).
+  creativeGenerationJobs CreativeGenerationJob[]
 
   @@unique([workspaceId, id], name: "brand_workspace_scope")
   @@unique([workspaceId, slug])
@@ -2730,6 +2742,9 @@ model Asset {
   coverOf     ContentVariant[] @relation("ContentVariantCover")
   brandFonts  BrandFont[]
 
+  /// PR 1 (Images) — image generation jobs (D-597).
+  creativeGenerationJobs CreativeGenerationJob[]
+
   @@unique([workspaceId, id], name: "asset_workspace_scope")
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, kind])
@@ -3274,6 +3289,9 @@ model ContentVariant {
   /// points at. Added rather than assumed: a plain key to a tenant-owned parent
   /// is a cross-workspace existence oracle, and this is the parent side of the
   /// pair that makes the child's key provable.
+  /// PR 1 (Images) — image generation jobs (D-597).
+  creativeGenerationJobs CreativeGenerationJob[]
+
   @@unique([workspaceId, id], name: "content_variant_workspace_scope")
   /// docs/DATABASE.md §4.5: one variant per platform per locale.
   @@unique([contentItemId, platformKey, locale])
@@ -6770,4 +6788,54 @@ model AiAppRateWindow {
   @@id([connectionId, windowStart])
   @@index([windowStart])
   @@map("ai_app_rate_window")
+}
+
+/// PR 1 (Images, D-597) — ONE IMAGE ASKED FOR, AS A BACKGROUND JOB.
+///
+/// The request writes a QUEUED row and returns at once; the api process
+/// generates the image and moves the row QUEUED -> RUNNING -> SUCCEEDED or
+/// FAILED by compare-and-set. An image asked for from a post is attached to
+/// `contentVariantId` on the server when the job finishes, audited. Credits
+/// stay on the AI gateway's reserve -> confirm -> settle ledger; this row
+/// records the outcome only. Migration `20261104090000_creative_generation_job`
+/// (owner-approved SQL) also holds the partial index on unfinished jobs that
+/// Prisma cannot express.
+model CreativeGenerationJob {
+  id                  String    @id @default(uuid()) @db.Uuid
+  workspaceId         String    @db.Uuid
+  brandId             String    @db.Uuid
+  requestedByUserId   String?   @db.Uuid
+  /// De-duplication token, never a credential: lookups also match person and brand.
+  idempotencyKey      String
+  /// CUSTOMER CONTENT. The row is deleted by the retention purge (D-597).
+  brief               String
+  formatKey           String
+  quality             String?
+  contentVariantId    String?   @db.Uuid
+  /// `QUEUED` | `RUNNING` | `SUCCEEDED` | `FAILED` (CHECK-constrained).
+  status              String    @default("QUEUED")
+  attempts            Int       @default(0)
+  assetId             String?   @db.Uuid
+  aiRequestId         String?   @db.Uuid
+  creditsChargedMilli BigInt?
+  attachedAt          DateTime? @db.Timestamptz(6)
+  /// A stable reason key the dashboard translates; never a provider's words.
+  failureReason       String?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  startedAt           DateTime? @db.Timestamptz(6)
+  completedAt         DateTime? @db.Timestamptz(6)
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "creative_generation_job_workspace_fkey")
+  brand          Brand           @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "creative_generation_job_brand_fkey")
+  requestedBy    User?           @relation(fields: [requestedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "creative_generation_job_requester_fkey")
+  contentVariant ContentVariant? @relation(fields: [workspaceId, contentVariantId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "creative_generation_job_variant_fkey")
+  asset          Asset?          @relation(fields: [workspaceId, assetId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "creative_generation_job_asset_fkey")
+  aiRequest      AiRequest?      @relation(fields: [workspaceId, aiRequestId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "creative_generation_job_ai_request_fkey")
+
+  @@unique([workspaceId, id], map: "creative_generation_job_workspaceId_id_key")
+  @@unique([workspaceId, idempotencyKey], map: "creative_generation_job_workspaceId_idempotencyKey_key")
+  @@index([workspaceId, contentVariantId], map: "creative_generation_job_workspaceId_contentVariantId_idx")
+  @@index([workspaceId, brandId, requestedByUserId, createdAt(sort: Desc)], map: "creative_generation_job_brand_requester_createdAt_idx")
+  @@index([requestedByUserId], map: "creative_generation_job_requestedByUserId_idx")
+  @@map("creative_generation_job")
 }

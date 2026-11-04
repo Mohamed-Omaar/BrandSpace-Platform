@@ -31,3 +31,22 @@ export type {
 } from './studio';
 export { CREATIVE_FORMATS, adaptationsFor, findCreativeFormat } from './formats';
 export type { CreativeFormat } from './formats';
+export {
+  CREATIVE_JOB_MAX_ATTEMPTS,
+  CREATIVE_JOB_QUEUED_STALE_MS,
+  CREATIVE_JOB_RUNNING_STALE_MS,
+  CreativeGenerationJobs,
+  failureReasonOf,
+  findStaleCreativeJobs,
+  runCreativeGenerationJob,
+  viewOf,
+} from './generation-jobs';
+export type {
+  CreativeJobFailure,
+  CreativeJobOutcome,
+  CreativeJobRunHost,
+  CreativeJobStatus,
+  CreativeJobView,
+  EnqueueCreativeJobInput,
+  StaleCreativeJob,
+} from './generation-jobs';
