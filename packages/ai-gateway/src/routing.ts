@@ -46,6 +46,12 @@ export interface RoutingRule {
     readonly outputRetentionDays: number | null;
     /** PR A (item 6, F-106) — the image quality when the caller names none. */
     readonly imageQuality?: ImageQuality;
+    /**
+     * PR 1 (Images) — one provider attempt's limit for this task, overriding
+     * the provider's `timeoutMs`. Null or absent: the code default
+     * (`attemptTimeoutMsFor`).
+     */
+    readonly attemptTimeoutMs?: number | null;
   };
   readonly retryPolicy: {
     readonly maxAttempts: number;

@@ -363,6 +363,13 @@ const aiModelsSchema = z.object({
 const aiRoutingParametersSchema = z.object({
   temperature: z.number().min(0).max(2).default(0.7),
   maxOutputTokens: z.number().int().positive().max(200_000).default(800),
+  /*
+   * PR 1 (Images, owner 2026-11-04) — how long ONE provider attempt may take
+   * for this task, overriding the provider's own `timeoutMs`. Null keeps the
+   * code default: 180 s for an image task, the provider's limit for text.
+   * The rule's `timeoutMs` still bounds the whole request.
+   */
+  attemptTimeoutMs: z.number().int().positive().max(600_000).nullable().default(null),
   promptTemplateVersion: z.number().int().positive().default(1),
   /*
    * Keep the model's output on the request row so an idempotent replay can

@@ -19,6 +19,12 @@ export type { AiFailureClass } from './errors';
 
 export { AI_MODALITIES } from './adapter';
 export {
+  IMAGE_ATTEMPT_TIMEOUT_MS,
+  attemptTimeoutMsFor,
+  fallsBackAfter,
+  retriesAfter,
+} from './attempt-policy';
+export {
   DEFAULT_IMAGE_SIZING,
   parseImageSize,
   resolveImageSize,
