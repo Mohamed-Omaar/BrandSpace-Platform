@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   ConfigurationService,
+  buildImpactPreview,
   marginWarnings,
   validateConfiguration,
   type ConfigDomain,
@@ -568,5 +569,70 @@ describe('PR 3 — the routing keeps every deadline active on staging', () => {
       'ai.credit-rules': rules,
     });
     expect(report.issues.filter((i) => i.severity === 'error')).toEqual([]);
+  });
+});
+
+describe('PR 3 — step 3 adds ONE rule to the active routing (the snippet in the activation guide)', () => {
+  /*
+   * Owner, 2026-11-08: no whole routing document is pasted. The guide's
+   * snippet goes on the line after `"rules": [` in a draft of the ACTIVE
+   * routing, and ends with a comma. Read from the guide itself, so the
+   * guide and this test cannot drift apart.
+   */
+  const guide = readFileSync('docs/pricing/PR-3-ACTIVATION.md', 'utf8');
+  const block = /<!-- pr-3-brand-extract-rule -->\s*```json\n([\s\S]*?)```/.exec(guide)?.[1] ?? '';
+  const active = JSON.parse(readFileSync('docs/pricing/staging-active-ai-routing.json', 'utf8'));
+  /** The draft as the owner leaves it: the snippet pasted right after `"rules": [`. */
+  const draftText = JSON.stringify(active, null, 2).replace('"rules": [\n', `"rules": [\n${block}`);
+
+  it('the snippet ends with a comma and pasted after "rules": [ gives valid JSON', () => {
+    expect(block.trimEnd().endsWith('},')).toBe(true);
+    expect(() => JSON.parse(draftText)).not.toThrow();
+  });
+
+  it('the result is the active routing plus the brand.extract rule, every other rule unchanged', () => {
+    const draft = JSON.parse(draftText);
+    expect(draft.rules[0]).toEqual(
+      routing.rules.find((r: { taskKey: string }) => r.taskKey === 'brand.extract'),
+    );
+    expect(draft.rules.slice(1)).toEqual(active.rules);
+  });
+
+  it('Validate & preview: impact is exactly one added rule; 0 errors; only the accepted copilot warning', () => {
+    const draft = JSON.parse(draftText);
+    const impact = buildImpactPreview('ai.routing', active, draft);
+    expect(impact.changes.map((c) => c.summary)).toEqual([
+      'routing rule "brand.extract" will be added',
+    ]);
+    const report = validateConfiguration('ai.routing', draft, {
+      'ai.models': MODELS,
+      'ai.credit-rules': rules,
+    });
+    expect(report.valid).toBe(true);
+    expect(report.issues.map((i) => `${i.severity}: ${i.message}`)).toEqual([
+      expect.stringMatching(
+        /^warning: copilot\.chat on gpt-5\.4-mini earns 61\.5% gross margin at its worst case, below the 65% target/,
+      ),
+    ]);
+  });
+
+  it('pasted twice: validation refuses the draft (the impact alone would not show it)', () => {
+    const twice = JSON.parse(draftText.replace('"rules": [\n', `"rules": [\n${block}`));
+    expect(
+      twice.rules.filter((r: { taskKey: string }) => r.taskKey === 'brand.extract'),
+    ).toHaveLength(2);
+    // The impact is keyed by task, so it still reads as one added rule …
+    expect(buildImpactPreview('ai.routing', active, twice).changes.map((c) => c.summary)).toEqual([
+      'routing rule "brand.extract" will be added',
+    ]);
+    // … and validation is what stops it: an error, so it cannot be activated.
+    const report = validateConfiguration('ai.routing', twice, {
+      'ai.models': MODELS,
+      'ai.credit-rules': rules,
+    });
+    expect(report.valid).toBe(false);
+    expect(report.issues.filter((i) => i.severity === 'error').map((i) => i.message)).toEqual([
+      expect.stringMatching(/^Duplicates rule 0: same task, scope and target at the same priority/),
+    ]);
   });
 });

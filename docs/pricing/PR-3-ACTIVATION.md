@@ -6,7 +6,7 @@ Three documents, activated in this order, each in Control Center → **Configura
 | ---- | ----------------- | --------------------------------------------------------------------------- |
 | 1    | `ai.models`       | One field on `gpt-image-2` only — `docs/pricing/pr-3-ai-models-change.json` |
 | 2    | `ai.credit-rules` | The whole document — `docs/pricing/pr-3-ai-credit-rules.json`               |
-| 3    | `ai.routing`      | One added rule, `brand.extract` — `docs/pricing/pr-3-ai-routing.json`       |
+| 3    | `ai.routing`      | One rule added to a draft of the active routing — the snippet in step 3     |
 
 **Why this order.** A route is refused unless the active prices cover it (#111), and the margin
 warning reads the active models. Models first, then prices, then routes — never routes first.
@@ -37,43 +37,69 @@ domains (the Versions table, Status "ACTIVE"). Those are your rollback targets.
      at its worst case, below the 65% target"). Accepted by the owner; repriced in Job 2.
 4. **Activate**.
 
-## Step 3 — `ai.routing` (one added rule; every deadline kept)
+## Step 3 — `ai.routing` (add ONE rule to the active routing; nothing else)
 
-The active routing carries deadlines set after the timeout fix: text tasks 60 s, `strategy.generate`
-and `plan.monthly` 120 s, `image.generate` 180 s (`timeoutMs` 180000). **They must survive.** A rule
-without `timeoutMs` falls back to 30 s, which brings the image and strategy timeouts back.
+**Do not paste a whole routing document.** The active routing carries the deadlines set after the
+timeout fix (text tasks 60 s, `strategy.generate` and `plan.monthly` 120 s, `image.generate` 180 s);
+the draft keeps them because it starts as a copy of the active version, and you only add one rule.
 
-`docs/pricing/staging-active-ai-routing.json` is the active document as recorded (the 2026-11-01
-rules with those deadlines); `docs/pricing/pr-3-ai-routing.json` is the same document plus one rule:
+1. Configuration → `ai.routing` → Change reason:
+   `PR 3: route brand.extract (mini → nano, 4,000 tokens)` → **Create draft**.
+2. In the draft, find the line `"rules": [` near the top. Put the cursor at the END of that line,
+   press Enter, and paste this snippet exactly — **it ends with a comma**, which separates it from
+   the rule that was first in the list:
 
-```diff
-     {
-+      "taskKey": "brand.extract",
-+      "primaryModelKey": "gpt-5.4-mini",
-+      "fallbackModelKeys": ["gpt-5.4-nano"],
-+      "timeoutMs": 180000,
-+      "parameters": {
-+        "maxOutputTokens": 4000,
-+        "attemptTimeoutMs": 120000
-+      }
-+    },
+<!-- pr-3-brand-extract-rule -->
+
+```json
+    {
+      "taskKey": "brand.extract",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"],
+      "timeoutMs": 180000,
+      "parameters": {
+        "maxOutputTokens": 4000,
+        "attemptTimeoutMs": 120000
+      }
+    },
 ```
 
-The deadline suits a source of up to ~52,000 tokens in and 4,000 out: one attempt may take 120 s
-(without `attemptTimeoutMs` a text attempt is cut at the provider's own limit, D-597), and the
-whole request, retry included, ends at 180 s.
+The result looks like this (the first existing rule follows the snippet unchanged):
 
-1. Configuration → `ai.routing` → Change reason: `PR 3: route brand.extract (mini → nano, 4,000 tokens)` → **Create draft**.
-   The draft starts as a copy of the ACTIVE routing.
-2. **Compare the draft with `staging-active-ai-routing.json`** (same rules, same `timeoutMs`). If they
-   differ in anything, stop: keep the draft as it is and use method A below, not the file.
-3. Add the rule — either way gives the same result when step 2 matched:
-   - **A (safest): paste only the rule** above into the draft's `"rules"` list, after `copilot.chat`;
-   - **B: replace the whole draft** with `pr-3-ai-routing.json`.
-4. **Save draft** → **Validate & preview**. Expect: no errors, the same single `copilot.chat` margin
-   warning, and an impact that shows **one added rule and no changed rule** — if any existing rule
-   shows a changed `timeoutMs`, do not activate.
+```text
+{
+  "rules": [
+    {
+      "taskKey": "brand.extract",
+      ...
+    },
+    {
+      "taskKey": "caption.generate",   ← whatever rule was first before; untouched
+      ...
+```
+
+Do not change any other line. If a `brand.extract` rule is already in the draft, stop and tell
+the developer — never add a second one.
+
+3. **Save draft**. If it refuses with a JSON error, the comma is missing or doubled: compare with
+   the snippet above.
+4. **Validate & preview** must show exactly:
+   - **Validation:** 0 errors. One warning only, the accepted D-15 margin warning on the
+     `copilot.chat` / `gpt-5.4-mini` credit row ("earns 61.5% gross margin at its worst case, below
+     the 65% target").
+   - **Impact:** exactly ONE line — `routing rule "brand.extract" will be added`. No line saying
+     `routing rule "…" changes: …` and none saying `will be REMOVED`.
+
+   **If the impact shows any other line, do not activate**: discard the draft and start again at 1.
+   If validation shows the error "Duplicates rule 0: same task, scope and target at the same
+   priority", the snippet was pasted twice (or a `brand.extract` rule was already there): it cannot
+   be activated — discard the draft and start again at 1.
+
 5. **Activate**.
+
+What the rule does: `brand.extract` reads a file of up to ~52,000 tokens and writes up to 4,000, on
+mini with nano as fallback. One attempt may take 120 s (without `attemptTimeoutMs` a text attempt is
+cut at the provider's own limit, D-597); the whole request, retry included, ends at 180 s.
 
 ## How to check (staging, a customer workspace with credits)
 
