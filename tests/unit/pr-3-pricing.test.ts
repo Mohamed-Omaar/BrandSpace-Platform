@@ -488,3 +488,85 @@ describe('PR 3 — an image request with no quality is priced as medium, never r
     }
   });
 });
+
+describe('PR 3 — the routing keeps every deadline active on staging', () => {
+  /*
+   * Owner review of #121: the first routing document dropped the deadlines
+   * active on staging (text 60 s, strategy and plan 120 s, image 180 s), so
+   * pasting it would have reset every route to the 30 s default. The
+   * document is now the active one plus ONE rule.
+   */
+  const active = JSON.parse(readFileSync('docs/pricing/staging-active-ai-routing.json', 'utf8'));
+
+  it('the active document carries the deadlines the owner activated', () => {
+    const deadlines = Object.fromEntries(
+      active.rules.map((r: { taskKey: string; timeoutMs: number }) => [r.taskKey, r.timeoutMs]),
+    );
+    expect(deadlines).toEqual({
+      'caption.generate': 60_000,
+      'ideas.generate': 60_000,
+      'analytics.explain': 60_000,
+      'content.translate': 60_000,
+      'copilot.chat': 60_000,
+      'strategy.generate': 120_000,
+      'plan.monthly': 120_000,
+      'image.generate': 180_000,
+    });
+  });
+
+  it('the new document is the active one plus the brand.extract rule, nothing else', () => {
+    const added = routing.rules.filter((r: { taskKey: string }) => r.taskKey === 'brand.extract');
+    expect(added).toEqual([
+      {
+        taskKey: 'brand.extract',
+        primaryModelKey: 'gpt-5.4-mini',
+        fallbackModelKeys: ['gpt-5.4-nano'],
+        timeoutMs: 180_000,
+        parameters: { maxOutputTokens: 4_000, attemptTimeoutMs: 120_000 },
+      },
+    ]);
+    expect(routing.rules.filter((r: { taskKey: string }) => r.taskKey !== 'brand.extract')).toEqual(
+      active.rules,
+    );
+  });
+
+  it('loaded through the runtime source, every existing rule keeps its deadline and parameters', async () => {
+    const before = await runtimeLoad({
+      'ai.models': MODELS,
+      'ai.routing': active,
+      'ai.credit-rules': rules,
+    });
+    const after = await runtimeLoad({
+      'ai.models': MODELS,
+      'ai.routing': routing,
+      'ai.credit-rules': rules,
+    });
+    expect(before.routingRules).toHaveLength(8);
+    for (const rule of before.routingRules) {
+      const kept = after.routingRules.find((r) => r.taskKey === rule.taskKey);
+      expect(kept, rule.taskKey).toEqual(rule);
+    }
+    // None of them fell back to the schema's 30 s default.
+    expect(after.routingRules.every((r) => r.timeoutMs >= 60_000)).toBe(true);
+  });
+
+  it('brand.extract: one attempt has 120 s (not the provider’s limit), the request 180 s', async () => {
+    const config = await runtimeLoad({
+      'ai.models': MODELS,
+      'ai.routing': routing,
+      'ai.credit-rules': rules,
+    });
+    const extract = config.routingRules.find((r) => r.taskKey === 'brand.extract')!;
+    expect(extract.timeoutMs).toBe(180_000);
+    expect(extract.parameters.attemptTimeoutMs).toBe(120_000);
+    expect(extract.parameters.maxOutputTokens).toBe(BRAND_EXTRACT_MAX_OUTPUT_TOKENS);
+  });
+
+  it('the active routing is valid with the new prices, so the documented order works', () => {
+    const report = validateConfiguration('ai.routing', active, {
+      'ai.models': MODELS,
+      'ai.credit-rules': rules,
+    });
+    expect(report.issues.filter((i) => i.severity === 'error')).toEqual([]);
+  });
+});
