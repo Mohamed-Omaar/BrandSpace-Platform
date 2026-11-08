@@ -1,0 +1,10 @@
+{
+  "model": "gpt-image-2",
+  "add": {
+    "imageCostByQualityMicroMinor": {
+      "low": 600000,
+      "medium": 5300000,
+      "high": 21100000
+    }
+  }
+}

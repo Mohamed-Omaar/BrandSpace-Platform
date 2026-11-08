@@ -1,0 +1,52 @@
+{
+  "rules": [
+    {
+      "taskKey": "caption.generate",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"]
+    },
+    {
+      "taskKey": "ideas.generate",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"]
+    },
+    {
+      "taskKey": "analytics.explain",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"]
+    },
+    {
+      "taskKey": "content.translate",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"]
+    },
+    {
+      "taskKey": "copilot.chat",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"]
+    },
+    {
+      "taskKey": "brand.extract",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"],
+      "parameters": {
+        "maxOutputTokens": 4000
+      }
+    },
+    {
+      "taskKey": "strategy.generate",
+      "primaryModelKey": "gpt-6.1-sol",
+      "fallbackModelKeys": ["gpt-5.4-mini"]
+    },
+    {
+      "taskKey": "plan.monthly",
+      "primaryModelKey": "gpt-6.1-sol",
+      "fallbackModelKeys": ["gpt-5.4-mini"]
+    },
+    {
+      "taskKey": "image.generate",
+      "primaryModelKey": "gpt-image-2",
+      "fallbackModelKeys": []
+    }
+  ]
+}
