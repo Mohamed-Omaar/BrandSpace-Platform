@@ -1,0 +1,164 @@
+{
+  "unit": "milli-credits",
+  "costs": [
+    {
+      "taskKey": "caption.generate",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 10000
+    },
+    {
+      "taskKey": "caption.generate",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 10000
+    },
+    {
+      "taskKey": "ideas.generate",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 10000
+    },
+    {
+      "taskKey": "ideas.generate",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 10000
+    },
+    {
+      "taskKey": "analytics.explain",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 10000
+    },
+    {
+      "taskKey": "analytics.explain",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 2000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 10000
+    },
+    {
+      "taskKey": "content.translate",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 1000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 6000
+    },
+    {
+      "taskKey": "content.translate",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 1000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 6000
+    },
+    {
+      "taskKey": "copilot.chat",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 1000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 25000
+    },
+    {
+      "taskKey": "copilot.chat",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 1000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 25000
+    },
+    {
+      "taskKey": "brand.extract",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 3000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 52000
+    },
+    {
+      "taskKey": "brand.extract",
+      "modelKey": "gpt-5.4-nano",
+      "baseMilliCredits": 3000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 52000
+    },
+    {
+      "taskKey": "strategy.generate",
+      "modelKey": "gpt-6.1-sol",
+      "baseMilliCredits": 12000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 12000
+    },
+    {
+      "taskKey": "strategy.generate",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 12000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 12000
+    },
+    {
+      "taskKey": "plan.monthly",
+      "modelKey": "gpt-6.1-sol",
+      "baseMilliCredits": 12000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 12000
+    },
+    {
+      "taskKey": "plan.monthly",
+      "modelKey": "gpt-5.4-mini",
+      "baseMilliCredits": 12000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "marginInputTokens": 12000
+    },
+    {
+      "taskKey": "image.generate",
+      "modelKey": "gpt-image-2",
+      "baseMilliCredits": 1000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "imageQuality": "low",
+      "marginImagePixels": 2359296
+    },
+    {
+      "taskKey": "image.generate",
+      "modelKey": "gpt-image-2",
+      "baseMilliCredits": 6000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "imageQuality": "medium",
+      "marginImagePixels": 2359296
+    },
+    {
+      "taskKey": "image.generate",
+      "modelKey": "gpt-image-2",
+      "baseMilliCredits": 24000,
+      "perUnitMilliCredits": 0,
+      "unit": "request",
+      "imageQuality": "high",
+      "marginImagePixels": 2359296
+    }
+  ],
+  "targetGrossMarginPercent": 65,
+  "minimumGrossMarginPercent": 0,
+  "creditValueMicroMinor": 5800000,
+  "referenceCurrency": "USD"
+}

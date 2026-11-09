@@ -563,6 +563,16 @@ const aiCreditRulesSchema = z.object({
          * quality its task and model have no specific rule for.
          */
         imageQuality: z.enum(['low', 'medium', 'high']).nullable().default(null),
+        /*
+         * PR 3 (F-113, D-15) — THE WORST CASE THE MARGIN CHECK ASSUMES for
+         * one action of this row: the input tokens one request may send (a
+         * text model), or the pixels one image may be sent at (an image model
+         * priced per quality). The output side is the route's own
+         * `maxOutputTokens`. Stated by the operator, never assumed in code;
+         * null leaves the row's margin unchecked, and validation says so.
+         */
+        marginInputTokens: z.number().int().positive().max(10_000_000).nullable().default(null),
+        marginImagePixels: z.number().int().positive().max(100_000_000).nullable().default(null),
       }),
     )
     .default([]),

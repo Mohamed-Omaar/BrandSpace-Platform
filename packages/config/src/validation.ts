@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import { systemClock, unsafeHostReason, unsafeProviderUrlReason } from '@brandspace/shared';
 import { AI_CAPABILITY_REQUIREMENTS, CONFIG_DOMAINS, type ConfigDomain } from './domains';
+import { marginWarnings } from './margin';
 
 /**
  * Two-stage validation — docs/ARCHITECTURE.md §7.2.
@@ -227,6 +228,8 @@ const CREDIT_ROW_KEYS = new Set([
   'perUnitMilliCredits',
   'unit',
   'imageQuality',
+  'marginInputTokens',
+  'marginImagePixels',
 ]);
 
 /** An unknown key would be dropped without a word: refuse it instead. */
@@ -1157,6 +1160,29 @@ function semantic(
         });
       }
     }
+  }
+
+  /*
+   * PR 3 (F-113, D-15) — WHAT EACH PRICE EARNS AT ITS WORST CASE, as a
+   * warning, whichever of the three documents is changing: a credit price, a
+   * model rate, or a route's output ceiling moves the same margin.
+   */
+  if (domain === 'ai.credit-rules') {
+    issues.push(
+      ...marginWarnings(doc, context['ai.models'], context['ai.routing'], (i) =>
+        i < 0 ? 'creditValueMicroMinor' : `costs.${i}`,
+      ),
+    );
+  }
+  if (domain === 'ai.models' || domain === 'ai.routing') {
+    issues.push(
+      ...marginWarnings(
+        context['ai.credit-rules'],
+        domain === 'ai.models' ? doc : context['ai.models'],
+        domain === 'ai.routing' ? doc : context['ai.routing'],
+        (i) => (i < 0 ? '' : `ai.credit-rules.costs.${i}`),
+      ).filter((issue) => issue.path !== ''),
+    );
   }
 
   /*

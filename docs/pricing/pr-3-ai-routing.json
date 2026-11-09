@@ -1,0 +1,62 @@
+{
+  "rules": [
+    {
+      "taskKey": "caption.generate",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"],
+      "timeoutMs": 60000
+    },
+    {
+      "taskKey": "ideas.generate",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"],
+      "timeoutMs": 60000
+    },
+    {
+      "taskKey": "analytics.explain",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"],
+      "timeoutMs": 60000
+    },
+    {
+      "taskKey": "content.translate",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"],
+      "timeoutMs": 60000
+    },
+    {
+      "taskKey": "copilot.chat",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"],
+      "timeoutMs": 60000
+    },
+    {
+      "taskKey": "brand.extract",
+      "primaryModelKey": "gpt-5.4-mini",
+      "fallbackModelKeys": ["gpt-5.4-nano"],
+      "timeoutMs": 180000,
+      "parameters": {
+        "maxOutputTokens": 4000,
+        "attemptTimeoutMs": 120000
+      }
+    },
+    {
+      "taskKey": "strategy.generate",
+      "primaryModelKey": "gpt-6.1-sol",
+      "fallbackModelKeys": ["gpt-5.4-mini"],
+      "timeoutMs": 120000
+    },
+    {
+      "taskKey": "plan.monthly",
+      "primaryModelKey": "gpt-6.1-sol",
+      "fallbackModelKeys": ["gpt-5.4-mini"],
+      "timeoutMs": 120000
+    },
+    {
+      "taskKey": "image.generate",
+      "primaryModelKey": "gpt-image-2",
+      "fallbackModelKeys": [],
+      "timeoutMs": 180000
+    }
+  ]
+}
