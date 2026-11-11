@@ -7,7 +7,7 @@ import { enter, ownWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
 
 /**
- * PR A (smart Copilot, D-603/D-604) — THE COPILOT WORKS, ON THE PAGE.
+ * PR A (smart Copilot, D-604/D-605) — THE COPILOT WORKS, ON THE PAGE.
  *
  * The development double plays the model's tool loop deterministically, so
  * this is the real stream, the real tools and the real database:

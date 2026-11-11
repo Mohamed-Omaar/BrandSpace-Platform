@@ -19,7 +19,7 @@ import {
 } from '@brandspace/copilot';
 
 /**
- * PR A (smart Copilot, D-603/D-604) — THE TOOL LOOP, WITHOUT A DATABASE.
+ * PR A (smart Copilot, D-604/D-605) — THE TOOL LOOP, WITHOUT A DATABASE.
  *
  * A scripted gateway answers each round; a fake port runs the tools. What is
  * proven: a read's result goes back to the model before it answers; only the

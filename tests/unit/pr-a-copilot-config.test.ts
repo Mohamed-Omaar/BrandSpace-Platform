@@ -11,7 +11,7 @@ import { defaultPayload } from '@brandspace/config';
 import { parseCopilotPolicy } from '@brandspace/copilot';
 
 /**
- * PR A (smart Copilot, D-604) — THE THREE EDITS IN `docs/pricing/PR-A-ACTIVATION.md`.
+ * PR A (smart Copilot, D-605) — THE THREE EDITS IN `docs/pricing/PR-A-ACTIVATION.md`.
  *
  * The snippets are read FROM THE GUIDE and applied to the active documents
  * exactly as the guide tells the owner to (after PR 3: the 2026-11-01 models

@@ -11,7 +11,7 @@ import { TenantOnboardingPolicySource, offersQuestionSetFor } from '@brandspace/
 import { currentEnvironment } from './phase7-context';
 
 /**
- * PR A (smart Copilot, D-604) — HOW COMPLETE THE BRAND'S KNOWLEDGE IS.
+ * PR A (smart Copilot, D-605) — HOW COMPLETE THE BRAND'S KNOWLEDGE IS.
  *
  * DISPLAY AND GUIDANCE, NEVER A PROMPT OF FACTS. The brand profile's fields
  * that are filled, plus the key questions answered, from the same Q19

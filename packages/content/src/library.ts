@@ -432,7 +432,7 @@ export class ContentLibraryService {
      */
     readonly templateId?: string | null | undefined;
     /**
-     * PR A (smart Copilot, D-604) — WHO WROTE THE WORDS. Absent: the person
+     * PR A (smart Copilot, D-605) — WHO WROTE THE WORDS. Absent: the person
      * typed them (HUMAN, no request). The Copilot passes AI_GENERATED and the
      * gateway request that wrote the caption, so provenance stays honest
      * (D-65): the draft is still created by the person, through this same

@@ -14,6 +14,7 @@ import { publishingGaps, type PublishingProviderShape } from '../../../server/pu
 import { translator } from '../../../i18n/messages';
 import { SUPPORT_COOKIE } from '../../../server/support-cookie';
 import { getConsoleMode } from '../../../server/console-mode-cookie';
+import { currentConsoleColourScheme } from '../../../server/colour-scheme';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,6 +91,7 @@ export default async function ConsoleLayout({
       // Presentation only (D-307). Read AFTER the actor is resolved and never
       // passed to anything that authorizes.
       mode={await getConsoleMode()}
+      scheme={await currentConsoleColourScheme()}
       support={
         supportGrant
           ? {

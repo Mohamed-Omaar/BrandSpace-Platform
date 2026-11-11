@@ -54,7 +54,7 @@ import {
 } from './phase7-context';
 
 /**
- * PR A (smart Copilot, D-603/D-604) — ONE MESSAGE, STREAMED, WITH TOOLS.
+ * PR A (smart Copilot, D-604/D-605) — ONE MESSAGE, STREAMED, WITH TOOLS.
  *
  * `POST /v1/copilot/stream` answers as server-sent events:
  *

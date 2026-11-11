@@ -500,10 +500,11 @@ function RailNav({
 
 /** What the rail draws: everything in it comes from the page being shown. */
 /**
- * LF: the Look & feel theme's logo, when the owner set one. `src` is the logo
- * for the surface the reader sees; `darkSrc`, when present, is swapped in
- * under `prefers-color-scheme: dark` (a reader following their device); `mark`
- * stands in for the brand glyph. Absent, the rail draws the original wordmark.
+ * LF: the Look & feel theme's logo, when the owner set one. `src` is the
+ * light logo; `darkSrc`, when present, is drawn instead wherever the page is
+ * dark (`<html data-color-scheme>`, or `system` on a dark device — PR E);
+ * `mark` stands in for the brand glyph. Absent, the rail draws the original
+ * wordmark.
  */
 export interface ShellLogo {
   readonly src?: string | undefined;
@@ -684,12 +685,16 @@ function RailLogo({
       </span>
       <span className="bsp-sb-wordmark bsp-nl bs-brand-text bsp-ltr">
         {logo?.src ? (
-          <picture>
-            {logo.darkSrc ? (
-              <source media="(prefers-color-scheme: dark)" srcSet={logo.darkSrc} />
-            ) : null}
+          logo.darkSrc ? (
+            // PR E: both are on the page; `<html data-color-scheme>` shows one
+            // (tokens.css), so a switch needs no new render.
+            <>
+              <img className="bs-theme-logo bs-theme-logo-light" src={logo.src} alt={wordmark} />
+              <img className="bs-theme-logo bs-theme-logo-dark" src={logo.darkSrc} alt={wordmark} />
+            </>
+          ) : (
             <img className="bs-theme-logo" src={logo.src} alt={wordmark} />
-          </picture>
+          )
         ) : (
           wordmark
         )}

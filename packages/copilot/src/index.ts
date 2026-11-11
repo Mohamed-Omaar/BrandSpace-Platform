@@ -121,7 +121,7 @@ export {
 export { productFactsLines, readableSize, typeName } from './product-facts';
 export type { ProductFacts } from './product-facts';
 
-// PR A (smart Copilot, D-604) — the tool loop.
+// PR A (smart Copilot, D-605) — the tool loop.
 export {
   AGENT_TOOLS,
   IMAGE_FORMAT_KEYS,

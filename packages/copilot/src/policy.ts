@@ -34,7 +34,7 @@ export interface CopilotPolicy {
     readonly maxRequestChars: number;
     readonly retentionDays: number;
   };
-  /** PR A (D-604) — the tool loop's bounds. */
+  /** PR A (D-605) — the tool loop's bounds. */
   readonly agent: {
     readonly maxRounds: number;
     readonly maxInputTokensPerMessage: number;

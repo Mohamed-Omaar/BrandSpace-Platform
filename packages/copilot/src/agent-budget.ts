@@ -1,7 +1,7 @@
 import type { ChatTurn, ToolSpec } from '@brandspace/ai-gateway';
 
 /**
- * PR A (smart Copilot, D-604) — THE MESSAGE'S INPUT BUDGET.
+ * PR A (smart Copilot, D-605) — THE MESSAGE'S INPUT BUDGET.
  *
  * Owner condition (2026-11-11): cap the worst case of ONE message so that its
  * margin at 4 credits is at least 50%. The loop may make `maxRounds` model

@@ -92,7 +92,7 @@ export async function buildServer() {
    */
   registerAnalyticsRoutes(app);
   registerCopilotRoutes(app);
-  // PR A (smart Copilot, D-604) — the streamed tool loop.
+  // PR A (smart Copilot, D-605) — the streamed tool loop.
   registerCopilotAgentRoutes(app);
   registerAutomationRoutes(app);
 

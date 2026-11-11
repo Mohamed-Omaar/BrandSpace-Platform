@@ -26,7 +26,7 @@ const KINDS = {
   'asset-file': uploadAssetFileAction,
   'composer-media': uploadComposerMediaAction,
   'brand-source': uploadSourceAction,
-  // PR A (smart Copilot, D-604) — an image the person sends the Copilot.
+  // PR A (smart Copilot, D-605) — an image the person sends the Copilot.
   'chat-image': uploadChatImageAction,
 } as const satisfies Record<string, (formData: FormData) => Promise<unknown>>;
 

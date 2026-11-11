@@ -3,7 +3,7 @@ import type { ImageJobPort } from '@brandspace/copilot';
 import type { TenantScopedClient } from '@brandspace/database';
 import { AppError, brandIdQueryFilter } from '@brandspace/shared';
 
-/** PR A (D-604) — the #119 job on a draft's first variant, for the loop and the plan card. */
+/** PR A (D-605) — the #119 job on a draft's first variant, for the loop and the plan card. */
 export function imageJobs(db: TenantScopedClient, workspaceId: string): ImageJobPort {
   return {
     async generate(input) {

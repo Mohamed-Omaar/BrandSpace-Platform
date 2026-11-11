@@ -59,20 +59,20 @@ interface HistoryRow {
   readonly kind: 'message' | 'topic_break';
   readonly purged: boolean;
   readonly createdAt: string;
-  /** PR A (D-604) — "worked on" (an answer) or the images sent (a message). */
+  /** PR A (D-605) — "worked on" (an answer) or the images sent (a message). */
   readonly activity?: {
     readonly worked?: readonly { readonly key: string; readonly state: string }[];
     readonly images?: readonly string[];
   } | null;
 }
 
-/** PR A (D-604) — one "worked on" line while the answer streams. */
+/** PR A (D-605) — one "worked on" line while the answer streams. */
 interface AgentRun {
   readonly key: string;
   readonly status: 'running' | 'done' | 'failed' | 'proposed';
 }
 
-/** PR A (D-604) — a draft or image the Copilot made in this message. */
+/** PR A (D-605) — a draft or image the Copilot made in this message. */
 interface MadeItem {
   readonly kind: 'draft' | 'image';
   readonly contentItemId: string;
@@ -80,7 +80,7 @@ interface MadeItem {
 }
 
 /**
- * PR A (D-604) — READ A SERVER-SENT EVENT STREAM: `event:` and `data:` lines,
+ * PR A (D-605) — READ A SERVER-SENT EVENT STREAM: `event:` and `data:` lines,
  * an empty line between events. Each complete event is handed over at once.
  */
 async function readEvents(
@@ -368,7 +368,7 @@ export function CopilotView({
   const [pageNonce] = useState(() => Math.floor(Math.random() * 0x7fffffff).toString(36));
   const [found, setFound] = useState<readonly HistoryRow[] | null>(null);
   const [price, setPrice] = useState<string | null>(null);
-  // PR A (D-604) — the answer as it streams, what it worked on, what it made.
+  // PR A (D-605) — the answer as it streams, what it worked on, what it made.
   const [streamText, setStreamText] = useState('');
   const [runs, setRuns] = useState<readonly AgentRun[]>([]);
   const [made, setMade] = useState<readonly MadeItem[]>([]);
@@ -515,7 +515,7 @@ export function CopilotView({
     }).format(day);
   };
 
-  /** PR A (D-604) — a stored message, with what it carried: images sent, work done. */
+  /** PR A (D-605) — a stored message, with what it carried: images sent, work done. */
   const historyText = (row: HistoryRow): string => {
     const body = row.body ?? '';
     const images = row.activity?.images?.length ?? 0;
@@ -553,14 +553,14 @@ export function CopilotView({
     : [
         ...shown,
         ...messages,
-        // PR A (D-604) — the answer, word by word, while it arrives.
+        // PR A (D-605) — the answer, word by word, while it arrives.
         ...(busy && streamText !== ''
           ? [{ id: 'a-streaming', author: 'assistant' as const, text: streamText }]
           : []),
       ];
 
   /*
-   * PR A (smart Copilot, D-604) — ONE MESSAGE, ANSWERED AS A STREAM.
+   * PR A (smart Copilot, D-605) — ONE MESSAGE, ANSWERED AS A STREAM.
    *
    * The Copilot reads what it needs (each read is a "worked on" line), may
    * make drafts and images, and answers word by word. What needs the person
@@ -726,7 +726,7 @@ export function CopilotView({
     }
   };
 
-  /** PR A (D-604) — an image for the Copilot to read, uploaded to the library first. */
+  /** PR A (D-605) — an image for the Copilot to read, uploaded to the library first. */
   const attachImage = async (file: File): Promise<void> => {
     setImageState('uploading');
     const form = new FormData();
@@ -847,7 +847,7 @@ export function CopilotView({
     return step ? t(`copilot.tool.${step.messageKey}` as MessageKey) : toolKey;
   };
 
-  // PR A (D-604) — what the Copilot worked on in this message ("Read the Brand Kit").
+  // PR A (D-605) — what the Copilot worked on in this message ("Read the Brand Kit").
   const agentTools: readonly CopilotToolRun[] = runs
     .filter((run) => run.status !== 'proposed')
     .map((run, index) => ({
@@ -1056,7 +1056,7 @@ export function CopilotView({
               {refusal(plan)}
             </Banner>
           ) : null}
-          {/* PR A (D-604) — what the Copilot's reads found, as the read-only card showed. */}
+          {/* PR A (D-605) — what the Copilot's reads found, as the read-only card showed. */}
           {plan.inspection && plan.inspection.length > 0 ? (
             <InspectionResults
               calls={plan.inspection}
@@ -1370,7 +1370,7 @@ export function CopilotView({
         <CopilotBody
           // PR B — one composer, page and panel: "Message Copilot…".
           labels={{ ...labels, promptPlaceholder: t('copilot.messagePlaceholder') }}
-          // PR A (D-604) — the dots until the first word, then the words themselves.
+          // PR A (D-605) — the dots until the first word, then the words themselves.
           state={busy && streamText === '' ? 'streaming' : proposedAction ? 'approval' : 'idle'}
           messages={
             panel && conversation.length === 0
@@ -1392,7 +1392,8 @@ export function CopilotView({
             : {})}
           {...(proposedAction ? { proposedAction } : {})}
           onApprove={() => void confirm()}
-          onReject={() => void reject()}
+          // ONE Cancel (owner decision, 2026-11-11): the plan card's. The
+          // approval region above draws none without `onReject`.
           extra={
             <>
               {conversationCards}
@@ -1431,7 +1432,7 @@ export function CopilotView({
                   attach: {
                     label: t('copilot.attachFile'),
                     onFile: (file: File) => {
-                      // PR A (D-604) — an image is for the Copilot to read; a
+                      // PR A (D-605) — an image is for the Copilot to read; a
                       // document is a Brand Brain source, as before.
                       if (file.type.startsWith('image/')) {
                         void attachImage(file);
@@ -1449,7 +1450,7 @@ export function CopilotView({
                   onStop: () => {
                     setStops((count) => count + 1);
                     void post('/api/copilot/stop', turn);
-                    // PR A (D-604) — closing the stream cancels the model call.
+                    // PR A (D-605) — closing the stream cancels the model call.
                     streamAbort.current?.abort();
                   },
                   stopLabel: t('copilot.stop'),

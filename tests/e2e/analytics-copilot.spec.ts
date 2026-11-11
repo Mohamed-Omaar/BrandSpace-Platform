@@ -316,9 +316,13 @@ test.describe('the AI Copilot', () => {
     if ((await settle(page)) === 'plan') {
       // Outcome 1. THE CONFIRMATION IS IN FRONT OF THE ACTION, not beside it.
       await expect(page.getByTestId('copilot-confirm')).toBeVisible();
-      // The plan card's own Cancel: the screen also draws the design system's
-      // approval region for the same plan, with a second Cancel.
+      // EXACTLY ONE Cancel, and it is the plan card's: the approval region
+      // above the composer draws none (owner decision, 2026-11-11).
+      await expect(page.getByTestId('copilot-reject')).toHaveCount(1);
       await expect(page.getByTestId('copilot-plan').getByTestId('copilot-reject')).toBeVisible();
+      await expect(page.getByTestId('copilot-approval').getByTestId('copilot-reject')).toHaveCount(
+        0,
+      );
       // And nothing has executed yet: there is no result until it is confirmed.
       await expect(page.getByTestId('copilot-result')).toHaveCount(0);
       return;
@@ -339,11 +343,19 @@ test.describe('the AI Copilot', () => {
 
     if ((await settle(page)) !== 'plan') return; // The refusal branch; covered above.
 
-    const reject = page.getByTestId('copilot-plan').getByTestId('copilot-reject');
-    await expect(reject).toBeVisible();
+    // Exactly one Cancel on the page, the plan card's.
+    const reject = page.getByTestId('copilot-reject');
+    await expect(reject).toHaveCount(1);
+    await expect(page.getByTestId('copilot-plan').getByTestId('copilot-reject')).toBeVisible();
+    const confirmed: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().endsWith('/api/copilot/confirm')) confirmed.push(request.url());
+    });
     await reject.click();
     await expect(page.getByTestId('copilot-plan')).toHaveCount(0);
     await expect(page.getByTestId('copilot-result')).toHaveCount(0);
+    // Cancelling runs nothing: no confirmation was ever sent.
+    expect(confirmed).toEqual([]);
   });
 
   test('the assistant never shows a model name, a prompt or a credential', async ({ page }) => {
@@ -1138,8 +1150,11 @@ test.describe('P6-12 · copilot and automations', () => {
     await page.getByTestId('copilot-propose').click();
     const outcome = await settle(page);
     if (outcome !== 'plan') return; // a refusal is an honest answer too
-    const reject = page.getByTestId('copilot-plan').getByTestId('copilot-reject');
+    const reject = page.getByTestId('copilot-reject');
     if ((await reject.count()) === 0) return; // a read-only plan needs no decision
+    // Exactly one Cancel, the plan card's.
+    await expect(reject).toHaveCount(1);
+    await expect(page.getByTestId('copilot-plan').getByTestId('copilot-reject')).toHaveCount(1);
     const cancelled = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/copilot/cancel') && response.request().method() === 'POST',

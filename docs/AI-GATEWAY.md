@@ -1048,7 +1048,7 @@ timeout or filter, idempotent replay, both ceilings and the sum rule (including 
 against PostgreSQL), the currency rule, the egress rules, the leak check, and that no customer response
 carries a provider cost.
 
-## 19. Conversations, tools, streaming and Stop (PR A, D-604)
+## 19. Conversations, tools, streaming and Stop (PR A, D-605)
 
 A text request may carry, all optional:
 

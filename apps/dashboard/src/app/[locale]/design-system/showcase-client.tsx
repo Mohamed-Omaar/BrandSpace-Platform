@@ -303,6 +303,9 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
       }}
       attachments={testId ? [ar ? 'دليل-العلامة.pdf' : 'brand-guide.pdf'] : []}
       proposedAction={copilotState === 'approval' ? sampleProposedAction(locale) : undefined}
+      // The catalogue shows the region on its own, with its Cancel; the
+      // Copilot screen leaves it to the plan card.
+      onReject={() => undefined}
       disabled
     />
   );

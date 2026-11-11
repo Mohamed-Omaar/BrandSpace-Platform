@@ -186,7 +186,7 @@ export interface AiTextInput {
   readonly prompt: string;
   readonly untrustedContext?: readonly string[];
   /**
-   * PR A (smart Copilot, D-604) — the conversation after the instruction, the
+   * PR A (smart Copilot, D-605) — the conversation after the instruction, the
    * tools the model may call, and (in the user turns) the images a person sent.
    * Absent for every task that sends one prompt.
    */
@@ -233,7 +233,7 @@ export interface AiGatewayRequest {
    */
   readonly accept?: (output: AiOutput) => void | Promise<void>;
   /**
-   * PR A (smart Copilot, D-604) — IS THIS OUTPUT CHARGED?
+   * PR A (smart Copilot, D-605) — IS THIS OUTPUT CHARGED?
    *
    * The Copilot's tool loop makes several calls for ONE message and charges
    * the message once: a call that ends in tool calls answers `false` and
@@ -242,10 +242,10 @@ export interface AiGatewayRequest {
    * every successful output is charged, as before.
    */
   readonly chargeWhen?: (output: AiOutput) => boolean;
-  /** PR A (D-604) — each piece of a text answer as it arrives. In memory only. */
+  /** PR A (D-605) — each piece of a text answer as it arrives. In memory only. */
   readonly onDelta?: (text: string) => void;
   /**
-   * PR A (D-604) — THE PERSON PRESSED STOP. Aborts the running attempt; the
+   * PR A (D-605) — THE PERSON PRESSED STOP. Aborts the running attempt; the
    * request ends CANCELLED, its reservation is released and nothing is
    * charged. Never retried, never sent to the next model.
    */
@@ -295,7 +295,7 @@ export type AiOutput =
   | {
       readonly kind: 'text';
       readonly text: string;
-      /** PR A (D-604) — the tools the model asked to run. Absent: a final answer. */
+      /** PR A (D-605) — the tools the model asked to run. Absent: a final answer. */
       readonly toolCalls?: readonly ToolCallRequest[];
     }
   | {
@@ -1011,7 +1011,7 @@ export class AiGateway {
         const attemptMs = Math.min(remainingMs, attemptTimeoutMsFor(route, provider.timeoutMs));
         lastAttemptMs = attemptMs;
         const timer = setTimeout(() => controller.abort(), attemptMs);
-        // PR A (D-604) — Stop aborts this attempt too.
+        // PR A (D-605) — Stop aborts this attempt too.
         const stop = () => controller.abort();
         request.signal?.addEventListener('abort', stop, { once: true });
         if (request.signal?.aborted) controller.abort();
@@ -1077,7 +1077,7 @@ export class AiGateway {
            */
           const metered =
             request.chargeWhen && !request.chargeWhen(output)
-              ? 0n // PR A (D-604): a tool-calling step of a message; the answer is charged.
+              ? 0n // PR A (D-605): a tool-calling step of a message; the answer is charged.
               : creditsChargedMilli(usage, creditRule, multiplier);
           const charged = metered > args.reservationEstimate ? args.reservationEstimate : metered;
           this.#reportOverrun(config.reservationOverrunAlertPercent, {
@@ -1113,7 +1113,7 @@ export class AiGateway {
         } catch (error) {
           lastError = error;
           if (request.signal?.aborted) {
-            // PR A (D-604) — STOPPED: no retry, no next model, nothing charged.
+            // PR A (D-605) — STOPPED: no retry, no next model, nothing charged.
             clearTimeout(timer);
             request.signal.removeEventListener('abort', stop);
             await this.#finishCancelled(requestId, reservationId, attempted, modelKey);
@@ -1248,7 +1248,7 @@ export class AiGateway {
     try {
       if (input.kind === 'text') {
         /*
-         * PR A (D-604) — IMAGES ONLY TO A MODEL THAT READS THEM. A model the
+         * PR A (D-605) — IMAGES ONLY TO A MODEL THAT READS THEM. A model the
          * catalogue does not declare `supportsVision` is skipped like an
          * unavailable one, so the chain moves to the next; nothing is charged.
          */
@@ -1845,7 +1845,7 @@ export class AiGateway {
 
   /** Read back what was recorded, so the caller and the database cannot disagree. */
   /**
-   * PR A (D-604) — THE PERSON STOPPED THE ANSWER. The reservation is released
+   * PR A (D-605) — THE PERSON STOPPED THE ANSWER. The reservation is released
    * in full and the request ends CANCELLED with nothing charged — the status
    * `ai_request` has carried for exactly this since PR B, and the one
    * `ai_request_no_charge_unless_succeeded` keeps at zero.
@@ -1938,7 +1938,7 @@ function worstCaseUsage(request: AiGatewayRequest, route: ResolvedRoute): UsageU
 }
 
 /**
- * PR A (D-604) — input tokens assumed per chat image when sizing a
+ * PR A (D-605) — input tokens assumed per chat image when sizing a
  * reservation: a 2048×2048 image is 4,096 patches × 1.2 at the most common
  * multiplier. Above what one image costs, never below.
  */

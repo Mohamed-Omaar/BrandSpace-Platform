@@ -7,7 +7,7 @@ import { uploadIntoLibrary } from '../../../server/asset-upload';
 
 const log = createLogger({ context: { component: 'dashboard.copilot.chat-image' } });
 
-/** PR A (smart Copilot, D-604) — what the chat sends a model: images only, at most 8 MB. */
+/** PR A (smart Copilot, D-605) — what the chat sends a model: images only, at most 8 MB. */
 const CHAT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const MAX_CHAT_IMAGE_BYTES = 8 * 1024 * 1024;
 

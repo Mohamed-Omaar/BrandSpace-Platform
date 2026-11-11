@@ -12,7 +12,7 @@ import {
 import { CreditLedgerService, type CreditPolicy } from '@brandspace/entitlements';
 
 /**
- * PR A (smart Copilot, D-604) — WHAT THE GATEWAY GUARANTEES THE TOOL LOOP,
+ * PR A (smart Copilot, D-605) — WHAT THE GATEWAY GUARANTEES THE TOOL LOOP,
  * against the real ledger and `ai_request`.
  *
  *   - a step that only asked for tools settles at ZERO credits (its provider

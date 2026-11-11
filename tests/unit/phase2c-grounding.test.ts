@@ -279,7 +279,7 @@ const NON_GENERATIVE_READERS: ReadonlyMap<string, string> = new Map([
   ['apps/dashboard/src/server/setup-wizard.ts', 'SETUP STATE: which setup steps are done'],
   [
     'apps/api/src/routes/copilot-knowledge.ts',
-    "GUIDANCE (PR A, D-604): the Copilot's brand knowledge % counts filled profile fields and answered key questions from the Q19 completeness, and names the next missing one by its configured wording — counts only, never fact text, never a prompt of facts",
+    "GUIDANCE (PR A, D-605): the Copilot's brand knowledge % counts filled profile fields and answered key questions from the Q19 completeness, and names the next missing one by its configured wording — counts only, never fact text, never a prompt of facts",
   ],
   [
     'apps/dashboard/src/server/home-prototype.ts',

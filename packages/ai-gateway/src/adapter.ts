@@ -91,7 +91,7 @@ export interface TextRequest {
    * Optional: an adapter that does not care never has to look.
    */
   readonly outputFormat?: 'text' | 'json';
-  /** PR A (D-604) — the turns after the instruction; the instruction is `prompt`. */
+  /** PR A (D-605) — the turns after the instruction; the instruction is `prompt`. */
   readonly conversation?: readonly ChatTurn[];
   readonly tools?: readonly ToolSpec[];
   /** Called with each piece of the answer as it arrives. Absent: one answer at the end. */
@@ -99,7 +99,7 @@ export interface TextRequest {
 }
 
 /*
- * PR A (smart Copilot, D-604) — A CONVERSATION, TOOLS, IMAGES AND STREAMING.
+ * PR A (smart Copilot, D-605) — A CONVERSATION, TOOLS, IMAGES AND STREAMING.
  *
  * All optional: a task that sends one prompt is unchanged. The Copilot sends
  * its turns as `conversation`, offers `tools` the model may call, attaches the
@@ -139,7 +139,7 @@ export interface ToolSpec {
 
 export interface TextResult {
   readonly text: string;
-  /** PR A (D-604) — the tools the model asked to run instead of (or before) answering. */
+  /** PR A (D-605) — the tools the model asked to run instead of (or before) answering. */
   readonly toolCalls?: readonly ToolCallRequest[];
   readonly usage: UsageUnits;
   /** What the provider says it used, when it differs from what was asked for. */

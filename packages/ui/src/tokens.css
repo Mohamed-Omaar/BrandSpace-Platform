@@ -687,6 +687,15 @@
   --bs-lit-ffffff-a1: rgba(255, 255, 255, 0.1);
   --bs-lit-ffffff-a35: rgba(255, 255, 255, 0.35);
   --bs-lit-ffffff-a62: rgba(255, 255, 255, 0.62);
+  --bs-lit-5223b8: #5223b8;
+  --bs-nav-pill-quiet: #8a8a92;
+  --bs-ambient-strength: 1;
+  --bs-field-edge-quiet: transparent;
+  --bs-gradient-overview-hero:
+    radial-gradient(circle at 72% 28%, rgba(255, 153, 185, 0.55), transparent 30%),
+    radial-gradient(circle at 28% 80%, rgba(255, 221, 21, 0.52), transparent 35%),
+    linear-gradient(135deg, #f7f3ff, #fff);
+  --bs-lit-ffffff-a68: rgba(255, 255, 255, 0.68);
   --bs-lit-ffffff-a7: rgba(255, 255, 255, 0.7);
   --bs-lit-ffffff-a75: rgba(255, 255, 255, 0.75);
   --bs-lit-ffffff-a85: rgba(255, 255, 255, 0.85);
@@ -1107,7 +1116,9 @@ h4 {
 .bs-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(var(--bs-ambient-blur));
+  /* PR E: `opacity()` multiplies the orb's own opacity, so the dark palette can
+     soften the light behind the frame through one token. */
+  filter: blur(var(--bs-ambient-blur)) opacity(var(--bs-ambient-strength));
   /* PERF A (owner, D-595): THE ORBS ARE STILL. The prototype drifted them
      (`@keyframes float`, 16 s, alternate), which repainted three 100px-blurred
      layers behind the frame on every frame. They now rest where the drift
@@ -2323,6 +2334,48 @@ html[dir='rtl'] input[type='week'] {
   inline-size: auto;
   max-inline-size: 100%;
   object-fit: contain;
+}
+/*
+ * PR E — THE CONTROL CENTER'S APPEARANCE ROW in the profile menu: the same row
+ * `menuItemStyle()` draws for sign-out, as a class (a client button cannot
+ * take the server's inline style without a new literal), with the value at the
+ * end.
+ */
+.bs-console-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bsp-rem-0-5);
+  inline-size: 100%;
+  min-block-size: var(--bsp-rem-2-5);
+  padding-inline: var(--bsp-rem-1);
+  padding-block: var(--bsp-rem-0-5);
+  border-radius: var(--bsp-rem-0-75);
+  border: 0;
+  background: transparent;
+  color: var(--bs-text-primary);
+  font: inherit;
+  font-size: var(--bsp-fs-11);
+  line-height: var(--bsp-rem-1);
+  text-align: start;
+  cursor: pointer;
+}
+.bs-console-menu-item:hover {
+  background: var(--bs-surface-muted);
+}
+/* PR E: with a light and a dark logo both on the page, the page's scheme shows
+   one, so switching never waits for a new render. */
+:root[data-color-scheme='dark'] .bs-theme-logo-light,
+:root:not([data-color-scheme='dark']) .bs-theme-logo-dark {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-color-scheme='system'] .bs-theme-logo-light {
+    display: none;
+  }
+  :root[data-color-scheme='system'] .bs-theme-logo-dark {
+    display: block;
+  }
 }
 .bs-theme-logo-mark {
   display: block;

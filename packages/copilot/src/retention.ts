@@ -90,7 +90,7 @@ export async function pruneCopilot(input: {
             where: { id: { in: staleMessages.map((row) => row.id) } },
             // BOTH COLUMNS TOGETHER. The CHECK constraint refuses a purge stamp
             // without a cleared body, so a half-applied purge is unrepresentable.
-            // PR A (D-604, owner condition) — "worked on" and the ids of the
+            // PR A (D-605, owner condition) — "worked on" and the ids of the
             // images sent go with the words, on the same retention.
             data: { body: null, bodyPurgedAt: now, activity: Prisma.DbNull },
           })

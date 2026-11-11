@@ -394,7 +394,7 @@ export const COPILOT_TOOLS = [
   },
 
   /*
-   * PR A (smart Copilot, D-603/D-604) — AN IMAGE FOR A DRAFT, through the #119
+   * PR A (smart Copilot, D-604/D-605) — AN IMAGE FOR A DRAFT, through the #119
    * generation job (attached to the draft's first variant when ready). The
    * tool loop runs it without a card while the message's image spend stays
    * under `copilot.agent.autoSpendLimitCredits`; above it, it is proposed and

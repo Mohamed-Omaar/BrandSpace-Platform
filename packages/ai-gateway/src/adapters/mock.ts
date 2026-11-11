@@ -610,7 +610,7 @@ function factChangeStep(
 }
 
 /*
- * PR A (smart Copilot, D-604) — THE TOOL LOOP, AS A MODEL WOULD PLAY IT.
+ * PR A (smart Copilot, D-605) — THE TOOL LOOP, AS A MODEL WOULD PLAY IT.
  *
  * Keyword-driven and deterministic, so the E2E suite exercises the real path:
  * a request about a post makes a DRAFT (and, when it asks for an image, then
@@ -890,7 +890,7 @@ export class MockProviderAdapter implements AiProviderAdapter {
 
   async generateText(request: TextRequest, ctx: AdapterContext): Promise<TextResult> {
     await this.#enter(request.modelKey, 'generateText', ctx);
-    // PR A (D-604) — the Copilot's tool loop, played deterministically.
+    // PR A (D-605) — the Copilot's tool loop, played deterministically.
     if (request.conversation) return agentTurn(request, ctx);
 
     const context = request.untrustedContext ?? [];

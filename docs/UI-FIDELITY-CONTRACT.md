@@ -2649,3 +2649,24 @@ under Generate, in the existing `.bsp-gen-hint` style. No new class, colour or l
 - The file card lists the waiting facts' titles (a plain list in the card's own text style) and
   adds "Reject all" in the existing secondary button style beside Approve all and Review; an
   already-added file reads "This file is already in Brand Brain."
+
+### 6.3.82 PR E — dark mode (D-600)
+
+The prototype has no dark scheme; dark mode is an **approved design-system extension** (§4.2,
+D-582's generated palette), and light mode is unchanged token for token.
+
+- **The Appearance item applies at once** — on the page, in the person's other tabs, and on every
+  page reached afterwards — in the dashboard and, new, in the Control Center (profile menu →
+  Appearance; in safe mode only the original look's dark palette is there). The item keeps the
+  menu row's look (`.bsp-menu-item`, value at the end); the Control Center's is
+  `.bs-console-menu-item`, the sign-out row's geometry as a class.
+- **Dark palette rules** (all at the generator, so every look follows): fields have a 3:1 edge in
+  dark (`--bs-field-edge-quiet` is transparent in light, so the prototype's filled fields are
+  untouched there); glass takes the surface's lightness; lines are a step lighter than the
+  surface; secondary greys are 4.5:1 on every dark ground; gradients darken; the ambient light and
+  the hero blobs are softer; the current rail item's quiet count is measured on its pill.
+- **Unchanged on purpose:** the abstract artwork and its ink (a picture), the social post previews
+  (each platform's own light look), the brand glyph (a logo).
+- **Proof:** `tests/e2e/pr-e-dark-mode.spec.ts` (switching without a reload; axe and painted
+  contrast on every main page in dark, en and ar, desktop and phone) and
+  `tests/unit/pr-e-dark-palette.test.ts`.

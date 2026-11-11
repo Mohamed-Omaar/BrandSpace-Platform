@@ -1,7 +1,7 @@
 import type { ToolCallRequest } from '../adapter';
 
 /**
- * PR A (smart Copilot, D-604) — READING A STREAMED CHAT ANSWER.
+ * PR A (smart Copilot, D-605) — READING A STREAMED CHAT ANSWER.
  *
  * The provider sends server-sent events: `data: {json}` lines, one chunk of
  * the answer each, ending with `data: [DONE]`. Text arrives as

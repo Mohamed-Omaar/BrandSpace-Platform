@@ -244,7 +244,7 @@ export async function executionContextFor(input: {
     retention: input.retention,
     externalActions: externalActions(db),
     automations,
-    // PR A (D-604) — `post.generate_image`, confirmed from a card.
+    // PR A (D-605) — `post.generate_image`, confirmed from a card.
     images: imageJobs(db, workspaceId),
   });
 }
@@ -942,7 +942,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
           { prisma: getPrisma(), timeoutMs: COPILOT_CONFIRM_TRANSACTION_MS },
         );
 
-        // PR A (D-604) — a confirmed image starts now that its job row is committed.
+        // PR A (D-605) — a confirmed image starts now that its job row is committed.
         for (const call of outcome.toolCalls) {
           if (
             call.toolKey === 'post.generate_image' &&

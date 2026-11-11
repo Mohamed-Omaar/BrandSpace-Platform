@@ -60,7 +60,7 @@ export async function proxyCopilot(request: Request, upstreamPath: string): Prom
 }
 
 /**
- * PR A (smart Copilot, D-604) — THE ANSWER AS A STREAM.
+ * PR A (smart Copilot, D-605) — THE ANSWER AS A STREAM.
  *
  * The same session handling as `proxyCopilot`, but the upstream body is
  * PASSED THROUGH as it arrives (server-sent events) rather than read whole,

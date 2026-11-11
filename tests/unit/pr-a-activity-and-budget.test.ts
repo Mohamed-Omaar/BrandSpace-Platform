@@ -14,7 +14,7 @@ import {
 } from '../../packages/copilot/src/agent-budget';
 
 /**
- * PR A (D-604) — THE OWNER'S CONDITIONS ON THE SQL APPROVAL (2026-11-11).
+ * PR A (D-605) — THE OWNER'S CONDITIONS ON THE SQL APPROVAL (2026-11-11).
  *
  *   1. `copilot_message.activity` holds only short step labels and ids — no
  *      customer content, no tool result — under a size cap enforced in code;

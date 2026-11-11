@@ -17,14 +17,14 @@ import { findTool } from './tools';
 import { estimatePrompt, fitPrompt, type PromptParts } from './agent-budget';
 
 /**
- * PR A (smart Copilot, D-604) — THE COPILOT'S TOOL LOOP.
+ * PR A (smart Copilot, D-605) — THE COPILOT'S TOOL LOOP.
  *
  * WHAT CHANGED FROM THE PLAN-PROPOSER. The model used to answer once with a
  * JSON plan, and every step ran after the reply. It now WORKS: it calls a
  * read tool, sees the result, reasons on it, calls another or answers — up to
  * `maxRounds` model calls per message. The answer streams word by word.
  *
- * WHAT IT MAY DO WITHOUT ASKING (owner, D-603): read, write a post DRAFT, and
+ * WHAT IT MAY DO WITHOUT ASKING (owner, D-604): read, write a post DRAFT, and
  * make an image for a draft while the message's image spend stays under the
  * configured limit. Everything else it may only PROPOSE — scheduling,
  * publishing, Brand Brain edits, campaigns, and any image over the limit: the

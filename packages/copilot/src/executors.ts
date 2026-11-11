@@ -83,12 +83,12 @@ export interface ExecutorContext {
    * cannot compose automations.
    */
   readonly automations?: AutomationRulePort | undefined;
-  /** PR A (D-604) — the #119 image job, for `post.generate_image`. */
+  /** PR A (D-605) — the #119 image job, for `post.generate_image`. */
   readonly images?: ImageJobPort | undefined;
 }
 
 /**
- * PR A (smart Copilot, D-604) — QUEUE AN IMAGE FOR A DRAFT. The API's
+ * PR A (smart Copilot, D-605) — QUEUE AN IMAGE FOR A DRAFT. The API's
  * implementation enqueues a `CreativeGenerationJob` on the draft's first
  * variant (the job attaches it when ready) and starts it after the
  * transaction commits; the recovery sweep finishes it if that start is lost.

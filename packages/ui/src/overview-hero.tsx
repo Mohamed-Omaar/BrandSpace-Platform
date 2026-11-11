@@ -99,7 +99,7 @@ export function OverviewHero({
               borderRadius: radiusTokens.full,
               // Translucent white on the wash, so the pill picks up whatever
               // the gradient is doing behind it rather than fighting it.
-              background: 'rgba(255, 255, 255, 0.68)',
+              background: 'var(--bs-lit-ffffff-a68)',
               ...typographyTokens.overline,
               letterSpacing: 'normal',
               textTransform: 'none',

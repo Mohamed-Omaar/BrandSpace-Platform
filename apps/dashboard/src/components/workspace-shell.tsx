@@ -2,7 +2,6 @@ import { headers } from 'next/headers';
 import { currentColourScheme } from '../server/colour-scheme';
 import { activeLook, logoHref } from '../server/theme';
 import { systemClock } from '@brandspace/shared';
-import { nextColourScheme } from '@brandspace/shared/theme';
 import { Suspense, type ReactNode } from 'react';
 import {
   CustomerShell,
@@ -41,6 +40,7 @@ import { GlobalCopilot } from './global-copilot';
 import { NotificationsBell } from './notifications-bell';
 import { loadNotificationFeed } from '../app/[locale]/notifications/feed';
 import { NotesPopover } from './notes-popover';
+import { AppearanceMenuItem } from './appearance-menu-item';
 import { loadNotesPopover } from '../app/[locale]/notes/popover-feed';
 import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
@@ -486,7 +486,6 @@ export async function WorkspaceShell({
   // P1: the person's light / dark / device choice, cycled by the account menu —
   // the same answer the page's `<html>` was rendered with.
   const scheme = await currentColourScheme();
-  const nextScheme = nextColourScheme(scheme);
   // LF: the theme's logo, when the owner set one, for the surface this person sees.
   const themeLogo = (await activeLook()).logo;
   const lightLogo = themeLogo.light ? logoHref('light', themeLogo.light) : undefined;
@@ -494,8 +493,10 @@ export async function WorkspaceShell({
   const logo =
     lightLogo || darkLogo || themeLogo.mark
       ? {
-          src: scheme === 'dark' ? (darkLogo ?? lightLogo) : (lightLogo ?? darkLogo),
-          darkSrc: scheme === 'system' && lightLogo ? darkLogo : undefined,
+          // PR E: both logos are on the page and the scheme on `<html>` picks
+          // one (tokens.css), so a switch shows the right logo at once.
+          src: lightLogo ?? darkLogo,
+          darkSrc: lightLogo ? darkLogo : undefined,
           mark: themeLogo.mark ? logoHref('mark', themeLogo.mark) : undefined,
         }
       : undefined;
@@ -1104,13 +1105,18 @@ export async function WorkspaceShell({
       >
         {t('account.language')}
       </PrototypeMenuLink>
-      <PrototypeMenuLink
-        href={`/${locale}/appearance?to=${nextScheme}&back=${encodeURIComponent(localeHref(locale))}`}
-        testId="account-appearance"
-        trailing={<b>{t(`appearance.${scheme}`)}</b>}
-      >
-        {t('account.appearance')}
-      </PrototypeMenuLink>
+      {/* PR E: applied at once, on this page and in every other tab. */}
+      <AppearanceMenuItem
+        locale={locale}
+        back={localeHref(locale)}
+        scheme={scheme}
+        label={t('account.appearance')}
+        names={{
+          light: t('appearance.light'),
+          dark: t('appearance.dark'),
+          system: t('appearance.system'),
+        }}
+      />
       <form action={signOutAction} style={{ margin: 0 }}>
         <input type="hidden" name="locale" value={locale} />
         <SubmitButton role="menuitem" data-testid="sign-out" className="bsp-menu-item bsp-sign-out">

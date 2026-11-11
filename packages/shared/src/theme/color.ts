@@ -188,7 +188,8 @@ export function hueDistance(a: number, b: number): number {
  * The generated dark counterpart of a light-theme colour (LF dark mode).
  *   - Opaque neutrals invert their lightness: white surfaces become deep
  *     grey, ink text becomes near-white.
- *   - Translucent light neutrals (glass) become translucent dark glass;
+ *   - Translucent light neutrals (glass) become translucent dark glass at the
+ *     dark surface's lightness (PR E);
  *     translucent dark ones (shadows, scrims) stay as they are.
  *   - Pale tints become deep tinted surfaces; deep colours become light; the
  *     saturated middle is lifted until it reads on a dark ground.
@@ -198,6 +199,11 @@ export function darkCounterpart(colour: Rgba): Rgba {
   const neutral = c.c < 0.025;
   if (colour.a < 1) {
     if (c.l < 0.5) return colour;
+    // PR E: white glass takes the dark SURFACE's lightness, the same rule as an
+    // opaque near-white below. It used to fall to 0.12, darker than the solid
+    // surface, so a glass card read as a hole in the page and the fields on it
+    // as raised.
+    if (neutral && c.l > 0.9) return fromOklch({ ...c, l: 0.18 + (c.l - 0.9) * 0.6 });
     return fromOklch({ ...c, l: Math.max(0.12, 1.12 - c.l), c: c.c * 0.6 });
   }
   if (neutral) {
@@ -206,7 +212,9 @@ export function darkCounterpart(colour: Rgba): Rgba {
     if (c.l > 0.9) return fromOklch({ ...c, l: 0.18 + (c.l - 0.9) * 0.6 });
     return fromOklch({ ...c, l: Math.min(0.96, Math.max(0.12, 1.12 - c.l)) });
   }
-  if (c.l > 0.85 && c.c < 0.1) return fromOklch({ ...c, l: 0.3, c: Math.min(c.c, 0.08) });
+  // PR E: 0.27, not 0.3 — deep enough that the secondary greys keep 4.5:1 on a
+  // tinted panel (a strategy month, a selected row), still a step off the surface.
+  if (c.l > 0.85 && c.c < 0.1) return fromOklch({ ...c, l: 0.27, c: Math.min(c.c, 0.08) });
   if (c.l < 0.35) return fromOklch({ ...c, l: 0.86, c: c.c * 0.6 });
   return fromOklch({ ...c, l: Math.max(c.l, 0.72) });
 }

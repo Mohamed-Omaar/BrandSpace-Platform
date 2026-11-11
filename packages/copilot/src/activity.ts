@@ -1,5 +1,5 @@
 /**
- * PR A (smart Copilot, D-604) — WHAT `copilot_message.activity` MAY HOLD.
+ * PR A (smart Copilot, D-605) — WHAT `copilot_message.activity` MAY HOLD.
  *
  * Owner condition (SQL approval, 2026-11-11): only SHORT STEP LABELS AND IDS —
  * never customer content, never a tool's result — with a size cap enforced in

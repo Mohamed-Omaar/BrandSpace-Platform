@@ -30,7 +30,7 @@ import {
 } from './fixtures';
 
 /**
- * PR A (smart Copilot, D-603/D-604) — ONE MESSAGE THROUGH THE REAL LOOP.
+ * PR A (smart Copilot, D-604/D-605) — ONE MESSAGE THROUGH THE REAL LOOP.
  *
  * The real orchestrator, the API's real tool port and the real gateway and
  * ledger, against a scripted provider: asked for a post, the model calls

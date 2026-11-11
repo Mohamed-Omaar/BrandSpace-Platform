@@ -2504,7 +2504,7 @@ const copilotSchema = z.object({
     .default({}),
 
   /*
-   * PR A (smart Copilot, D-603/D-604) — THE TOOL LOOP.
+   * PR A (smart Copilot, D-604/D-605) — THE TOOL LOOP.
    *
    * `maxRounds`: model calls one message may make (each read is a round); the
    * last one is asked to answer with no tools, so a message always ends.

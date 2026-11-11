@@ -1,4 +1,4 @@
-# PR A — activating the smart Copilot's model and price on staging (D-604)
+# PR A — activating the smart Copilot's model and price on staging (D-605)
 
 The tool loop works on staging's current configuration as soon as PR A is deployed: `copilot.chat`
 keeps its route (gpt-5.4-mini → gpt-5.4-nano) and its price. These three edits switch it to the

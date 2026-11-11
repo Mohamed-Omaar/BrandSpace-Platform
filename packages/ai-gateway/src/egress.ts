@@ -111,7 +111,7 @@ export interface EgressRequest {
   readonly body?: string;
   readonly signal: AbortSignal;
   /**
-   * PR A (D-604) — each piece of a SUCCESSFUL (2xx) answer as it arrives,
+   * PR A (D-605) — each piece of a SUCCESSFUL (2xx) answer as it arrives,
    * decoded as UTF-8 across chunk boundaries. The whole body is still
    * returned at the end; the same size cap applies.
    */

@@ -7,7 +7,7 @@ import type { AdapterContext } from '@brandspace/ai-gateway';
 import { ChatStreamReader } from '../../packages/ai-gateway/src/adapters/openai-stream';
 
 /**
- * PR A (smart Copilot, D-604) — TOOLS, IMAGES AND STREAMING IN THE ADAPTER.
+ * PR A (smart Copilot, D-605) — TOOLS, IMAGES AND STREAMING IN THE ADAPTER.
  *
  * A local server stands in for the provider; requests go through the real
  * pinned egress transport, so the streamed answer arrives in real chunks

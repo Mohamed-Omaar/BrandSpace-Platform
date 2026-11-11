@@ -101,10 +101,18 @@ export function PrototypeHeroCanvas({ className }: { readonly className?: string
     let raf = 0;
     let alive = true;
     // LF: the ground and the blobs' strength are tokens, so the Look & feel
-    // dark palette darkens them; unset, the canvas's own values.
-    const css = getComputedStyle(canvas);
-    const ground = css.getPropertyValue('--bs-hero-ground').trim() || GROUND;
-    const strength = Number(css.getPropertyValue('--bs-hero-blob-strength').trim() || 1);
+    // dark palette darkens them; unset, the canvas's own values. PR E: read
+    // again whenever the page's scheme changes (the Appearance item, or the
+    // device under "device"), so a switch repaints the canvas at once instead
+    // of after the next page load.
+    let ground = GROUND;
+    let strength = 1;
+    const readTokens = () => {
+      const css = getComputedStyle(canvas);
+      ground = css.getPropertyValue('--bs-hero-ground').trim() || GROUND;
+      strength = Number(css.getPropertyValue('--bs-hero-blob-strength').trim() || 1);
+    };
+    readTokens();
     const size = () => {
       const rect = canvas.getBoundingClientRect();
       width = rect.width || 1100;
@@ -149,6 +157,18 @@ export function PrototypeHeroCanvas({ className }: { readonly className?: string
       if (!reduce && !document.hidden && alive && !raf) raf = requestAnimationFrame(draw);
     };
     document.addEventListener('visibilitychange', visible);
+    const rescheme = () => {
+      readTokens();
+      // Under reduced motion the canvas is drawn once; draw it again.
+      if (reduce) draw(0);
+    };
+    const schemeAttribute = new MutationObserver(rescheme);
+    schemeAttribute.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-color-scheme'],
+    });
+    const device = window.matchMedia('(prefers-color-scheme: dark)');
+    device.addEventListener('change', rescheme);
     size();
     if (reduce) draw(0);
     else raf = requestAnimationFrame(draw);
@@ -156,6 +176,8 @@ export function PrototypeHeroCanvas({ className }: { readonly className?: string
       alive = false;
       cancelAnimationFrame(raf);
       document.removeEventListener('visibilitychange', visible);
+      schemeAttribute.disconnect();
+      device.removeEventListener('change', rescheme);
     };
   }, []);
   return <canvas ref={ref} aria-hidden="true" className={className} />;

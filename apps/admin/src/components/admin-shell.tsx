@@ -31,6 +31,8 @@ import { simpleCopy } from '../i18n/simple';
 import type { ConsoleMode } from '../server/console-mode';
 import { ADVANCED_ONLY_PATHS, consoleNavigation, type ConsoleIcon } from './console-nav';
 import { AdvancedScreenNotice, ConsoleLanguageSwitch, ModeSwitch } from './mode-switch';
+import { ConsoleAppearanceMenuItem } from './appearance-menu-item';
+import type { ColourScheme } from '@brandspace/shared/theme';
 
 const ICONS: Record<ConsoleIcon, ReactNode> = {
   home: <HomeIcon size={20} />,
@@ -66,6 +68,7 @@ export function AdminShell({
   permissionKeys,
   environment,
   mode,
+  scheme,
   support = null,
   children,
 }: {
@@ -89,6 +92,8 @@ export function AdminShell({
   environment: string;
   /** Simple or Advanced (D-307). Presentation only — never an access input. */
   mode: ConsoleMode;
+  /** PR E: the operator's light / dark / device choice this page was drawn in. */
+  scheme: ColourScheme;
   support?: SupportBannerState | null;
   children: ReactNode;
 }) {
@@ -242,6 +247,16 @@ export function AdminShell({
           role={actorRole}
           initials={initialsFrom(actorEmail)}
         >
+          {/* PR E: each operator's light / dark / device choice, applied at once. */}
+          <ConsoleAppearanceMenuItem
+            scheme={scheme}
+            label={t('nav.appearance')}
+            names={{
+              light: t('appearance.light'),
+              dark: t('appearance.dark'),
+              system: t('appearance.system'),
+            }}
+          />
           <form action={`/${locale}/sign-out`} method="post">
             <button type="submit" role="menuitem" data-testid="sign-out" style={menuItemStyle()}>
               {t('nav.signOut')}

@@ -327,7 +327,7 @@ export interface ConversationMessage {
   readonly purged: boolean;
   readonly createdAt: Date;
   readonly planId: string | null;
-  /** PR A (D-604) — "worked on" and the images sent: ids, keys and states only. */
+  /** PR A (D-605) — "worked on" and the images sent: ids, keys and states only. */
   readonly activity: unknown;
 }
 
@@ -418,7 +418,7 @@ type AcceptedPlan = z.infer<typeof planResponseSchema> & {
   readonly invalidToolKeys?: readonly string[];
 };
 
-/** PR A (smart Copilot, D-604) — what the tool loop starts from. */
+/** PR A (smart Copilot, D-605) — what the tool loop starts from. */
 export interface AgentPrepared {
   readonly sessionId: string;
   readonly brandId: string | null;
@@ -457,7 +457,7 @@ interface PreparedTurn {
   readonly language: 'ar' | 'en';
   readonly gateway: AiGateway;
   readonly request: AiGatewayRequest & { readonly input: { kind: 'text'; prompt: string } };
-  /** PR A (smart Copilot, D-604) — the pieces the tool loop builds its own request from. */
+  /** PR A (smart Copilot, D-605) — the pieces the tool loop builds its own request from. */
   readonly agent: {
     readonly history: readonly { readonly role: 'USER' | 'ASSISTANT'; readonly body: string }[];
     readonly reference: readonly string[];
@@ -1278,7 +1278,7 @@ export class CopilotOrchestrator {
   }
 
   // ---------------------------------------------------------------------------
-  // PR A (smart Copilot, D-604) — the tool loop's hooks into the conversation.
+  // PR A (smart Copilot, D-605) — the tool loop's hooks into the conversation.
   // Each runs inside the short transaction its caller opens (H-4).
   // ---------------------------------------------------------------------------
 
