@@ -15,8 +15,8 @@ import { withPlatformPrisma } from './platform-prisma';
  *
  *   - asked for a post, it shows "Created a post draft", links to the draft
  *     and answers word by word — in English and in Arabic;
- *   - Stop while it writes: "Stopped. Nothing was charged." and the wallet is
- *     unchanged;
+ *   - Stop while it writes: "Stopped. Nothing was charged."; that message is
+ *     stopped, its model call CANCELLED, nothing charged;
  *   - an image sent in the chat is read (the message says it carried one);
  *   - asked for a post with a picture, it starts the image for the draft and
  *     the picture is attached to the draft when ready.
@@ -35,13 +35,6 @@ async function send(page: Page, text: string): Promise<void> {
     .toBe(true);
   await page.getByTestId('copilot-request').press('Enter');
 }
-
-const balance = () =>
-  withPlatformPrisma(
-    async (prisma) =>
-      (await prisma.creditWallet.findUniqueOrThrow({ where: { workspaceId: workspaceId() } }))
-        .balanceMilliCredits,
-  );
 
 for (const locale of ['en', 'ar'] as const) {
   test(`asked for a post, it makes a draft, says what it did and links to it (${locale})`, async ({
@@ -82,14 +75,14 @@ for (const locale of ['en', 'ar'] as const) {
   });
 }
 
-test('Stop while it writes: "Stopped. Nothing was charged." and the wallet is unchanged', async ({
+test('Stop while it writes: "Stopped. Nothing was charged." — the message is stopped and charged nothing', async ({
   page,
 }) => {
   test.setTimeout(120_000);
   await signIn(page, 'en');
   await page.goto(`${DASHBOARD_BASE_URL}/en/copilot`);
-  const before = await balance();
-  await send(page, `Say hello slowly ${randomUUID().slice(0, 6)}`);
+  const sent = `Say hello slowly ${randomUUID().slice(0, 6)}`;
+  await send(page, sent);
   // Words arrive before the end…
   await expect(page.getByTestId('copilot-message-assistant').last()).toContainText('Hello', {
     timeout: 30_000,
@@ -100,7 +93,31 @@ test('Stop while it writes: "Stopped. Nothing was charged." and the wallet is un
     { timeout: 30_000 },
   );
   await expect(page.getByTestId('copilot-propose')).toBeVisible();
-  expect(await balance()).toBe(before);
+  // THIS message, not the shared wallet (other tests spend from it in
+  // parallel): marked stopped, its model call CANCELLED, nothing charged.
+  await expect
+    .poll(
+      () =>
+        withPlatformPrisma(async (prisma) => {
+          const asked = await prisma.copilotMessage.findFirst({
+            where: { workspaceId: workspaceId(), role: 'USER', body: sent },
+            select: { status: true, idempotencyKey: true },
+          });
+          const calls = asked?.idempotencyKey
+            ? await prisma.aiRequest.findMany({
+                where: { idempotencyKey: { startsWith: `copilot:${asked.idempotencyKey}:` } },
+                select: { status: true, creditsChargedMilli: true },
+              })
+            : [];
+          return {
+            message: asked?.status ?? null,
+            cancelled: calls.some((call) => call.status === 'CANCELLED'),
+            charged: calls.reduce((sum, call) => sum + call.creditsChargedMilli, 0n).toString(),
+          };
+        }),
+      { timeout: 30_000 },
+    )
+    .toEqual({ message: 'stopped', cancelled: true, charged: '0' });
 });
 
 test('an image sent in the chat is read with the message', async ({ page }) => {

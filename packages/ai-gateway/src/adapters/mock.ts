@@ -737,7 +737,10 @@ async function agentTurn(request: TextRequest, ctx: AdapterContext): Promise<Tex
           ? 'أرى الصورة التي أرسلتها.'
           : 'I can see the image you sent.'
         : !done && !greeting && material
-          ? material
+          ? // The reply language is the question's, as the instruction asks.
+            arabic
+            ? `بحسب عقل العلامة: ${material}`
+            : material
           : arabic
             ? done
               ? callsSoFar.includes('post__create_draft')

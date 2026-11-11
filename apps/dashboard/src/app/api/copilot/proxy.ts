@@ -89,6 +89,15 @@ export async function proxyCopilotStream(
     return NextResponse.json({ error: { code: 'VALIDATION_FAILED' } }, { status: 422 });
   }
 
+  /*
+   * STOP MUST REACH THE MODEL. Closing the browser's stream cancels the body
+   * handed back below, and that cancel aborts this upstream request: the API
+   * sees its connection close and cancels the running model call. The
+   * request's own signal is passed on too, for a disconnect before the first
+   * byte. Without this the provider would finish an answer nobody reads.
+   */
+  const upstreamAbort = new AbortController();
+  request.signal.addEventListener('abort', () => upstreamAbort.abort(), { once: true });
   try {
     const upstream = await fetch(`${base.replace(/\/$/, '')}${upstreamPath}`, {
       method: 'POST',
@@ -98,14 +107,30 @@ export async function proxyCopilotStream(
         authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(body),
-      signal: request.signal,
+      signal: upstreamAbort.signal,
     });
     const type = upstream.headers.get('content-type') ?? '';
     if (!type.startsWith('text/event-stream') || !upstream.body) {
       const payload: unknown = await upstream.json().catch(() => ({ error: { code: 'INTERNAL' } }));
       return NextResponse.json(payload, { status: upstream.status });
     }
-    return new Response(upstream.body, {
+    const reader = upstream.body.getReader();
+    const passThrough = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        try {
+          const { value, done } = await reader.read();
+          if (done) controller.close();
+          else controller.enqueue(value);
+        } catch {
+          controller.close();
+        }
+      },
+      cancel() {
+        upstreamAbort.abort();
+        void reader.cancel().catch(() => undefined);
+      },
+    });
+    return new Response(passThrough, {
       status: 200,
       headers: {
         'content-type': 'text/event-stream; charset=utf-8',

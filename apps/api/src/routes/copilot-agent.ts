@@ -179,7 +179,9 @@ export function registerCopilotAgentRoutes(app: FastifyInstance): void {
       });
       const controller = new AbortController();
       let finished = false;
-      req.raw.on('close', () => {
+      // The client left (Stop, or the page closed) before the answer ended: the
+      // response's own close — not the request's, which fires once its body is read.
+      raw.on('close', () => {
         if (!finished) controller.abort();
       });
       const send = (event: string, data: unknown) => {
