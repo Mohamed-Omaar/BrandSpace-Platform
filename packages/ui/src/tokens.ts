@@ -899,10 +899,7 @@ export const ambientTokens = {
  */
 export const gradientTokens = {
   /** The Overview hero. Yellow → white → purple, all under 35% opacity. */
-  hero:
-    'radial-gradient(circle at 72% 28%, rgba(255, 153, 185, 0.55), transparent 30%),' +
-    ' radial-gradient(circle at 28% 80%, rgba(255, 221, 21, 0.52), transparent 35%),' +
-    ' linear-gradient(135deg, #F7F3FF, #FFF)',
+  hero: 'var(--bs-gradient-overview-hero)',
   /**
    * `.auth-stage` — the entry screens' ground. An OPAQUE base under two soft
    * washes, which is the reason it exists rather than letting the ambient orbs
@@ -1810,6 +1807,30 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-lit-ffffff-a1', value: 'rgba(255, 255, 255, 0.1)' },
   { name: '--bs-lit-ffffff-a35', value: 'rgba(255, 255, 255, 0.35)' },
   { name: '--bs-lit-ffffff-a62', value: 'rgba(255, 255, 255, 0.62)' },
+  // PR E: the profile card's avatar gradient ends here (`#5223b8`), so dark mode reaches it.
+  { name: '--bs-lit-5223b8', value: '#5223b8' },
+  // PR E: the quiet count on the current rail item, which is an ink pill in
+  // light (the prototype's #8a8a92, 5.6:1 on ink) and a light pill in dark.
+  { name: '--bs-nav-pill-quiet', value: '#8a8a92' },
+  // PR E: how strongly the ambient orbs show (1 in light; the dark palette lowers it).
+  { name: '--bs-ambient-strength', value: '1' },
+  /*
+   * PR E: the edge of a FILLED field (D-55: filled, not outlined) — none in
+   * light, where the design is unchanged; the dark palette draws the 3:1 field
+   * edge here, because a dark fill on a dark card is 1.04:1 (WCAG 1.4.11).
+   */
+  { name: '--bs-field-edge-quiet', value: 'transparent' },
+  /*
+   * PR E: the Overview hero's wash (`gradientTokens.hero`), as a custom property
+   * so the dark palette darkens its colours (theme-css.ts). Value unchanged.
+   */
+  {
+    name: '--bs-gradient-overview-hero',
+    value:
+      '\n    radial-gradient(circle at 72% 28%, rgba(255, 153, 185, 0.55), transparent 30%),\n    radial-gradient(circle at 28% 80%, rgba(255, 221, 21, 0.52), transparent 35%),\n    linear-gradient(135deg, #F7F3FF, #FFF)',
+  },
+  // PR E: the hero's label pill (`.label-pill`, white at .68), so dark mode reaches it.
+  { name: '--bs-lit-ffffff-a68', value: 'rgba(255, 255, 255, 0.68)' },
   { name: '--bs-lit-ffffff-a7', value: 'rgba(255, 255, 255, 0.7)' },
   { name: '--bs-lit-ffffff-a75', value: 'rgba(255, 255, 255, 0.75)' },
   { name: '--bs-lit-ffffff-a85', value: 'rgba(255, 255, 255, 0.85)' },

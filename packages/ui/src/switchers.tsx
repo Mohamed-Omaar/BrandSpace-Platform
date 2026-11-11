@@ -689,7 +689,7 @@ export function ProfileCard({
               blockSize: layoutTokens.railAvatar,
               flexShrink: 0,
               borderRadius: radiusTokens.control,
-              background: `linear-gradient(145deg, ${colorTokens.brandPurple}, #5223B8)`,
+              background: `linear-gradient(145deg, ${colorTokens.brandPurple}, var(--bs-lit-5223b8))`,
               color: colorTokens.brandPurpleInk,
               fontSize: 'var(--bsp-fs-10)',
               fontWeight: 800,

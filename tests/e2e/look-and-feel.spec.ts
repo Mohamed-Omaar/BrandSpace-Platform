@@ -76,8 +76,13 @@ test.describe('Look & feel', () => {
     const css = (await customer.text()).replace(/@font-face \{[^}]*\}/g, '');
     expect(css).toContain(":root:root[data-color-scheme='dark'] {");
     expect(css).not.toMatch(/(^|\n)\s*:root(:root)? \{/);
-    const console = await request.get(`${ADMIN_BASE_URL}/theme.css`);
-    expect((await console.text()).trim()).toBe('');
+    // PR E: in safe mode the Control Center's stylesheet holds only the
+    // ORIGINAL look's dark palette, keyed on the operator's own choice — no
+    // light override, never the owner's theme.
+    const consoleCss = (await (await request.get(`${ADMIN_BASE_URL}/theme.css`)).text()).trim();
+    expect(consoleCss).toContain(":root:root[data-color-scheme='dark'] {");
+    expect(consoleCss).not.toMatch(/(^|\n)\s*:root(:root)? \{/);
+    expect(consoleCss).not.toContain('@font-face');
   });
 
   test("each person's dark choice is theirs: a cookie, and the dark palette", async ({

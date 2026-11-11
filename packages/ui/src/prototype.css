@@ -659,7 +659,7 @@
 }
 /* On the dark current item the prototype keeps `#8a8a92` (5.6:1 on `#111114`). */
 .bsp-nav[aria-current='page'] .bsp-cnt[data-tone='quiet'] {
-  color: var(--bs-lit-8a8a92);
+  color: var(--bs-nav-pill-quiet);
 }
 /* Round 4 — the current item's count is the prototype's white circle with ink figures. */
 .bsp-nav[aria-current='page'] .bsp-cnt[data-tone='ink'] {
@@ -675,7 +675,7 @@
   color: var(--bs-surface);
 }
 .bsp-sbnav[data-ind] .bsp-nav[data-lit] .bsp-cnt[data-tone='quiet'] {
-  color: var(--bs-lit-8a8a92);
+  color: var(--bs-nav-pill-quiet);
 }
 .bsp-sbnav[data-ind] .bsp-nav[data-lit] .bsp-cnt[data-tone='ink'] {
   background: var(--bs-surface);
@@ -1118,6 +1118,13 @@ button.bsp-xcard:hover {
 }
 .bsp-menu-item:hover {
   background: var(--bs-lit-141023-a04);
+}
+/* PR E — a menu row with a value at its end (the Appearance item): the label
+   at the start, the value at the end, as `PrototypeMenuLink` lays out a row
+   with a trailing part. */
+.bsp-menu-item.bsp-menu-split {
+  justify-content: space-between;
+  gap: var(--bsp-px-8);
 }
 /* Sign out: `border-top: 1px solid #f0f0f2; margin-top: 4px; padding: 10px;
    font-weight: 600; color: #b83245`. */
@@ -3287,7 +3294,7 @@ span.bsp-cal-hol {
 /* The prototype's field: `border: 1px solid transparent; background:
    #f5f5f7; border-radius: 12px; padding: 10px 12px; font-size: 13.5px`. */
 .bsp-fdis-control {
-  border: 1px solid transparent;
+  border: 1px solid var(--bs-field-edge-quiet);
   /* The colour only, so a select keeps the prototype's chevron (round 4). */
   background-color: var(--bs-lit-f5f5f7);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
@@ -3856,7 +3863,7 @@ span.bsp-cal-hol {
 /* The brief: `border: 1px solid transparent; background: #f5f5f7;
    border-radius: 12px; padding: 10px 14px; font-size: 14px`. */
 .bsp-st-input {
-  border: 1px solid transparent;
+  border: 1px solid var(--bs-field-edge-quiet);
   background: var(--bs-lit-f5f5f7);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-10) var(--bsp-px-14);
@@ -3870,7 +3877,7 @@ span.bsp-cal-hol {
 .bsp-st-caption {
   min-height: var(--bsp-px-150);
   resize: vertical;
-  border: 1px solid transparent;
+  border: 1px solid var(--bs-field-edge-quiet);
   background: var(--bs-lit-f5f5f7);
   border-radius: calc(var(--bsp-px-14) * var(--bs-radius-scale));
   padding: var(--bsp-px-12) var(--bsp-px-14);
@@ -3982,7 +3989,7 @@ span.bsp-cal-hol {
 .bsp-st-tag-input {
   flex-grow: 1;
   min-width: 0;
-  border: 1px solid transparent;
+  border: 1px solid var(--bs-field-edge-quiet);
   background: var(--bs-lit-f5f5f7);
   border-radius: calc(var(--bsp-px-10) * var(--bs-radius-scale));
   padding: var(--bsp-px-7) var(--bsp-px-12);
@@ -4444,7 +4451,7 @@ span.bsp-cal-hol {
 /* "What is the post about?": `border: 1px solid transparent; background:
    #f5f5f7; border-radius: 12px; padding: 10px 14px; font-size: 14px`. */
 .bsp-st-brief {
-  border: 1px solid transparent;
+  border: 1px solid var(--bs-field-edge-quiet);
   background: var(--bs-lit-f5f5f7);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-10) var(--bsp-px-14);
@@ -4886,7 +4893,7 @@ span.bsp-cal-hol {
 .bs-control.bsp-apr-textarea {
   min-height: var(--bsp-px-70);
   resize: vertical;
-  border: 1px solid transparent;
+  border: 1px solid var(--bs-field-edge-quiet);
   background: var(--bs-lit-f5f5f7);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-10) var(--bsp-px-12);
@@ -6024,7 +6031,7 @@ span.bsp-cal-hol {
 .bs-control.bsp-gen-brief {
   min-height: var(--bsp-px-90);
   resize: vertical;
-  border: 1px solid transparent;
+  border: 1px solid var(--bs-field-edge-quiet);
   background: var(--bs-lit-f5f5f7);
   border-radius: calc(var(--bsp-px-14) * var(--bs-radius-scale));
   padding: var(--bsp-px-12) var(--bsp-px-14);
@@ -7425,7 +7432,7 @@ button.bsp-chip.bsp-bb-q {
 .bs-control.bsp-bb-chat-input {
   flex-grow: 1;
   min-inline-size: 0;
-  border: 1px solid transparent;
+  border: 1px solid var(--bs-field-edge-quiet);
   background: var(--bs-lit-f5f5f7);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-10) var(--bsp-px-14);
@@ -8067,7 +8074,7 @@ img.bsp-pf-art {
   block-size: var(--bsp-px-41) !important;
   min-block-size: 0 !important;
   resize: none;
-  border: 1px solid transparent !important;
+  border: 1px solid var(--bs-field-edge-quiet) !important;
   background: var(--bs-lit-f5f5f7) !important;
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale)) !important;
   padding: var(--bsp-px-10) var(--bsp-px-12) !important;
@@ -9973,7 +9980,7 @@ img.bsp-pf-art {
 .bsp-nts-compose textarea.bs-control {
   min-block-size: var(--bsp-px-70);
   resize: vertical;
-  border: 1px solid transparent;
+  border: 1px solid var(--bs-field-edge-quiet);
   background-color: var(--bs-lit-f5f5f7);
   border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
   padding: var(--bsp-px-10) var(--bsp-px-12);
@@ -11772,7 +11779,7 @@ img.bsp-pf-art {
     select,
     textarea
   ).bs-control {
-  border: 1px solid transparent !important;
+  border: 1px solid var(--bs-field-edge-quiet) !important;
   background: var(--bs-lit-f4f4f5) !important;
   border-radius: calc(var(--bsp-px-14) * var(--bs-radius-scale)) !important;
   padding: var(--bsp-px-14) var(--bsp-px-18) !important;

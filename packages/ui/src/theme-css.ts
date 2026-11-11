@@ -1,7 +1,12 @@
 import {
   BUNDLED_FONTS,
   ORIGINAL_ROLES,
+  contrastOf,
   darkCounterpart,
+  fromOklch,
+  luminance,
+  toOklch,
+  untilReadable,
   darkPalette,
   follow,
   formatColour,
@@ -114,6 +119,120 @@ function writeRoles(out: Map<string, string>, palette: Palette, unless?: Palette
   }
 }
 
+/*
+ * PR E — WHAT THE GENERATED DARK PALETTE GOT WRONG, AND THE RULES THAT FIX IT.
+ *
+ * `darkCounterpart` inverts each colour on its own. Measured on the dark pages
+ * (tests/e2e/pr-e-dark-mode.spec.ts), three kinds of token came out unreadable
+ * because nothing checked them against what they sit on:
+ *
+ *   1. FIELD EDGES. A field's border is a light grey on white; inverted it is
+ *      near-black, darker than the dark surface (1.12:1), so a field had no
+ *      visible edge. In dark it is a grey at 3:1 against the lightest surface a
+ *      field sits on (WCAG 1.4.11).
+ *   2. MID-GREY TEXT. The secondary greys a page sets text in (`--bs-lit-55555c`,
+ *      `--bs-text-subtle`, …) were inverted without a check and fell to 3.4:1.
+ *      Every neutral that reads as text on white (3:1 to 9:1 against white) is
+ *      raised in dark until it is 4.5:1 on the lightest surface text sits on.
+ *   3. LINES. Hairlines and card borders came out darker than the surface, so
+ *      card edges vanished. In dark a line is a step LIGHTER than the surface,
+ *      as dark interfaces draw them.
+ *
+ * Pale tints (a tinted panel, a selected row) count as grounds too.
+ *
+ * And one token keeps its light value: the words printed on the abstract
+ * artwork (`AbstractMedia`), because the artwork stands in for a picture and a
+ * picture does not change with the scheme.
+ */
+const DARK_FIELD_EDGES = [
+  '--bs-control-border',
+  '--bs-control-border-customer',
+  '--bs-control-border-customer-hover',
+] as const;
+const DARK_LINES = [
+  '--bs-hairline',
+  '--bs-card-border',
+  '--bs-border',
+  '--bs-document-rule',
+] as const;
+const DARK_FIXED = ['--bs-media-ink-soft'] as const;
+/** The surfaces text and fields sit on in dark; the lightest one decides. */
+const DARK_GROUNDS = [
+  '--bs-surface',
+  '--bs-app-background',
+  '--bs-ambient-ground',
+  '--bs-shell-surface',
+  '--bs-frame-surface',
+  '--bs-frame-rail',
+  '--bs-control-surface',
+  '--bs-control-surface-hover',
+  '--bs-surface-soft',
+  '--bs-surface-muted',
+  '--bs-surface-lavender',
+  '--bs-surface-lavender-strong',
+  '--bs-brand-purple-tint',
+] as const;
+
+/** A pale tint on white (a tinted panel or row): text sits on it too. */
+function isPaleTint(value: string): boolean {
+  const colour = parseColour(value);
+  if (!colour || colour.a < 1) return false;
+  const c = toOklch(colour);
+  return c.l > 0.85 && c.c >= 0.025 && c.c < 0.1;
+}
+
+/** The lightest of the dark grounds: the one a light foreground must clear. */
+function lightestGround(
+  out: ReadonlyMap<string, string>,
+  light: ReadonlyMap<string, string>,
+): string {
+  let best: string | null = null;
+  const tints = COLOUR_TOKENS.filter((t) => isPaleTint(light.get(t.name) ?? t.value)).map(
+    (t) => t.name,
+  );
+  for (const name of [...DARK_GROUNDS, ...tints]) {
+    const value = out.get(name);
+    const colour = value ? parseColour(value) : null;
+    if (!colour || colour.a < 1) continue;
+    if (best === null || luminance(colour) > luminance(parseColour(best)!)) {
+      best = formatColour(colour);
+    }
+  }
+  return best ?? ORIGINAL_ROLES.text;
+}
+
+/** A neutral that reads as text or an icon on white (3:1 to 9:1). */
+function isMidGreyText(value: string): boolean {
+  const colour = parseColour(value);
+  if (!colour || colour.a < 1 || toOklch(colour).c >= 0.025) return false;
+  const ratio = contrastOf(formatColour(colour), ORIGINAL_ROLES.surface);
+  return ratio >= 3 && ratio <= 9;
+}
+
+/*
+ * PR E — GRADIENTS FOLLOW TOO. A token whose value is a gradient with colour
+ * literals in it (the Overview hero's wash) is not a colour token, so the dark
+ * palette never reached it and the Control Center's hero stayed a white panel
+ * under light text. Each literal in such a value is replaced by its dark
+ * counterpart; a gradient written with `var(--…)` already follows. Shadows and
+ * the focus ring are left alone: their colours are dark on purpose, and
+ * `darkCounterpart` keeps a dark translucent colour as it is anyway.
+ */
+const LITERAL_COLOUR = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g;
+const PAINTED_VALUES = ENTRIES.filter(
+  (e) =>
+    parseColour(e.value) === null &&
+    !/shadow|focus/.test(e.name) &&
+    new RegExp(LITERAL_COLOUR.source).test(e.value),
+);
+
+function darkValue(value: string): string {
+  return value.replace(LITERAL_COLOUR, (literal) => {
+    const colour = parseColour(literal);
+    return colour ? formatColour(darkCounterpart(colour)) : literal;
+  });
+}
+
 /** Every colour token's dark value: generated, then the dark palette's roles. */
 function darkColours(look: ThemeLook): Map<string, string> {
   const light = lightColours(lightPalette(look));
@@ -123,8 +242,41 @@ function darkColours(look: ThemeLook): Map<string, string> {
     out.set(token.name, formatColour(darkCounterpart(parseColour(value)!)));
   }
   writeRoles(out, darkPalette(look));
-  // Home's hero canvas: pastel blobs stay soft on a dark ground.
-  out.set('--bs-hero-blob-strength', '0.35');
+  for (const token of PAINTED_VALUES) out.set(token.name, darkValue(token.value.trim()));
+  const ground = lightestGround(out, light);
+  // 2. Mid-grey text, readable on every ground (the roles already are).
+  for (const token of COLOUR_TOKENS) {
+    if (isMidGreyText(light.get(token.name) ?? token.value)) {
+      out.set(token.name, untilReadable(out.get(token.name)!, ground, 4.5));
+    }
+  }
+  for (const role of ['textSecondary', 'textMuted'] as const) {
+    for (const name of ROLE_TOKENS[role]) out.set(name, untilReadable(out.get(name)!, ground, 4.5));
+  }
+  // 1. Field edges at 3:1, starting from the hover grey so the two stay apart.
+  const edge = untilReadable(out.get('--bs-control-border-customer-hover')!, ground, 3);
+  for (const name of DARK_FIELD_EDGES) out.set(name, edge);
+  out.set('--bs-field-edge-quiet', edge);
+  out.set('--bs-control-border-customer-hover', untilReadable(edge, ground, 4.5));
+  // 3. Lines: a step lighter than the surface.
+  const surface = toOklch(parseColour(out.get('--bs-surface')!)!);
+  for (const name of DARK_LINES) {
+    out.set(name, formatColour(fromOklch({ ...surface, l: Math.min(0.5, surface.l + 0.09) })));
+  }
+  for (const name of DARK_FIXED) {
+    const value = valueOf(name);
+    if (value) out.set(name, value);
+  }
+  // The quiet count on the current rail item: that pill is ink in light and
+  // light in dark, so its grey is measured against the pill, not the page.
+  out.set(
+    '--bs-nav-pill-quiet',
+    untilReadable(valueOf('--bs-nav-pill-quiet')!, out.get('--bs-text-primary')!, 4.5),
+  );
+  // Home's hero canvas and the ambient light behind the frame: soft on a dark
+  // ground, soft enough that text over the brightest blob keeps 4.5:1.
+  out.set('--bs-hero-blob-strength', '0.12');
+  out.set('--bs-ambient-strength', '0.4');
   return out;
 }
 
@@ -398,6 +550,14 @@ export function themeStylesheet(input: unknown, options: ThemeStylesheetOptions 
       (e) => [e.name, e.value.trim()] as [string, string],
     );
     out.push(`${root} {\n${declarations([...aliases, ...ROOT_ALIASES])}\n}`);
+    // PR E: and the LIGHT value of everything the dark palette sets, so a box
+    // previewing light shows light on a Control Center page the operator has
+    // switched to dark (it used to inherit the page's dark values).
+    const light = lightColours(lightPalette(look));
+    const reset = [...darkColours(look).keys()]
+      .map((name) => [name, light.get(name) ?? valueOf(name)?.trim()] as const)
+      .filter((entry): entry is [string, string] => entry[1] !== undefined);
+    out.push(`${root} {\n${declarations(reset)}\n}`);
   }
   if (!isOriginalLook(look)) {
     const light = themeVariables(look);

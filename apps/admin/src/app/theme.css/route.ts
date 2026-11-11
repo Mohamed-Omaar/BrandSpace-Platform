@@ -7,10 +7,13 @@ import { currentEnvironment, getConfigService } from '../../server/platform-cont
  * THE CONTROL CENTER'S LOOK & FEEL STYLESHEET (LF).
  *
  * Safe mode first: "Keep the Control Center on the original look" is ON by
- * default, and while it is on this is EMPTY — the Control Center an owner uses
- * to fix a bad theme never wears that theme. Turned off, the Control Center
- * takes the active look in the owner's default colour scheme. Anything that
- * goes wrong is the original look.
+ * default, and while it is on this holds only the ORIGINAL look's dark palette
+ * (PR E), for an operator who chose dark — the Control Center an owner uses to
+ * fix a bad theme never wears that theme. Turned off, the Control Center takes
+ * the active look. Either way the dark palette is keyed on `<html
+ * data-color-scheme>`, which the layout writes from the operator's choice and
+ * then the owner's default. Anything that goes wrong is the original light
+ * look.
  */
 const log = createLogger({ context: { component: 'admin.theme' } });
 
@@ -18,9 +21,11 @@ export async function GET(request: Request): Promise<Response> {
   let css = '';
   try {
     const theme = await getConfigService().get('theme', currentEnvironment());
-    if (!theme.controlCenterOriginal) {
-      css = `${themeFontFaces(theme.look)}\n${themeStylesheet(theme.look, { app: 'admin', scheme: theme.look.dark.mode })}\n`;
-    }
+    // PR E: keyed on `<html data-color-scheme>` (the operator's own choice,
+    // `currentConsoleColourScheme`), the same rule as the dashboard's.
+    css = theme.controlCenterOriginal
+      ? `${themeStylesheet({}, { app: 'admin', scheme: 'attribute' })}\n`
+      : `${themeFontFaces(theme.look)}\n${themeStylesheet(theme.look, { app: 'admin', scheme: 'attribute' })}\n`;
   } catch (error: unknown) {
     log.warn('The theme could not be read; the original look is used', internalErrorFields(error));
   }
