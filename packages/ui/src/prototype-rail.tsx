@@ -112,7 +112,7 @@ function formRow({
         style={{
           gap: 'var(--bsp-px-10)',
           padding: 'var(--bsp-px-7) var(--bsp-px-8)',
-          background: current ? 'rgba(121, 53, 254, 0.08)' : 'transparent',
+          background: current ? 'var(--bs-lit-7935fe-a08)' : 'transparent',
         }}
       >
         {tile ? (
@@ -153,7 +153,7 @@ function formRow({
           ) : null}
         </span>
         {current ? (
-          <span aria-hidden="true" style={{ color: '#5312c4', fontWeight: 800 }}>
+          <span aria-hidden="true" style={{ color: 'var(--bsp-purple-ink)', fontWeight: 800 }}>
             ✓
           </span>
         ) : null}
@@ -318,7 +318,10 @@ export function PrototypeBrandSwitcher({
           }),
         )}
         {options.length === 0 && emptyLabel ? (
-          <p className="bsp-menu-item" style={{ margin: 0, cursor: 'default', color: '#6a6a72' }}>
+          <p
+            className="bsp-menu-item"
+            style={{ margin: 0, cursor: 'default', color: 'var(--bsp-faint)' }}
+          >
             {emptyLabel}
           </p>
         ) : null}
@@ -333,7 +336,7 @@ export function PrototypeBrandSwitcher({
           style={{
             fontSize: 'var(--bsp-fs-12-5)',
             fontWeight: 600,
-            color: '#5312c4',
+            color: 'var(--bsp-purple-ink)',
             padding: 'var(--bsp-px-7) var(--bsp-px-10)',
           }}
         >

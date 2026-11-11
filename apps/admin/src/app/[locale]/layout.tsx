@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
+import { currentConsoleColourScheme } from '../../server/colour-scheme';
 import {
   SUPPORTED_LOCALES,
   directionForLocale,
@@ -48,12 +49,20 @@ export default async function LocaleLayout({
   const { locale } = await params;
   if (!isSupportedLocale(locale)) notFound();
   const webfont = webfontHref(process.env['BRANDSPACE_WEBFONTS']);
+  // PR E: the operator's light / dark / device choice, decided on the server so
+  // the first paint is already right; `/theme.css` keys the dark palette on it.
+  const scheme = await currentConsoleColourScheme();
   return (
-    <html lang={htmlLangForLocale(locale)} dir={directionForLocale(locale)}>
+    <html
+      lang={htmlLangForLocale(locale)}
+      dir={directionForLocale(locale)}
+      data-color-scheme={scheme}
+    >
       <head>
         {/*
-          LF — the Look & feel theme. Empty while "Keep the Control Center on
-          the original look" is on, which is the default.
+          LF — the Look & feel theme. While "Keep the Control Center on the
+          original look" is on (the default) it holds only the original look's
+          dark palette, for an operator who chose dark (PR E).
         */}
         <link rel="stylesheet" href="/theme.css" />
         {/*

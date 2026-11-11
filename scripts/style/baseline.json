@@ -27,7 +27,7 @@
       "border-width": 185,
       "font-family": 3,
       "letter-spacing": 37,
-      "lit-token": 454,
+      "lit-token": 452,
       "radius": 1,
       "shadow": 23,
       "size": 53,
@@ -509,7 +509,6 @@
       "inline-style": 13
     },
     "packages/ui/src/overview-hero.tsx": {
-      "colour": 1,
       "inline-style": 12
     },
     "packages/ui/src/password-field.tsx": {
@@ -540,7 +539,7 @@
       "inline-style": 1
     },
     "packages/ui/src/prototype-rail.tsx": {
-      "colour": 10,
+      "colour": 6,
       "inline-style": 18,
       "numeric-style": 3
     },
