@@ -1,4 +1,8 @@
--- PR A (smart Copilot, D-604). SQL approved by the owner on <pending>.
+-- PR A (smart Copilot, D-604). SQL approved by the owner on 2026-11-11, with
+-- two conditions met in code: the retention purge clears "activity" with the
+-- message body (`packages/copilot/src/retention.ts`), and "activity" holds only
+-- short step labels and ids under a size cap (`packages/copilot/src/activity.ts`:
+-- at most 24 steps, 2 image ids, 2,048 bytes).
 --
 -- SCHEMA ONLY, ADDITIVE. One NULLABLE column on "copilot_message"; nothing is
 -- backfilled and every existing row keeps NULL. No RLS change: the table keeps

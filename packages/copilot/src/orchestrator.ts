@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { answerActivity, messageActivity } from './activity';
 import { z } from 'zod';
 import {
   writeAuditEvent,
@@ -1295,7 +1296,8 @@ export class CopilotOrchestrator {
           idempotencyKey: input.idempotencyKey,
           role: 'USER',
         },
-        data: { activity: { images: [...input.imageAssetIds] } },
+        // Ids only, capped (`activity.ts`, owner condition).
+        data: { activity: messageActivity(input.imageAssetIds) },
       });
     }
     return {
@@ -1354,7 +1356,7 @@ export class CopilotOrchestrator {
     answer: {
       readonly text: string;
       readonly aiRequestId: string | null;
-      readonly activity: unknown;
+      readonly worked: readonly unknown[];
     },
   ): Promise<{ readonly messageId: string | null }> {
     await this.#db.copilotMessage.createMany({
@@ -1366,7 +1368,8 @@ export class CopilotOrchestrator {
           body: answer.text.slice(0, REPLY_HARD_MAX),
           citations: prepared.citations as unknown as Prisma.InputJsonValue,
           aiRequestId: answer.aiRequestId,
-          activity: answer.activity as Prisma.InputJsonValue,
+          // Step labels and ids only, capped (`activity.ts`, owner condition).
+          activity: answerActivity(answer.worked) as unknown as Prisma.InputJsonValue,
           idempotencyKey: `${input.idempotencyKey}:assistant`,
           correlationId: prepared.correlationId,
           expiresAt: input.expiresAt,

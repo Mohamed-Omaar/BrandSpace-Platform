@@ -1,10 +1,9 @@
-import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import { deterministicPng } from '@brandspace/ai-gateway';
 import { DASHBOARD_BASE_URL } from './apps';
-import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
-import { signIn } from './own-workspace';
+import { CreditLedgerService } from '@brandspace/entitlements';
+import { enter, ownWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
 
 /**
@@ -22,9 +21,30 @@ import { withPlatformPrisma } from './platform-prisma';
  *     the picture is attached to the draft when ready.
  */
 
-const workspaceId = (): string =>
-  (JSON.parse(readFileSync(E2E_CREDENTIALS_FILE, 'utf8')) as E2eAdminCredentials).customer
-    .workspaceId;
+/**
+ * A WORKSPACE OF ITS OWN, with credits through the real ledger: this suite's
+ * turns never land in the conversation the other Copilot suites share.
+ */
+async function fresh(page: Page, label: string, locale: 'en' | 'ar' = 'en'): Promise<string> {
+  const world = await ownWorkspace(`pra-${label}`);
+  await withPlatformPrisma(async (prisma) => {
+    await prisma.creditWallet.upsert({
+      where: { workspaceId: world.workspaceId },
+      create: { workspaceId: world.workspaceId },
+      update: {},
+    });
+    await new CreditLedgerService({ prisma }).grant({
+      workspaceId: world.workspaceId,
+      source: 'PROMOTIONAL_GRANT',
+      credits: 1_000,
+      reason: 'PR A end-to-end allowance',
+      idempotencyKey: `e2e-pra-grant:${world.workspaceId}`,
+    });
+  });
+  await enter(page, world.slug, locale);
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/copilot`);
+  return world.workspaceId;
+}
 
 async function send(page: Page, text: string): Promise<void> {
   await expect
@@ -41,8 +61,7 @@ for (const locale of ['en', 'ar'] as const) {
     page,
   }) => {
     test.setTimeout(120_000);
-    await signIn(page, locale);
-    await page.goto(`${DASHBOARD_BASE_URL}/${locale}/copilot`);
+    const workspaceId = await fresh(page, `draft-${locale}`, locale);
     const tag = randomUUID().slice(0, 6);
     await send(
       page,
@@ -68,7 +87,7 @@ for (const locale of ['en', 'ar'] as const) {
       prisma.contentItem.findUniqueOrThrow({ where: { id: String(itemId) } }),
     );
     expect(item).toMatchObject({
-      workspaceId: workspaceId(),
+      workspaceId,
       status: 'DRAFT',
       origin: 'AI_GENERATED',
     });
@@ -79,8 +98,7 @@ test('Stop while it writes: "Stopped. Nothing was charged." — the message is s
   page,
 }) => {
   test.setTimeout(120_000);
-  await signIn(page, 'en');
-  await page.goto(`${DASHBOARD_BASE_URL}/en/copilot`);
+  const workspaceId = await fresh(page, 'stop');
   const sent = `Say hello slowly ${randomUUID().slice(0, 6)}`;
   await send(page, sent);
   // Words arrive before the end…
@@ -100,7 +118,7 @@ test('Stop while it writes: "Stopped. Nothing was charged." — the message is s
       () =>
         withPlatformPrisma(async (prisma) => {
           const asked = await prisma.copilotMessage.findFirst({
-            where: { workspaceId: workspaceId(), role: 'USER', body: sent },
+            where: { workspaceId, role: 'USER', body: sent },
             select: { status: true, idempotencyKey: true },
           });
           const calls = asked?.idempotencyKey
@@ -122,8 +140,7 @@ test('Stop while it writes: "Stopped. Nothing was charged." — the message is s
 
 test('an image sent in the chat is read with the message', async ({ page }) => {
   test.setTimeout(120_000);
-  await signIn(page, 'en');
-  await page.goto(`${DASHBOARD_BASE_URL}/en/copilot`);
+  await fresh(page, 'image');
   await page.getByTestId('copilot-attach-input').setInputFiles({
     name: `photo-${randomUUID().slice(0, 6)}.png`,
     mimeType: 'image/png',
@@ -145,8 +162,7 @@ test('asked for a post with a picture, the image is made for the draft and attac
   page,
 }) => {
   test.setTimeout(180_000);
-  await signIn(page, 'en');
-  await page.goto(`${DASHBOARD_BASE_URL}/en/copilot`);
+  await fresh(page, 'picture');
   await send(page, `Write a post with a picture ${randomUUID().slice(0, 6)}`);
   await expect(page.getByTestId('copilot-tools')).toContainText('Started an image', {
     timeout: 60_000,

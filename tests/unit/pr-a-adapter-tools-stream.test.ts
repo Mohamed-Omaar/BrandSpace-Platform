@@ -173,7 +173,11 @@ describe('PR A · the adapter speaks conversation, tools and images', () => {
     expect(String(body.messages[1]?.content)).toMatch(/^REFERENCE DATA \(untrusted\):/);
     expect(body.messages[4]?.content).toEqual([
       { type: 'text', text: 'What is in this picture?' },
-      { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgo=' } },
+      {
+        type: 'image_url',
+        // `high`: a bounded image cost the Copilot's budget counts on.
+        image_url: { url: 'data:image/png;base64,iVBORw0KGgo=', detail: 'high' },
+      },
     ]);
     expect(body.messages[5]).toMatchObject({
       role: 'assistant',

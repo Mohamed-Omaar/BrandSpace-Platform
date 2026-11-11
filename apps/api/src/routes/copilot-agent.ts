@@ -85,7 +85,8 @@ const streamSchema = z.object({
   request: z.string().min(1).max(4_000),
   idempotencyKey: z.string().min(8).max(200),
   /** Images the person sent with the message: their own Asset Library ids. */
-  imageAssetIds: z.array(z.string().uuid()).max(4).default([]),
+  // At most two: each counts 3,000 input tokens toward the message's budget.
+  imageAssetIds: z.array(z.string().uuid()).max(2).default([]),
 });
 
 /** The largest image the chat sends to a model. */
@@ -224,6 +225,7 @@ export function registerCopilotAgentRoutes(app: FastifyInstance): void {
             signal: controller.signal,
             limits: {
               maxRounds: admitted.policy.agent.maxRounds,
+              maxInputTokens: admitted.policy.agent.maxInputTokensPerMessage,
               autoSpendLimitMilli: BigInt(admitted.policy.agent.autoSpendLimitCredits) * 1000n,
             },
           },

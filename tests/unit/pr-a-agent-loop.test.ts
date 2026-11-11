@@ -5,6 +5,7 @@ import type {
   AiGatewayResult,
   AiOutput,
 } from '@brandspace/ai-gateway';
+import { estimatePrompt } from '../../packages/copilot/src/agent-budget';
 import {
   AGENT_TOOLS,
   agentToolName,
@@ -64,7 +65,7 @@ interface Harness {
   readonly events: AgentEvent[];
   readonly ran: { key: string; args: Record<string, unknown> }[];
   readonly marks: string[];
-  readonly finished: { text: string; activity: unknown }[];
+  readonly finished: { text: string; worked: unknown }[];
 }
 
 function harness(
@@ -73,6 +74,10 @@ function harness(
     stopAfterRound?: number;
     quote?: bigint;
     maxRounds?: number;
+    maxInputTokens?: number;
+    prepared?: Partial<AgentPrepared>;
+    /** What the provider says it billed per call, when above the estimate. */
+    billed?: number;
     limitMilli?: bigint;
     authorization?: LiveAuthorization;
     /** The fake port refuses this read for want of its permission. */
@@ -98,7 +103,7 @@ function harness(
         modelKey: 'scripted',
         attemptedModelKeys: ['scripted'],
         output,
-        usage: {},
+        usage: options.billed ? { promptTokens: options.billed } : {},
         creditsChargedMilli: charge ? 3000n : 0n,
         providerCostMicroMinor: 1n,
         failureClass: null,
@@ -109,7 +114,7 @@ function harness(
     },
   } as unknown as AiGateway;
   const copilot = {
-    prepareAgentTurn: async () => PREPARED,
+    prepareAgentTurn: async () => ({ ...PREPARED, ...options.prepared }),
     agentStopped: async () => false,
     markAgentTurn: async (_input: unknown, status: string) => {
       h.marks.push(status);
@@ -117,7 +122,7 @@ function harness(
     finishAgentTurn: async (
       _input: unknown,
       _prepared: unknown,
-      answer: { text: string; activity: unknown },
+      answer: { text: string; worked: unknown },
     ) => {
       h.finished.push(answer);
       return { messageId: 'msg-1' };
@@ -159,6 +164,7 @@ function harness(
         signal: controller.signal,
         limits: {
           maxRounds: options.maxRounds ?? 6,
+          maxInputTokens: options.maxInputTokens ?? 1_000_000,
           autoSpendLimitMilli: options.limitMilli ?? 30_000n,
         },
       },
@@ -202,9 +208,7 @@ describe('PR A · the tool loop', () => {
       { type: 'activity', key: 'calendar.lookup', state: 'running' },
       { type: 'activity', key: 'calendar.lookup', state: 'done' },
     ]);
-    expect(h.finished[0]?.activity).toEqual({
-      worked: [{ key: 'calendar.lookup', state: 'done' }],
-    });
+    expect(h.finished[0]?.worked).toEqual([{ key: 'calendar.lookup', state: 'done' }]);
   });
 
   it('the history and the person’s message are real turns; tools are offered by name', async () => {
@@ -381,5 +385,82 @@ describe('PR A · the tool loop', () => {
     const result = await turn();
     expect(result.deniedPermissions).toEqual(['credits.read']);
     expect(result.activity).toEqual([{ key: 'credits.balance', state: 'failed' }]);
+  });
+
+  describe('the message’s input budget (owner condition: worst case ≥ 50% at 4 credits)', () => {
+    const sentEstimate = (h: Harness) =>
+      h.requests.reduce((sum, request) => {
+        if (request.input.kind !== 'text') return sum;
+        return (
+          sum +
+          estimatePrompt({
+            instruction: request.input.prompt,
+            reference: request.input.untrustedContext ?? [],
+            conversation: request.input.conversation ?? [],
+            tools: request.input.tools ?? [],
+          })
+        );
+      }, 0);
+    const LONG = 'أ'.repeat(6_000); // ~4,000 estimated tokens of Arabic
+    const bigPrepared: Partial<AgentPrepared> = {
+      history: Array.from({ length: 10 }, (_, i) => ({
+        role: i % 2 === 0 ? ('USER' as const) : ('ASSISTANT' as const),
+        body: LONG,
+      })),
+      reference: [LONG, LONG],
+    };
+
+    it('a long conversation never sends more than the budget across all its rounds', async () => {
+      const { h, turn } = harness(
+        (request) =>
+          request.input.kind === 'text' && request.input.tools
+            ? call('calendar.lookup', {}, `c-${Math.random()}`)
+            : answer('Done.'),
+        { maxRounds: 3, maxInputTokens: 24_000, prepared: bigPrepared },
+      );
+      await turn();
+      expect(h.requests.length).toBeLessThanOrEqual(3);
+      expect(sentEstimate(h)).toBeLessThanOrEqual(24_000);
+      // The person's own message is never trimmed away.
+      const last = h.requests.at(-1)?.input;
+      const turns = last?.kind === 'text' ? (last.conversation ?? []) : [];
+      expect(
+        turns.some((t) => t.role === 'user' && t.text.startsWith('What is on the calendar')),
+      ).toBe(true);
+    });
+
+    it('a round is offered tools only while an answering round would still fit', async () => {
+      const script: Script = (request) =>
+        request.input.kind === 'text' && request.input.tools
+          ? call('calendar.lookup', {}, `c-${Math.random()}`)
+          : answer('Done.');
+      // Measure the first round (with its tools), then allow about two and a half.
+      const probe = harness(script, { maxRounds: 2 });
+      await probe.turn();
+      const one = sentEstimate({ ...probe.h, requests: probe.h.requests.slice(0, 1) });
+      const budget = Math.floor(one * 2.5);
+      const { h, turn } = harness(script, { maxRounds: 3, maxInputTokens: budget });
+      await turn();
+      // Round 1 can afford a round after it; round 2 cannot afford a third: it answers.
+      expect(
+        h.requests.map((r) => (r.input.kind === 'text' && r.input.tools ? 'tools' : 'answer')),
+      ).toEqual(['tools', 'answer']);
+      expect(sentEstimate(h)).toBeLessThanOrEqual(budget);
+    });
+
+    it('a provider that bills more than the estimate shrinks what is left, and the answer still comes', async () => {
+      const { h, turn } = harness(
+        (request) =>
+          request.input.kind === 'text' && request.input.tools
+            ? call('calendar.lookup', {}, `c-${Math.random()}`)
+            : answer('Done.'),
+        { maxRounds: 3, maxInputTokens: 24_000, billed: 12_000 },
+      );
+      const result = await turn();
+      // 12,000 billed for round 1: projections scale up, so round 2 answers within what is left.
+      expect(h.requests.length).toBe(2);
+      expect(h.requests[1]?.input.kind === 'text' && h.requests[1].input.tools).toBeFalsy();
+      expect(result.answer).toBe('Done.');
+    });
   });
 });

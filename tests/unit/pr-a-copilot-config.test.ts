@@ -7,6 +7,8 @@ import {
   type ConfigDomain,
 } from '@brandspace/config';
 import { ConfigurationAiSource, findCreditRule } from '@brandspace/ai-gateway';
+import { defaultPayload } from '@brandspace/config';
+import { parseCopilotPolicy } from '@brandspace/copilot';
 
 /**
  * PR A (smart Copilot, D-604) — THE THREE EDITS IN `docs/pricing/PR-A-ACTIVATION.md`.
@@ -102,7 +104,7 @@ const RULES = (() => {
     value('pr-a-credit-gpt-5.4'),
     ...doc.costs.map((row) =>
       row['taskKey'] === 'copilot.chat'
-        ? { ...row, baseMilliCredits: 4000, marginInputTokens: 63000 }
+        ? { ...row, baseMilliCredits: 4000, marginInputTokens: 38400 }
         : row,
     ),
   ];
@@ -161,7 +163,7 @@ describe('PR A — the Copilot’s model and price, as the guide activates them'
     expect(d15(report)).toEqual([
       // The current route still allows 800 output tokens; step 3 raises it.
       expect.stringMatching(
-        /^copilot\.chat on gpt-5\.4 earns 26\.9% gross margin at its worst case, below the 65% target/,
+        /^copilot\.chat on gpt-5\.4 earns 53\.4% gross margin at its worst case, below the 65% target/,
       ),
     ]);
     for (const summary of buildImpactPreview('ai.credit-rules', ACTIVE_RULES, RULES).changes.map(
@@ -179,7 +181,7 @@ describe('PR A — the Copilot’s model and price, as the guide activates them'
     expect(errors(report)).toEqual([]);
     expect(d15(report)).toEqual([
       expect.stringMatching(
-        /^copilot\.chat on gpt-5\.4 earns 24\.\d% gross margin at its worst case/,
+        /^copilot\.chat on gpt-5\.4 earns 50\.9% gross margin at its worst case/,
       ),
     ]);
     expect(
@@ -222,5 +224,32 @@ describe('PR A — the Copilot’s model and price, as the guide activates them'
         expect(rule.timeoutMs, rule.taskKey).toBe(before?.['timeoutMs']);
       }
     }
+  });
+
+  it('owner condition: the ENFORCED worst case of one message keeps at least 50% at 4 credits', () => {
+    // The caps the code applies by default, and the prices the guide activates.
+    const agent = parseCopilotPolicy(defaultPayload('copilot')).agent;
+    expect(agent).toMatchObject({ maxRounds: 3, maxInputTokensPerMessage: 24_000 });
+    const model = value('pr-a-model-gpt-5.4');
+    const route = value('pr-a-route-copilot') as { parameters: { maxOutputTokens: number } };
+    const price = value('pr-a-credit-gpt-5.4');
+    const inputRate = Number(model['inputCostPerUnitMicroMinor']); // per 1k tokens
+    const outputRate = Number(model['outputCostPerUnitMicroMinor']);
+    // Every round re-sends the conversation, so the INPUT cap is per message;
+    // the output is per round. No prompt cache is assumed: a ceiling.
+    const worst =
+      (agent.maxInputTokensPerMessage * inputRate) / 1000 +
+      (agent.maxRounds * route.parameters.maxOutputTokens * outputRate) / 1000;
+    const revenue = (Number(price['baseMilliCredits']) * 5_800_000) / 1000;
+    expect(worst).toBe(11_400_000); // $0.114
+    expect(revenue).toBe(23_200_000); // $0.232
+    const margin = (revenue - worst) / revenue;
+    expect(margin).toBeGreaterThanOrEqual(0.5);
+    // The credit row states the same ceiling for the one-call margin check:
+    // 24,000 input + the other rounds' output at the input-rate equivalent.
+    const equivalent =
+      agent.maxInputTokensPerMessage +
+      ((agent.maxRounds - 1) * route.parameters.maxOutputTokens * outputRate) / inputRate;
+    expect(price['marginInputTokens']).toBe(equivalent);
   });
 });

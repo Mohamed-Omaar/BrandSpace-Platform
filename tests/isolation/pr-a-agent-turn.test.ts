@@ -15,6 +15,7 @@ import { CreditLedgerService } from '@brandspace/entitlements';
 import {
   CopilotOrchestrator,
   parseCopilotPolicy,
+  pruneCopilot,
   resolveLiveAuthorization,
   runAgentTurn,
   type AgentEvent,
@@ -244,7 +245,7 @@ describe('PR A · one message through the real loop', () => {
         tools: port(),
         emit: (event) => events.push(event),
         signal: new AbortController().signal,
-        limits: { maxRounds: 6, autoSpendLimitMilli: 30_000n },
+        limits: { maxRounds: 3, maxInputTokens: 24_000, autoSpendLimitMilli: 30_000n },
       },
       {
         workspaceId: fixtures.a.workspaceId,
@@ -344,5 +345,42 @@ describe('PR A · one message through the real loop', () => {
       callId: 'x2',
     });
     expect(outcome.ok).toBe(false);
+  });
+
+  it('owner condition: the retention purge clears "activity" with the words', async () => {
+    const session = await inA((db) =>
+      orchestrator(db).openSession({
+        authorization: auth,
+        brandId: fixtures.a.brandId,
+        surface: 'general',
+        locale: 'EN',
+        expiresAt: null,
+      }),
+    );
+    const past = new Date(Date.now() - 60_000);
+    const row = await platform.copilotMessage.create({
+      data: {
+        workspaceId: fixtures.a.workspaceId,
+        sessionId: session.id,
+        role: 'ASSISTANT',
+        body: 'An answer whose window has passed.',
+        correlationId: randomUUID(),
+        expiresAt: past,
+        activity: { worked: [{ key: 'post.create_draft', state: 'done' }] },
+      },
+    });
+    let purged = 0;
+    // The purge is bounded per pass; other suites' expired rows may come first.
+    for (let pass = 0; pass < 50; pass += 1) {
+      const left = await platform.copilotMessage.findUniqueOrThrow({ where: { id: row.id } });
+      if (left.body === null) break;
+      purged += (await pruneCopilot({ prisma: platform, policy, clock: { now: () => new Date() } }))
+        .messageBodiesPurged;
+    }
+    expect(purged).toBeGreaterThan(0);
+    const after = await platform.copilotMessage.findUniqueOrThrow({ where: { id: row.id } });
+    expect(after.body).toBeNull();
+    expect(after.bodyPurgedAt).not.toBeNull();
+    expect(after.activity).toBeNull();
   });
 });

@@ -68,30 +68,35 @@ gpt-5.4 $2.50 / $15.00 per million input / output tokens, $0.25 cached input.
       "baseMilliCredits": 4000,
       "perUnitMilliCredits": 0,
       "unit": "request",
-      "marginInputTokens": 63000
+      "marginInputTokens": 38400
     },
 ```
 
 3. In the two existing rows whose `"taskKey"` is `"copilot.chat"` (models `gpt-5.4-mini` and
    `gpt-5.4-nano`): change `"baseMilliCredits": 1000` to `"baseMilliCredits": 4000`, and change
-   `"marginInputTokens": 25000` to `"marginInputTokens": 63000`.
+   `"marginInputTokens": 25000` to `"marginInputTokens": 38400`.
 4. **Save draft** → **Validate & preview** must show: 0 errors; exactly ONE margin warning, on
-   `copilot.chat on gpt-5.4` ("earns 26.9% gross margin at its worst case" — the current route still
-   allows 800 output tokens; it reads about 24% after step 3); impact lines only for
+   `copilot.chat on gpt-5.4` ("earns 53.4% gross margin at its worst case" — the current route still
+   allows 800 output tokens; it reads 50.9% after step 3); impact lines only for
    `credit cost "copilot.chat"`. Then **Activate**.
 
-**What 4 credits ($0.232) earns** — one message is up to 4 model calls (`copilot.agent.maxRounds`),
-charged once. Costs from OpenAI's prices, with the prompt cache on rounds 2–4:
+**What 4 credits ($0.232) earns** — one message is at most **3 model calls**
+(`copilot.agent.maxRounds`) sending at most **24,000 input tokens in total**
+(`copilot.agent.maxInputTokensPerMessage`, counted conservatively in code: Arabic at 1.5 characters a
+token, English at 3, an image at 3,000 — two images at most), each call writing at most 1,200 tokens.
+It is charged once. From OpenAI's prices for gpt-5.4 ($2.50 / $15.00 per million):
 
-| Message on gpt-5.4                        | Cost     | Margin |
-| ----------------------------------------- | -------- | ------ |
-| A simple question (1 call)                | ≈ $0.044 | 81%    |
-| With tools (3 calls)                      | ≈ $0.072 | 69%    |
-| Worst case (4 calls, long context, cache) | ≈ $0.176 | 24%    |
+| Message on gpt-5.4                                  | Cost     | Margin    |
+| --------------------------------------------------- | -------- | --------- |
+| A simple question (1 call)                          | ≈ $0.044 | 81%       |
+| With tools (3 calls, prompt cache on calls 2–3)     | ≈ $0.072 | 69%       |
+| **Worst case, enforced** (24,000 in, 3 × 1,200 out) | $0.114   | **50.9%** |
 
-The margin check models no cache, so it states the worst case as 63,000 input tokens plus the 1,200
-output tokens of one call — the same $0.176 — and warns at 24%. On gpt-5.4-mini (the fallback) the
-same message earns 77% or more.
+The worst case ignores the prompt cache, so it is a ceiling, not an estimate. The margin check
+prices one call, so the credit row states the same ceiling as 38,400 input tokens (24,000, plus the
+other two calls' 2,400 output tokens at the input-rate equivalent of 14,400) with the route's 1,200
+output tokens — $0.114 — and warns at 50.9%, below the 65% target. On gpt-5.4-mini (the fallback)
+the same ceiling costs $0.034: 85%.
 
 ## Step 3 — `ai.routing`: the Copilot on gpt-5.4, longer replies
 
@@ -114,7 +119,7 @@ same message earns 77% or more.
 ```
 
 3. **Save draft** → **Validate & preview** must show: 0 errors; the same single margin warning, now
-   about 24% (1,200 output tokens per call);
+   50.9% (1,200 output tokens per call);
    impact exactly one line — `routing rule "copilot.chat" changes: primaryModelKey, fallbackModelKeys, timeoutMs, parameters`.
    Then **Activate**.
 

@@ -748,7 +748,7 @@ export function CopilotView({
         return;
       }
       const assetId = outcome.assetId;
-      setChatImages((current) => [...current, { assetId, name: file.name }].slice(-4));
+      setChatImages((current) => [...current, { assetId, name: file.name }].slice(-2));
       setImageState('idle');
     } catch {
       setImageState('failed');

@@ -14,6 +14,7 @@ import { copilotGenerationFailed, copilotTurnStopped } from './errors';
 import type { AgentPrepared, OrchestratorRun, TurnInput } from './orchestrator';
 import { TurnStoppedError } from './orchestrator';
 import { findTool } from './tools';
+import { estimatePrompt, fitPrompt, type PromptParts } from './agent-budget';
 
 /**
  * PR A (smart Copilot, D-604) — THE COPILOT'S TOOL LOOP.
@@ -429,6 +430,8 @@ export interface AgentActivityEntry {
 
 export interface AgentLimits {
   readonly maxRounds: number;
+  /** The input tokens one message may send across all its rounds (owner condition). */
+  readonly maxInputTokens: number;
   /** Image credits a message may spend without a card, milli-credits. */
   readonly autoSpendLimitMilli: bigint;
 }
@@ -600,10 +603,42 @@ export async function runAgentTurn(
     throw copilotTurnStopped();
   };
 
+  /*
+   * THE MESSAGE'S INPUT BUDGET (owner condition, `agent-budget.ts`). A round
+   * is offered tools only while a following answering round would still fit;
+   * otherwise it is the last. A round that would not fit is trimmed (earlier
+   * turns, then reference, then long tool results) before it is sent.
+   */
+  let reference: readonly string[] = prepared.reference;
+  let earlierTurns = prepared.history.length;
+  let spent = 0;
+  // How much more the provider billed than estimated, at most (never below 1):
+  // every projection is scaled by it, so the answering round keeps its room.
+  let scale = 1;
   for (let round = 1; round <= deps.limits.maxRounds; round += 1) {
     if (await stopped()) return stop();
     // The last round answers: no tools are offered, so the loop always ends.
-    const last = round === deps.limits.maxRounds;
+    let last = round === deps.limits.maxRounds || specs.length === 0;
+    let parts: PromptParts = { instruction, reference, conversation, tools: last ? [] : specs };
+    if (!last && spent + 2 * estimatePrompt(parts) * scale > deps.limits.maxInputTokens) {
+      last = true;
+      parts = { ...parts, tools: [] };
+    }
+    let estimate = estimatePrompt(parts);
+    if (spent + estimate * scale > deps.limits.maxInputTokens) {
+      const fitted = fitPrompt(
+        parts,
+        Math.floor((deps.limits.maxInputTokens - spent) / scale),
+        earlierTurns,
+      );
+      if (!fitted) break;
+      parts = { ...fitted.parts, tools: [] };
+      last = true;
+      earlierTurns = fitted.earlierTurns;
+      reference = fitted.parts.reference;
+      conversation.splice(0, conversation.length, ...fitted.parts.conversation);
+      estimate = estimatePrompt(parts);
+    }
     const result: AiGatewayResult = await deps.gateway.execute({
       workspaceId: input.workspaceId,
       userId: input.authorization.userId,
@@ -613,9 +648,9 @@ export async function runAgentTurn(
       input: {
         kind: 'text',
         prompt: instruction,
-        untrustedContext: prepared.reference,
-        conversation,
-        ...(last || specs.length === 0 ? {} : { tools: specs }),
+        untrustedContext: parts.reference,
+        conversation: [...parts.conversation],
+        ...(last ? {} : { tools: specs }),
       },
       onDelta: (text) => deps.emit({ type: 'delta', text }),
       signal: deps.signal,
@@ -628,6 +663,10 @@ export async function runAgentTurn(
     });
 
     if (result.status === 'CANCELLED' || (await stopped())) return stop();
+    // Spent: what was estimated, or what was billed if the provider counted more.
+    const billed = result.usage.promptTokens ?? 0;
+    spent += Math.max(estimate, billed);
+    if (estimate > 0 && billed > estimate) scale = Math.max(scale, billed / estimate);
     if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
       await deps.run((copilot) => copilot.markAgentTurn(input, 'failed'));
       throw copilotGenerationFailed(result.failureMessage);
@@ -642,7 +681,7 @@ export async function runAgentTurn(
         copilot.finishAgentTurn(input, prepared, {
           text: answer,
           aiRequestId: result.requestId,
-          activity: { worked: activity },
+          worked: activity,
         }),
       );
       // D8 — named from retrieval, never the model; only when nothing was made.
@@ -674,7 +713,32 @@ export async function runAgentTurn(
       conversation.push({ role: 'tool', toolCallId: call.id, text: reply });
     }
   }
-  /* c8 ignore next 2 -- the last round offers no tools, so it always answers. */
+  // The budget left no room for another round: what was said is the answer.
+  if (said.length > 0) {
+    const answer = said.join('\n\n');
+    const finished = await deps.run((copilot) =>
+      copilot.finishAgentTurn(input, prepared, {
+        text: answer,
+        aiRequestId: null,
+        worked: activity,
+      }),
+    );
+    return {
+      answer,
+      brandFactAreas: [],
+      missing: null,
+      saveFact,
+      inspection,
+      deniedPermissions: [...new Set(deniedPermissions)],
+      messageId: finished.messageId,
+      brandId: prepared.brandId,
+      aiRequestId: null,
+      creditsChargedMilli: 0n,
+      activity,
+      proposed,
+      knowledge,
+    };
+  }
   await deps.run((copilot) => copilot.markAgentTurn(input, 'failed'));
   throw copilotGenerationFailed(null);
 

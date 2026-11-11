@@ -145,3 +145,10 @@ export type {
   AgentProposedStep,
 } from './agent';
 export type { AgentPrepared } from './orchestrator';
+export {
+  ACTIVITY_MAX_BYTES,
+  ACTIVITY_MAX_IMAGES,
+  ACTIVITY_MAX_STEPS,
+  answerActivity,
+  messageActivity,
+} from './activity';

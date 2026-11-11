@@ -192,7 +192,9 @@ function chatMessage(turn: ChatTurn): Record<string, unknown> {
       { type: 'text', text: turn.text },
       ...turn.images.map((image) => ({
         type: 'image_url',
-        image_url: { url: `data:${image.mimeType};base64,${image.base64}` },
+        // `high`: a bounded cost (gpt-5.4: at most 2,500 patches × 1.2 =
+        // 3,000 tokens), which the Copilot's message budget counts on.
+        image_url: { url: `data:${image.mimeType};base64,${image.base64}`, detail: 'high' },
       })),
     ],
   };
