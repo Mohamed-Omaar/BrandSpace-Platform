@@ -45,6 +45,10 @@ export type {
   TextResult,
   UsageUnits,
   GeneratedImage,
+  ChatImage,
+  ChatTurn,
+  ToolCallRequest,
+  ToolSpec,
 } from './adapter';
 
 /**

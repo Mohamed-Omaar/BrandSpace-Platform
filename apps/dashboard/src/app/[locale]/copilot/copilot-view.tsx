@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { formatCredits } from '../../../server/composer-editor';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Banner,
   Button,
@@ -59,6 +59,61 @@ interface HistoryRow {
   readonly kind: 'message' | 'topic_break';
   readonly purged: boolean;
   readonly createdAt: string;
+  /** PR A (D-604) — "worked on" (an answer) or the images sent (a message). */
+  readonly activity?: {
+    readonly worked?: readonly { readonly key: string; readonly state: string }[];
+    readonly images?: readonly string[];
+  } | null;
+}
+
+/** PR A (D-604) — one "worked on" line while the answer streams. */
+interface AgentRun {
+  readonly key: string;
+  readonly status: 'running' | 'done' | 'failed' | 'proposed';
+}
+
+/** PR A (D-604) — a draft or image the Copilot made in this message. */
+interface MadeItem {
+  readonly kind: 'draft' | 'image';
+  readonly contentItemId: string;
+  readonly title: string | null;
+}
+
+/**
+ * PR A (D-604) — READ A SERVER-SENT EVENT STREAM: `event:` and `data:` lines,
+ * an empty line between events. Each complete event is handed over at once.
+ */
+async function readEvents(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: string, data: Record<string, unknown>) => void,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let end = buffer.indexOf('\n\n');
+    while (end >= 0) {
+      const block = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      let event = 'message';
+      let data = '';
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += line.slice(5).trim();
+      }
+      if (data !== '') {
+        try {
+          onEvent(event, JSON.parse(data) as Record<string, unknown>);
+        } catch {
+          // A malformed event is skipped; the stream's end decides the outcome.
+        }
+      }
+      end = buffer.indexOf('\n\n');
+    }
+  }
 }
 
 export interface CopilotBrand {
@@ -313,6 +368,14 @@ export function CopilotView({
   const [pageNonce] = useState(() => Math.floor(Math.random() * 0x7fffffff).toString(36));
   const [found, setFound] = useState<readonly HistoryRow[] | null>(null);
   const [price, setPrice] = useState<string | null>(null);
+  // PR A (D-604) — the answer as it streams, what it worked on, what it made.
+  const [streamText, setStreamText] = useState('');
+  const [runs, setRuns] = useState<readonly AgentRun[]>([]);
+  const [made, setMade] = useState<readonly MadeItem[]>([]);
+  const [knowledgePercent, setKnowledgePercent] = useState<number | null>(null);
+  const [chatImages, setChatImages] = useState<readonly { assetId: string; name: string }[]>([]);
+  const [imageState, setImageState] = useState<'idle' | 'uploading' | 'failed'>('idle');
+  const streamAbort = useRef<AbortController | null>(null);
 
   /*
    * THE CONFIRMATION WINDOW IS SHOWN CLOSING, NOT DISCOVERED CLOSED. While a
@@ -452,6 +515,21 @@ export function CopilotView({
     }).format(day);
   };
 
+  /** PR A (D-604) — a stored message, with what it carried: images sent, work done. */
+  const historyText = (row: HistoryRow): string => {
+    const body = row.body ?? '';
+    const images = row.activity?.images?.length ?? 0;
+    if (row.role === 'USER') {
+      return images > 0
+        ? `${body}\n${t('copilot.imagesAttached').replace('{n}', String(images))}`
+        : body;
+    }
+    const worked = (row.activity?.worked ?? []).filter((entry) => entry.state === 'done');
+    if (worked.length === 0) return body;
+    const list = [...new Set(worked.map((entry) => tOr(`copilot.worked.${entry.key}`, entry.key)))];
+    return `${t('copilot.workedOn').replace('{list}', list.join(' · '))}\n\n${body}`;
+  };
+
   const shown: CopilotMessage[] = [];
   let lastDay = '';
   for (const row of found ?? history) {
@@ -466,12 +544,30 @@ export function CopilotView({
         : {
             id: row.id,
             author: row.role === 'USER' ? 'user' : 'assistant',
-            text: row.purged ? t('copilot.purged') : (row.body ?? ''),
+            text: row.purged ? t('copilot.purged') : historyText(row),
           },
     );
   }
-  const conversation: readonly CopilotMessage[] = found ? shown : [...shown, ...messages];
+  const conversation: readonly CopilotMessage[] = found
+    ? shown
+    : [
+        ...shown,
+        ...messages,
+        // PR A (D-604) — the answer, word by word, while it arrives.
+        ...(busy && streamText !== ''
+          ? [{ id: 'a-streaming', author: 'assistant' as const, text: streamText }]
+          : []),
+      ];
 
+  /*
+   * PR A (smart Copilot, D-604) — ONE MESSAGE, ANSWERED AS A STREAM.
+   *
+   * The Copilot reads what it needs (each read is a "worked on" line), may
+   * make drafts and images, and answers word by word. What needs the person
+   * (scheduling, publishing, Brand Brain, campaigns, a costly image) comes
+   * back as the existing plan card. Stop aborts the stream: the running model
+   * call is cancelled and nothing is charged.
+   */
   const propose = async (): Promise<void> => {
     if (request.trim().length === 0 || busy) return;
     setBusy(true);
@@ -480,76 +576,182 @@ export function CopilotView({
     setErrorCode(null);
     setErrorDetails(null);
     setExecution(null);
+    setPlan(null);
+    setToken(null);
+    setStreamText('');
+    setRuns([]);
+    setMade([]);
+    const controller = new AbortController();
+    streamAbort.current = controller;
+    let stopped = false;
     try {
       const active = await openSession();
       if (!active) return;
-
+      const sent = request;
+      const images = chatImages;
       setMessages((current) => [
         ...current,
-        { id: `u-${current.length}`, author: 'user', text: request },
+        {
+          id: `u-${current.length}`,
+          author: 'user',
+          text:
+            images.length > 0
+              ? `${sent}\n${t('copilot.imagesAttached').replace('{n}', String(images.length))}`
+              : sent,
+        },
       ]);
-
       // ONE KEY PER REQUEST TEXT ON THIS PAGE, so a double click replays the
-      // first turn rather than paying for a second. PR B — a stopped turn
-      // moves the counter, so asking again is a new turn.
-      const idempotencyKey = `copilot:${active}:${pageNonce}:${digest(request)}:${stops}`;
+      // first turn rather than paying for a second. A stopped turn moves the
+      // counter, so asking again is a new turn.
+      const idempotencyKey = `copilot:${active}:${pageNonce}:${digest(sent)}:${stops}`;
       setTurn({ sessionId: active, idempotencyKey });
-      const result = (await post('/api/copilot/turn', {
-        sessionId: active,
-        // NO brandId. The session owns its brand; see the turn route (P7-R1).
-        request,
-        idempotencyKey,
-      })) as PlanResponse;
+      setRequest('');
+      setChatImages([]);
 
-      // PR B — STOPPED: no answer, nothing charged, and no error to show.
+      let response: Response;
+      try {
+        response = await fetch('/api/copilot/stream', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: active,
+            // NO brandId. The session owns its brand (P7-R1).
+            request: sent,
+            idempotencyKey,
+            imageAssetIds: images.map((image) => image.assetId),
+          }),
+          signal: controller.signal,
+        });
+      } catch {
+        if (controller.signal.aborted) stopped = true;
+        else setErrorCode('INTERNAL');
+        return;
+      }
       if (
-        result.error?.code === 'CONFLICT' &&
-        (result.error.details as { reason?: unknown } | undefined)?.reason === 'stopped'
+        !(response.headers.get('content-type') ?? '').startsWith('text/event-stream') ||
+        !response.body
       ) {
+        const refused = (await response.json().catch(() => ({ error: { code: 'INTERNAL' } }))) as {
+          error?: { code?: string; details?: Readonly<Record<string, unknown>> };
+        };
+        if (refused.error?.code === 'NOT_FOUND') setSessionId(null);
+        setErrorCode(refused.error?.code ?? 'INTERNAL');
+        setErrorDetails(refused.error?.details ?? null);
+        return;
+      }
+
+      let finished = false;
+      try {
+        await readEvents(response.body, (event, data) => {
+          switch (event) {
+            case 'knowledge':
+              if (typeof data['percent'] === 'number') setKnowledgePercent(data['percent']);
+              break;
+            case 'delta':
+              if (typeof data['text'] === 'string') {
+                const piece = data['text'];
+                setStreamText((current) => current + piece);
+              }
+              break;
+            case 'activity': {
+              const key = String(data['key'] ?? '');
+              const state = data['state'] as AgentRun['status'];
+              setRuns((current) =>
+                state === 'running' ||
+                !current.some((run) => run.key === key && run.status === 'running')
+                  ? [...current, { key, status: state }]
+                  : current.map((run) =>
+                      run.key === key && run.status === 'running' ? { key, status: state } : run,
+                    ),
+              );
+              break;
+            }
+            case 'draft':
+              setMade((current) => [
+                ...current,
+                {
+                  kind: 'draft',
+                  contentItemId: String(data['contentItemId']),
+                  title: typeof data['title'] === 'string' ? data['title'] : null,
+                },
+              ]);
+              break;
+            case 'image':
+              setMade((current) => [
+                ...current,
+                { kind: 'image', contentItemId: String(data['contentItemId']), title: null },
+              ]);
+              break;
+            case 'done': {
+              finished = true;
+              // The card (when something waits for confirmation), the areas
+              // named, the missing-fact notice, the hand-off, what reads found.
+              const card = data['plan'] as PlanResponse | null;
+              if (card) {
+                setPlan(card);
+                setToken(card.confirmationToken ?? null);
+                setNow(Date.now());
+              }
+              break;
+            }
+            case 'stopped':
+              stopped = true;
+              break;
+            case 'error': {
+              const code = typeof data['code'] === 'string' ? data['code'] : 'INTERNAL';
+              if (code === 'NOT_FOUND') setSessionId(null);
+              setErrorCode(code);
+              setErrorDetails(
+                (data['details'] as Readonly<Record<string, unknown>> | null) ?? null,
+              );
+              break;
+            }
+          }
+        });
+      } catch {
+        if (controller.signal.aborted) stopped = true;
+      }
+      if (!finished && controller.signal.aborted) stopped = true;
+      if (finished) await load(active);
+    } finally {
+      if (stopped) {
         setMessages((current) => [
           ...current,
           { id: `a-${current.length}`, author: 'assistant', text: t('copilot.stopped') },
         ]);
-        return;
       }
-      if (result.error?.code) {
-        // A conversation the server no longer admits (expired, or the brand
-        // scope narrowed) is dropped, so the next request opens a fresh one.
-        if (result.error.code === 'NOT_FOUND') setSessionId(null);
-        setErrorCode(result.error.code);
-        setErrorDetails(result.error.details ?? null);
-        return;
-      }
-      setPlan(result);
-      setToken(result.confirmationToken ?? null);
-      setNow(Date.now());
-      // A brand question while Brand Brain is off is answered with the notice,
-      // in the reader's language, never with the model's words (Phase 2C D9).
-      const summary =
-        result.notice === 'brand_brain_off'
-          ? t('copilot.notice.brandBrainOff')
-          : result.notice === 'brand_brain_missing'
-            ? missingSentence(result.missing ?? null)
-            : result.notice === 'permission_denied'
-              ? [...new Set(result.deniedPermissions ?? [])]
-                  .map((key) => denials[key])
-                  .filter((line): line is string => Boolean(line))
-                  .join(' ') || t('copilot.notice.permissionDenied')
-              : result.saveFact
-                ? t('copilot.saveFact.summary')
-                : locale === 'ar'
-                  ? result.summary?.ar
-                  : result.summary?.en;
-      if (summary) {
-        setMessages((current) => [
-          ...current,
-          { id: `a-${current.length}`, author: 'assistant', text: summary },
-        ]);
-      }
-      setRequest('');
-      await load(active);
-    } finally {
+      streamAbort.current = null;
+      setStreamText('');
       setBusy(false);
+    }
+  };
+
+  /** PR A (D-604) — an image for the Copilot to read, uploaded to the library first. */
+  const attachImage = async (file: File): Promise<void> => {
+    setImageState('uploading');
+    const form = new FormData();
+    form.set('file', file);
+    form.set('locale', locale);
+    form.set('brandId', brand.id);
+    try {
+      const response = await fetch('/api/upload/chat-image', {
+        method: 'POST',
+        headers: { 'x-bs-upload': '1' },
+        body: form,
+      });
+      const outcome = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        assetId?: string | null;
+      };
+      if (!outcome.ok || !outcome.assetId) {
+        setImageState('failed');
+        return;
+      }
+      const assetId = outcome.assetId;
+      setChatImages((current) => [...current, { assetId, name: file.name }].slice(-4));
+      setImageState('idle');
+    } catch {
+      setImageState('failed');
     }
   };
 
@@ -622,6 +824,15 @@ export function CopilotView({
     }
   };
 
+  /** PR B — the screens' own refusals for the reads a person may not open. */
+  const refusal = (result: PlanResponse): string | null =>
+    result.notice === 'permission_denied'
+      ? [...new Set(result.deniedPermissions ?? [])]
+          .map((key) => denials[key])
+          .filter((line): line is string => Boolean(line))
+          .join(' ') || t('copilot.notice.permissionDenied')
+      : null;
+
   const steps = plan?.steps ?? [];
   const external = plan?.highestActionClass === 'EXTERNAL_OR_DESTRUCTIVE';
   const expiresAt = plan?.confirmationExpiresAt ? Date.parse(plan.confirmationExpiresAt) : null;
@@ -635,6 +846,21 @@ export function CopilotView({
     const step = steps.find((entry) => entry.toolKey === toolKey);
     return step ? t(`copilot.tool.${step.messageKey}` as MessageKey) : toolKey;
   };
+
+  // PR A (D-604) — what the Copilot worked on in this message ("Read the Brand Kit").
+  const agentTools: readonly CopilotToolRun[] = runs
+    .filter((run) => run.status !== 'proposed')
+    .map((run, index) => ({
+      id: `run-${index}`,
+      title: tOr(`copilot.worked.${run.key}`, run.key),
+      detail:
+        run.status === 'running'
+          ? t('copilot.worked.running')
+          : run.status === 'failed'
+            ? t('copilot.worked.failed')
+            : '',
+      status: run.status === 'running' ? 'running' : run.status === 'failed' ? 'failed' : 'done',
+    }));
 
   const tools: readonly CopilotToolRun[] = steps.map((step) => {
     const call =
@@ -687,6 +913,60 @@ export function CopilotView({
    */
   const conversationCards = (
     <>
+      {knowledgePercent !== null ? (
+        <p data-testid="copilot-knowledge" className="bs-cpa-note">
+          {t('copilot.knowledge').replace('{percent}', String(knowledgePercent))}
+        </p>
+      ) : null}
+      {made.length > 0 ? (
+        <ul data-testid="copilot-made" className="bs-cpa-list">
+          {made.map((item, index) => (
+            <li key={`${item.kind}-${item.contentItemId}-${index}`} dir="auto">
+              {item.kind === 'draft' ? (
+                <Link
+                  href={`/${locale}/content/compose?item=${item.contentItemId}`}
+                  className={buttonClass('neutral')}
+                  data-testid="copilot-open-draft"
+                >
+                  {t('copilot.openDraft').replace('{title}', item.title ?? '')}
+                </Link>
+              ) : (
+                <span data-testid="copilot-image-coming" className="bs-cpa-note">
+                  {t('copilot.imageComing')}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {chatImages.length > 0 || imageState !== 'idle' ? (
+        <div data-testid="copilot-chat-images" dir="auto" className="bs-cpa-list">
+          {chatImages.map((image) => (
+            <span key={image.assetId} className="bs-cpa-note">
+              {t('copilot.imageReady').replace('{name}', image.name)}{' '}
+              <button
+                type="button"
+                className={buttonClass('ghost')}
+                onClick={() =>
+                  setChatImages((current) =>
+                    current.filter((entry) => entry.assetId !== image.assetId),
+                  )
+                }
+              >
+                {t('copilot.removeImage')}
+              </button>
+            </span>
+          ))}
+          {imageState === 'uploading' ? (
+            <span className="bs-cpa-note">{t('copilot.imageUploading')}</span>
+          ) : null}
+          {imageState === 'failed' ? (
+            <Banner tone="error" testId="copilot-image-failed">
+              {t('copilot.imageFailed')}
+            </Banner>
+          ) : null}
+        </div>
+      ) : null}
       {errorCode ? (
         <Banner tone="error" testId="copilot-error">
           {aiLimitMessage(
@@ -766,6 +1046,28 @@ export function CopilotView({
                 </Link>
               </span>
             </Banner>
+          ) : null}
+          {/*
+            PR B, kept by PR A — A READ THE PERSON MAY NOT OPEN is refused the way
+            its own screen refuses: that screen's sentence, never the model's.
+          */}
+          {refusal(plan) ? (
+            <Banner tone="info" testId="copilot-permission-denied">
+              {refusal(plan)}
+            </Banner>
+          ) : null}
+          {/* PR A (D-604) — what the Copilot's reads found, as the read-only card showed. */}
+          {plan.inspection && plan.inspection.length > 0 ? (
+            <InspectionResults
+              calls={plan.inspection}
+              title={t('copilot.inspection.title')}
+              stepTitle={(toolKey: string) => tOr(`copilot.worked.${toolKey}`, toolKey)}
+              t={tOr}
+              number={number}
+              time={time}
+              rateMetricKeys={rateMetricKeys}
+              locale={locale}
+            />
           ) : null}
         </div>
       ) : null}
@@ -1068,7 +1370,8 @@ export function CopilotView({
         <CopilotBody
           // PR B — one composer, page and panel: "Message Copilot…".
           labels={{ ...labels, promptPlaceholder: t('copilot.messagePlaceholder') }}
-          state={busy ? 'streaming' : proposedAction ? 'approval' : 'idle'}
+          // PR A (D-604) — the dots until the first word, then the words themselves.
+          state={busy && streamText === '' ? 'streaming' : proposedAction ? 'approval' : 'idle'}
           messages={
             panel && conversation.length === 0
               ? [{ id: 'copilot-hello', author: 'assistant', text: panel.greeting }]
@@ -1083,7 +1386,7 @@ export function CopilotView({
                 },
               }
             : {})}
-          tools={tools}
+          tools={[...agentTools, ...tools]}
           {...(creditsLabel
             ? { credits: { label: t('overview.metric.credits'), value: creditsLabel } }
             : {})}
@@ -1128,6 +1431,12 @@ export function CopilotView({
                   attach: {
                     label: t('copilot.attachFile'),
                     onFile: (file: File) => {
+                      // PR A (D-604) — an image is for the Copilot to read; a
+                      // document is a Brand Brain source, as before.
+                      if (file.type.startsWith('image/')) {
+                        void attachImage(file);
+                        return;
+                      }
                       setFileAdded(false);
                       setAttached(file);
                     },
@@ -1140,6 +1449,8 @@ export function CopilotView({
                   onStop: () => {
                     setStops((count) => count + 1);
                     void post('/api/copilot/stop', turn);
+                    // PR A (D-604) — closing the stream cancels the model call.
+                    streamAbort.current?.abort();
                   },
                   stopLabel: t('copilot.stop'),
                 }

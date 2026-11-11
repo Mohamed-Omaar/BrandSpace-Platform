@@ -308,7 +308,7 @@ const SUMMARY_MAX_LINES = 40;
 
 /** PR B — one entry of the conversation as the screen shows it. */
 /** PR B — the person stopped the turn; the gateway releases its reservation. */
-class TurnStoppedError extends Error {
+export class TurnStoppedError extends Error {
   constructor() {
     super('The turn was stopped.');
     this.name = 'TurnStoppedError';
@@ -326,6 +326,8 @@ export interface ConversationMessage {
   readonly purged: boolean;
   readonly createdAt: Date;
   readonly planId: string | null;
+  /** PR A (D-604) — "worked on" and the images sent: ids, keys and states only. */
+  readonly activity: unknown;
 }
 
 export interface TurnInput {
@@ -415,6 +417,31 @@ type AcceptedPlan = z.infer<typeof planResponseSchema> & {
   readonly invalidToolKeys?: readonly string[];
 };
 
+/** PR A (smart Copilot, D-604) — what the tool loop starts from. */
+export interface AgentPrepared {
+  readonly sessionId: string;
+  readonly brandId: string | null;
+  readonly correlationId: string;
+  readonly brandBrain: boolean;
+  readonly language: 'ar' | 'en';
+  readonly citations: readonly unknown[];
+  readonly history: readonly { readonly role: 'USER' | 'ASSISTANT'; readonly body: string }[];
+  readonly reference: readonly string[];
+  readonly productFacts: readonly string[];
+  readonly surfaceLine: string;
+  readonly subjectLine: string | null;
+  /** The areas the retrieved facts came from — named under the answer (D8). */
+  readonly factAreas: readonly string[];
+  /** No fact shared a word with the request (the overview was given instead). */
+  readonly lexicalMiss: boolean;
+  /**
+   * D8 — the key question this request matches that nobody answered, when no
+   * fact matched it by its words and it is not a profile question. Retrieval
+   * and configuration only, never the model.
+   */
+  readonly missing: MissingKnowledge | null;
+}
+
 interface PreparedTurn {
   readonly session: { readonly id: string; readonly brandId: string | null };
   readonly brandId: string | null;
@@ -429,6 +456,14 @@ interface PreparedTurn {
   readonly language: 'ar' | 'en';
   readonly gateway: AiGateway;
   readonly request: AiGatewayRequest & { readonly input: { kind: 'text'; prompt: string } };
+  /** PR A (smart Copilot, D-604) — the pieces the tool loop builds its own request from. */
+  readonly agent: {
+    readonly history: readonly { readonly role: 'USER' | 'ASSISTANT'; readonly body: string }[];
+    readonly reference: readonly string[];
+    readonly productFacts: readonly string[];
+    readonly surfaceLine: string;
+    readonly subjectLine: string | null;
+  };
 }
 
 /** Notes for the operator AND the repair prompt: paths and tool keys only. */
@@ -674,6 +709,7 @@ export class CopilotOrchestrator {
         bodyPurgedAt: true,
         createdAt: true,
         planId: true,
+        activity: true,
       },
     });
     const page = rows.slice(0, limit).reverse();
@@ -690,6 +726,7 @@ export class CopilotOrchestrator {
         purged: row.bodyPurgedAt !== null,
         createdAt: row.createdAt,
         planId: row.planId,
+        activity: row.activity ?? null,
       })),
     };
   }
@@ -1216,7 +1253,142 @@ export class CopilotOrchestrator {
           ],
         },
       } as PreparedTurn['request'],
+      agent: {
+        history: history.map((turn) => ({
+          role: turn.role === 'ASSISTANT' ? ('ASSISTANT' as const) : ('USER' as const),
+          body: turn.body,
+        })),
+        reference: [
+          ...(remembered.summary && brandBrain
+            ? [fenceUntrusted('EARLIER IN THIS CONVERSATION (summary)', remembered.summary)]
+            : []),
+          ...(profile ? [profile] : []),
+          ...(recent ? [recent] : []),
+          ...(subject ? [subject.fenced] : []),
+          ...(context ? [context] : []),
+        ],
+        productFacts,
+        surfaceLine: `THE CUSTOMER OPENED YOU FROM: ${COPILOT_SURFACES[copilotSurface(session.surface)]}.`,
+        subjectLine: subject
+          ? `THE CUSTOMER IS LOOKING AT ONE ${SUBJECT_NOUN[subject.kind]}; it is described in the fenced CURRENT SUBJECT block. Treat "this" or "it" in the request as that ${SUBJECT_NOUN[subject.kind]}.`
+          : null,
+      },
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // PR A (smart Copilot, D-604) — the tool loop's hooks into the conversation.
+  // Each runs inside the short transaction its caller opens (H-4).
+  // ---------------------------------------------------------------------------
+
+  /** Admit the turn, write the person's message (`streaming`), gather the context. */
+  async prepareAgentTurn(
+    input: TurnInput & { readonly imageAssetIds?: readonly string[] },
+  ): Promise<AgentPrepared> {
+    const prepared = await this.#prepareTurn(input);
+    if (input.imageAssetIds && input.imageAssetIds.length > 0) {
+      // The images the person sent stay on their own message (ids only).
+      await this.#db.copilotMessage.updateMany({
+        where: {
+          workspaceId: this.#workspaceId,
+          sessionId: prepared.session.id,
+          idempotencyKey: input.idempotencyKey,
+          role: 'USER',
+        },
+        data: { activity: { images: [...input.imageAssetIds] } },
+      });
+    }
+    return {
+      sessionId: prepared.session.id,
+      brandId: prepared.brandId,
+      correlationId: prepared.correlationId,
+      brandBrain: prepared.brandBrain,
+      language: prepared.language,
+      citations: (prepared.grounding && prepared.grounding.items.length > 0
+        ? prepared.grounding.citations
+        : []) as unknown as readonly unknown[],
+      ...prepared.agent,
+      factAreas: prepared.grounding && !prepared.lexicalMiss ? areasOf(prepared.grounding) : [],
+      lexicalMiss: prepared.lexicalMiss,
+      missing:
+        prepared.brandBrain &&
+        prepared.brandId !== null &&
+        !(prepared.hasProfile && asksAboutProfile(input.request)) &&
+        (prepared.lexicalMiss || !prepared.grounding || prepared.grounding.items.length === 0)
+          ? await this.#missing(prepared.brandId, input.request, input.keyQuestions)
+          : null,
+    };
+  }
+
+  /** Did the person press Stop on this turn? */
+  async agentStopped(input: TurnInput): Promise<boolean> {
+    return this.#stopped(input);
+  }
+
+  /** The turn ended without an answer: `stopped` (never charged) or `failed`. */
+  async markAgentTurn(input: TurnInput, status: 'stopped' | 'failed' | 'complete'): Promise<void> {
+    if (status === 'stopped') {
+      await this.#db.copilotMessage.updateMany({
+        where: {
+          workspaceId: this.#workspaceId,
+          sessionId: input.sessionId,
+          idempotencyKey: input.idempotencyKey,
+          role: 'USER',
+          status: 'streaming',
+        },
+        data: { status: 'stopped' },
+      });
+      return;
+    }
+    await this.#markTurn(input, status);
+  }
+
+  /**
+   * Write the answer: its text, the gateway request that was charged, what was
+   * read and done on the way (`activity`), and the Brand Brain citations of the
+   * context it was given. Idempotent on the turn's key, like `#finishTurn`.
+   */
+  async finishAgentTurn(
+    input: TurnInput,
+    prepared: AgentPrepared,
+    answer: {
+      readonly text: string;
+      readonly aiRequestId: string | null;
+      readonly activity: unknown;
+    },
+  ): Promise<{ readonly messageId: string | null }> {
+    await this.#db.copilotMessage.createMany({
+      data: [
+        {
+          workspaceId: this.#workspaceId,
+          sessionId: prepared.sessionId,
+          role: 'ASSISTANT',
+          body: answer.text.slice(0, REPLY_HARD_MAX),
+          citations: prepared.citations as unknown as Prisma.InputJsonValue,
+          aiRequestId: answer.aiRequestId,
+          activity: answer.activity as Prisma.InputJsonValue,
+          idempotencyKey: `${input.idempotencyKey}:assistant`,
+          correlationId: prepared.correlationId,
+          expiresAt: input.expiresAt,
+        },
+      ],
+      skipDuplicates: true,
+    });
+    const row = await this.#db.copilotMessage.findFirst({
+      where: {
+        workspaceId: this.#workspaceId,
+        sessionId: prepared.sessionId,
+        idempotencyKey: `${input.idempotencyKey}:assistant`,
+      },
+      select: { id: true },
+    });
+    await this.#db.copilotSession.update({
+      where: { id: prepared.sessionId },
+      data: { lastMessageAt: this.#clock.now() },
+    });
+    await this.#rollSummary(prepared.sessionId);
+    await this.#markTurn(input, 'complete');
+    return { messageId: row?.id ?? null };
   }
 
   async #finishTurn(

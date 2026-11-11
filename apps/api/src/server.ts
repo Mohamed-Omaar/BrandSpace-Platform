@@ -24,6 +24,7 @@ import { registerBillingHostedPageRoutes } from './routes/billing-hosted-page';
 import { registerAccountRoutes } from './routes/account';
 import { registerOnboardingRoutes } from './routes/onboarding';
 import { registerCopilotRoutes } from './routes/copilot';
+import { registerCopilotAgentRoutes } from './routes/copilot-agent';
 import { registerAiAppsConsentRoutes } from './ai-apps/consent-routes';
 import { registerAiAppsMcpRoutes } from './ai-apps/mcp-route';
 import { registerAiAppsOAuthRoutes } from './ai-apps/oauth-routes';
@@ -91,6 +92,8 @@ export async function buildServer() {
    */
   registerAnalyticsRoutes(app);
   registerCopilotRoutes(app);
+  // PR A (smart Copilot, D-604) — the streamed tool loop.
+  registerCopilotAgentRoutes(app);
   registerAutomationRoutes(app);
 
   /*

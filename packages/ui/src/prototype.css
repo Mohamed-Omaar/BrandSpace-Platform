@@ -14026,6 +14026,21 @@ select.bs-select.bsp-chevron {
 .bs-cpt > * {
   flex: none;
 }
+/* PR A (D-604) — under the Copilot's answer: knowledge %, the drafts it made,
+   the images waiting to send. A caption line, and a tight list of them. */
+.bs-cpa-note {
+  margin: 0;
+  font-size: var(--bsp-fs-9);
+  line-height: var(--bsp-rem-0-75);
+  color: var(--bs-text-secondary);
+}
+.bs-cpa-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--bs-space-xs);
+}
 .bs-cpt > .bs-cpt-search {
   flex: 1 1 auto;
   inline-size: auto;

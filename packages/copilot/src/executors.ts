@@ -83,6 +83,26 @@ export interface ExecutorContext {
    * cannot compose automations.
    */
   readonly automations?: AutomationRulePort | undefined;
+  /** PR A (D-604) — the #119 image job, for `post.generate_image`. */
+  readonly images?: ImageJobPort | undefined;
+}
+
+/**
+ * PR A (smart Copilot, D-604) — QUEUE AN IMAGE FOR A DRAFT. The API's
+ * implementation enqueues a `CreativeGenerationJob` on the draft's first
+ * variant (the job attaches it when ready) and starts it after the
+ * transaction commits; the recovery sweep finishes it if that start is lost.
+ */
+export interface ImageJobPort {
+  generate(input: {
+    readonly brandId: string;
+    readonly contentItemId: string;
+    readonly brief: string;
+    readonly formatKey: string;
+    readonly quality: 'low' | 'medium' | 'high';
+    readonly idempotencyKey: string;
+    readonly actor: LiveAuthorization;
+  }): Promise<{ readonly jobId: string; readonly contentVariantId: string }>;
 }
 
 /** The slice of `AutomationEngine` the Copilot may reach: creating, never enabling. */
@@ -546,6 +566,24 @@ const contentDraft: ToolExecutor = async (context, args) => {
   };
 };
 
+const postGenerateImage: ToolExecutor = async (context, args) => {
+  if (!context.images) throw externalActionUnavailable();
+  const queued = await context.images.generate({
+    brandId: String(args['brandId']),
+    contentItemId: String(args['contentItemId']),
+    brief: String(args['brief']),
+    formatKey: String(args['formatKey'] ?? 'square'),
+    quality: (args['quality'] as 'low' | 'medium' | 'high' | undefined) ?? 'medium',
+    idempotencyKey: context.idempotencyKey,
+    actor: context.authorization,
+  });
+  return {
+    result: { jobId: queued.jobId, contentItemId: String(args['contentItemId']) },
+    resourceType: 'CreativeGenerationJob',
+    resourceId: queued.jobId,
+  };
+};
+
 const calendarPlace: ToolExecutor = async (context, args) => {
   const view = await context.calendar.schedule({
     contentItemId: String(args['contentItemId']),
@@ -967,6 +1005,7 @@ export const TOOL_EXECUTORS: Readonly<Record<string, ToolExecutor>> = {
   'campaign.create': campaignCreate,
   'campaign.update': campaignUpdate,
   'content.draft': contentDraft,
+  'post.generate_image': postGenerateImage,
   'calendar.place': calendarPlace,
   'publishing.publish_now': publishNow,
   'automation.create_rule': automationCreateRule,
@@ -1062,6 +1101,17 @@ export async function buildPreview(
           after: ((args['platformKeys'] as string[] | undefined) ?? []).join(', '),
         },
       ];
+    case 'post.generate_image': {
+      const item = await requireTargetItem(context, args);
+      return [
+        { labelKey: 'copilot.preview.content', after: item.title },
+        { labelKey: 'copilot.preview.brief', after: String(args['brief'] ?? '').slice(0, 200) },
+        {
+          labelKey: 'copilot.preview.imageQuality',
+          after: `${String(args['quality'] ?? 'medium')} · ${String(args['formatKey'] ?? 'square')}`,
+        },
+      ];
+    }
     case 'calendar.place': {
       const item = await requireTargetItem(context, args);
       return [

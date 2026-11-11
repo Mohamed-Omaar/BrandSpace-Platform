@@ -9,8 +9,11 @@ const log = createLogger({ context: { component: 'ai.gateway' } });
 import type {
   AdapterContext,
   AdapterRegistry,
+  ChatTurn,
   GeneratedImage,
   ImageQuality,
+  ToolCallRequest,
+  ToolSpec,
   UsageUnits,
 } from './adapter';
 import { DEFAULT_IMAGE_SIZING, parseImageSize, resolveImageSize } from './image-sizing';
@@ -182,6 +185,13 @@ export interface AiTextInput {
   readonly kind: 'text';
   readonly prompt: string;
   readonly untrustedContext?: readonly string[];
+  /**
+   * PR A (smart Copilot, D-604) — the conversation after the instruction, the
+   * tools the model may call, and (in the user turns) the images a person sent.
+   * Absent for every task that sends one prompt.
+   */
+  readonly conversation?: readonly ChatTurn[];
+  readonly tools?: readonly ToolSpec[];
 }
 
 export interface AiImageInput {
@@ -222,6 +232,24 @@ export interface AiGatewayRequest {
    * (H-4), so a provider call never holds a tenant transaction open.
    */
   readonly accept?: (output: AiOutput) => void | Promise<void>;
+  /**
+   * PR A (smart Copilot, D-604) — IS THIS OUTPUT CHARGED?
+   *
+   * The Copilot's tool loop makes several calls for ONE message and charges
+   * the message once: a call that ends in tool calls answers `false` and
+   * settles at zero (its provider cost is still recorded), and the call that
+   * gives the answer answers `true` and settles at the quoted price. Absent:
+   * every successful output is charged, as before.
+   */
+  readonly chargeWhen?: (output: AiOutput) => boolean;
+  /** PR A (D-604) — each piece of a text answer as it arrives. In memory only. */
+  readonly onDelta?: (text: string) => void;
+  /**
+   * PR A (D-604) — THE PERSON PRESSED STOP. Aborts the running attempt; the
+   * request ends CANCELLED, its reservation is released and nothing is
+   * charged. Never retried, never sent to the next model.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -247,7 +275,7 @@ export interface AiQuote {
 
 export interface AiGatewayResult {
   readonly requestId: string;
-  readonly status: 'SUCCEEDED' | 'FAILED' | 'TIMEOUT' | 'MODERATION_BLOCKED';
+  readonly status: 'SUCCEEDED' | 'FAILED' | 'TIMEOUT' | 'MODERATION_BLOCKED' | 'CANCELLED';
   readonly modelKey: string | null;
   readonly attemptedModelKeys: readonly string[];
   /** Null unless the routing rule opted into persistence, or this run produced it. */
@@ -264,7 +292,12 @@ export interface AiGatewayResult {
 }
 
 export type AiOutput =
-  | { readonly kind: 'text'; readonly text: string }
+  | {
+      readonly kind: 'text';
+      readonly text: string;
+      /** PR A (D-604) — the tools the model asked to run. Absent: a final answer. */
+      readonly toolCalls?: readonly ToolCallRequest[];
+    }
   | {
       readonly kind: 'image';
       readonly imageRefs: readonly string[];
@@ -978,6 +1011,10 @@ export class AiGateway {
         const attemptMs = Math.min(remainingMs, attemptTimeoutMsFor(route, provider.timeoutMs));
         lastAttemptMs = attemptMs;
         const timer = setTimeout(() => controller.abort(), attemptMs);
+        // PR A (D-604) — Stop aborts this attempt too.
+        const stop = () => controller.abort();
+        request.signal?.addEventListener('abort', stop, { once: true });
+        if (request.signal?.aborted) controller.abort();
         try {
           /*
            * D-573 — THE CREDENTIAL, PER ATTEMPT, IN MEMORY ONLY. Resolved from
@@ -995,7 +1032,14 @@ export class AiGateway {
             allowedHosts: config.allowedHosts ?? [],
           };
 
-          const { output, usage } = await this.#invoke(adapter, model, route, request.input, ctx);
+          const { output, usage } = await this.#invoke(
+            adapter,
+            model,
+            route,
+            request.input,
+            ctx,
+            request.onDelta,
+          );
 
           /*
            * H-3 — VALIDATE, THEN SETTLE. The caller parses and checks the
@@ -1031,7 +1075,10 @@ export class AiGateway {
            * customer pays at most what they were quoted, and the provider cost
            * is recorded as it really was.
            */
-          const metered = creditsChargedMilli(usage, creditRule, multiplier);
+          const metered =
+            request.chargeWhen && !request.chargeWhen(output)
+              ? 0n // PR A (D-604): a tool-calling step of a message; the answer is charged.
+              : creditsChargedMilli(usage, creditRule, multiplier);
           const charged = metered > args.reservationEstimate ? args.reservationEstimate : metered;
           this.#reportOverrun(config.reservationOverrunAlertPercent, {
             requestId,
@@ -1065,6 +1112,13 @@ export class AiGateway {
           };
         } catch (error) {
           lastError = error;
+          if (request.signal?.aborted) {
+            // PR A (D-604) — STOPPED: no retry, no next model, nothing charged.
+            clearTimeout(timer);
+            request.signal.removeEventListener('abort', stop);
+            await this.#finishCancelled(requestId, reservationId, attempted, modelKey);
+            return this.#recordedResult(requestId);
+          }
           const failureClass = failureClassOf(error);
           const attemptsLeft = attempt < route.retryPolicy.maxAttempts;
 
@@ -1081,6 +1135,7 @@ export class AiGateway {
           // Always. A leaked timer keeps the process alive and would abort a
           // controller belonging to a request that already finished.
           clearTimeout(timer);
+          request.signal?.removeEventListener('abort', stop);
         }
         if (success) {
           await this.#settleAndRecord(success);
@@ -1188,9 +1243,22 @@ export class AiGateway {
     route: ResolvedRoute,
     input: AiInput,
     ctx: AdapterContext,
+    onDelta?: (text: string) => void,
   ): Promise<{ output: AiOutput; usage: UsageUnits }> {
     try {
       if (input.kind === 'text') {
+        /*
+         * PR A (D-604) — IMAGES ONLY TO A MODEL THAT READS THEM. A model the
+         * catalogue does not declare `supportsVision` is skipped like an
+         * unavailable one, so the chain moves to the next; nothing is charged.
+         */
+        if (hasImages(input.conversation) && model.features?.vision !== true) {
+          throw new AiProviderError(
+            'MODEL_UNAVAILABLE',
+            customerMessageFor('MODEL_UNAVAILABLE'),
+            `Model "${model.key}" is not declared to read images.`,
+          );
+        }
         if (!adapter.generateText) {
           throw new AiProviderError(
             'MODEL_UNAVAILABLE',
@@ -1211,11 +1279,25 @@ export class AiGateway {
             // always a key from the closed registry.
             taskKey: route.taskKey,
             // D-573 — the caller will parse JSON: ask the provider for it.
-            ...(wantsJson(route) ? { outputFormat: 'json' as const } : {}),
+            // A conversation answers in prose (and tool calls), never forced JSON:
+            // `copilot.chat` was a JSON task for the plan-proposer only.
+            ...(wantsJson(route) && !input.conversation ? { outputFormat: 'json' as const } : {}),
+            ...(input.conversation ? { conversation: input.conversation } : {}),
+            ...(input.tools && input.tools.length > 0 ? { tools: input.tools } : {}),
+            ...(onDelta ? { onDelta } : {}),
           },
           ctx,
         );
-        return { output: { kind: 'text', text: result.text }, usage: result.usage };
+        return {
+          output: {
+            kind: 'text',
+            text: result.text,
+            ...(result.toolCalls && result.toolCalls.length > 0
+              ? { toolCalls: result.toolCalls }
+              : {}),
+          },
+          usage: result.usage,
+        };
       }
 
       if (!adapter.generateImage) {
@@ -1762,6 +1844,38 @@ export class AiGateway {
   }
 
   /** Read back what was recorded, so the caller and the database cannot disagree. */
+  /**
+   * PR A (D-604) — THE PERSON STOPPED THE ANSWER. The reservation is released
+   * in full and the request ends CANCELLED with nothing charged — the status
+   * `ai_request` has carried for exactly this since PR B, and the one
+   * `ai_request_no_charge_unless_succeeded` keeps at zero.
+   */
+  async #finishCancelled(
+    requestId: string,
+    reservationId: string,
+    attempted: readonly string[],
+    modelKey: string,
+  ): Promise<void> {
+    try {
+      await this.#ledger.release(reservationId, 'ai:request-cancelled');
+    } catch (releaseError) {
+      if (!(releaseError instanceof AppError) || releaseError.code !== 'NOT_FOUND') {
+        throw releaseError;
+      }
+    }
+    await this.#prisma.aiRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'CANCELLED',
+        completedAt: this.#clock.now(),
+        attemptedModelKeys: [...attempted],
+        resolvedModelKey: modelKey,
+        creditsChargedMilli: 0n,
+      },
+    });
+    log.info('ai request cancelled', { requestId, attempts: attempted.length });
+  }
+
   async #recordedResult(requestId: string, output?: AiOutput): Promise<AiGatewayResult> {
     const row = await this.#prisma.aiRequest.findUniqueOrThrow({ where: { id: requestId } });
     const result = toResult(row, false);
@@ -1804,13 +1918,38 @@ function worstCaseUsage(request: AiGatewayRequest, route: ResolvedRoute): UsageU
   if (request.input.kind === 'image') {
     return { imageCount: request.input.count };
   }
+  const turns = request.input.conversation ?? [];
   return {
-    promptTokens: estimatePromptTokens([
-      request.input.prompt,
-      ...(request.input.untrustedContext ?? []),
-    ]),
+    promptTokens:
+      estimatePromptTokens([
+        request.input.prompt,
+        ...(request.input.untrustedContext ?? []),
+        ...turns.map((turn) => turn.text),
+        ...turns.flatMap((turn) =>
+          turn.role === 'assistant' ? (turn.toolCalls ?? []).map((call) => call.arguments) : [],
+        ),
+        ...(request.input.tools ?? []).map((tool) => JSON.stringify(tool)),
+      ]) +
+      // An image is priced by the provider in patches, not characters: a
+      // generous fixed allowance per image keeps the reservation above it.
+      imagesIn(turns) * IMAGE_INPUT_TOKEN_ALLOWANCE,
     completionTokens: route.parameters.maxOutputTokens,
   };
+}
+
+/**
+ * PR A (D-604) — input tokens assumed per chat image when sizing a
+ * reservation: a 2048×2048 image is 4,096 patches × 1.2 at the most common
+ * multiplier. Above what one image costs, never below.
+ */
+const IMAGE_INPUT_TOKEN_ALLOWANCE = 5_000;
+
+function imagesIn(turns: readonly ChatTurn[]): number {
+  return turns.reduce((n, turn) => n + (turn.role === 'user' ? (turn.images?.length ?? 0) : 0), 0);
+}
+
+function hasImages(turns: readonly ChatTurn[] | undefined): boolean {
+  return turns !== undefined && imagesIn(turns) > 0;
 }
 
 /**

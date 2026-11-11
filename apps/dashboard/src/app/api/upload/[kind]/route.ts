@@ -4,6 +4,7 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { uploadAssetAction, uploadAssetFileAction } from '../../../[locale]/assets/actions';
 import { uploadSourceAction } from '../../../[locale]/brand-brain/actions';
 import { uploadComposerMediaAction } from '../../../[locale]/content/actions';
+import { uploadChatImageAction } from '../../../[locale]/copilot/actions';
 
 /**
  * P1 — AN UPLOAD THAT SHOWS ITS PROGRESS. A server action is sent by
@@ -25,6 +26,8 @@ const KINDS = {
   'asset-file': uploadAssetFileAction,
   'composer-media': uploadComposerMediaAction,
   'brand-source': uploadSourceAction,
+  // PR A (smart Copilot, D-604) — an image the person sends the Copilot.
+  'chat-image': uploadChatImageAction,
 } as const satisfies Record<string, (formData: FormData) => Promise<unknown>>;
 
 export type UploadRelayKind = keyof typeof KINDS;

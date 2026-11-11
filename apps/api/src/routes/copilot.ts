@@ -45,6 +45,8 @@ import { AppError, systemClock } from '@brandspace/shared';
 import { route } from '../route-contract';
 // ONE IMPLEMENTATION OF THE PLAN CEILING, shared with the automation route.
 import { scheduleQuota } from './schedule-quota';
+import { imageJobs } from './copilot-images';
+import { startCreativeJob } from './creative';
 import { automationRuleCheckFor, copilotAutomationPort } from './copilot-automation';
 import {
   configurationService,
@@ -172,7 +174,7 @@ async function automationPort(db: TenantScopedClient, workspaceId: string) {
  * The registry check under this environment's automation thresholds, and this
  * workspace's plan (Phase 2B-3 PR 6, owner decision 11).
  */
-async function automationRules(db: TenantScopedClient, workspaceId: string) {
+export async function automationRules(db: TenantScopedClient, workspaceId: string) {
   return automationRuleCheckFor(
     await new TenantAutomationPolicySource(db, currentEnvironment()).load(),
     await entitledActionTypes((featureKey) => entitlementGate(db, workspaceId).allows(featureKey)),
@@ -187,7 +189,7 @@ async function automationRules(db: TenantScopedClient, workspaceId: string) {
  * collaborators — two copies of this list would drift the first time a tool was
  * added.
  */
-async function executionContextFor(input: {
+export async function executionContextFor(input: {
   db: TenantScopedClient;
   workspaceId: string;
   planKey: string | null;
@@ -242,6 +244,8 @@ async function executionContextFor(input: {
     retention: input.retention,
     externalActions: externalActions(db),
     automations,
+    // PR A (D-604) — `post.generate_image`, confirmed from a card.
+    images: imageJobs(db, workspaceId),
   });
 }
 
@@ -938,6 +942,17 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
           { prisma: getPrisma(), timeoutMs: COPILOT_CONFIRM_TRANSACTION_MS },
         );
 
+        // PR A (D-604) — a confirmed image starts now that its job row is committed.
+        for (const call of outcome.toolCalls) {
+          if (
+            call.toolKey === 'post.generate_image' &&
+            call.status === 'SUCCEEDED' &&
+            call.resourceId
+          ) {
+            startCreativeJob(caller.workspaceId, call.resourceId, facts.planKey);
+          }
+        }
+
         return reply.send({
           planId: outcome.plan.id,
           status: outcome.plan.status,
@@ -1101,7 +1116,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
  * no generating step costs nothing, and the UI shows no number rather than a zero
  * that reads as "free for ever".
  */
-async function estimateFor(
+export async function estimateFor(
   steps: readonly { toolKey: string }[],
   workspaceId: string,
   planKey: string | null,

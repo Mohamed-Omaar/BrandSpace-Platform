@@ -113,4 +113,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261103090200_audit_event_workspace_actor_action_index',
   '20261103120000_one_assistant',
   '20261104090000_creative_generation_job',
+  '20261111090000_copilot_message_activity',
 ];

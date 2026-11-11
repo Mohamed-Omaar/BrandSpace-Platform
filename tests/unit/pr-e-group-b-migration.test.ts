@@ -68,7 +68,7 @@ describe('PR E — the Group B fields', () => {
   });
 
   it('comes directly after batch 7 PR C, and only connectors A and B, the AI apps migrations and the D-573 ceiling follow it', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-17)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-18)).toEqual([
       '20261016090000_content_item_publish_time',
       NAME,
       '20261021090000_connectors_a_handles_and_subjects',
@@ -96,6 +96,8 @@ describe('PR E — the Group B fields', () => {
       '20261103120000_one_assistant',
       // PR 1 (D-597): image generation as a background job.
       '20261104090000_creative_generation_job',
+      // PR A (D-604): the Copilot's "worked on" and images on a message.
+      '20261111090000_copilot_message_activity',
     ]);
   });
 });

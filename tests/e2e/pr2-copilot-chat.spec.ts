@@ -78,7 +78,7 @@ for (const locale of ['en', 'ar'] as const) {
     await expect.poll(() => atBottom(log)).toBe(true);
 
     // A turn waits with "Thinking…" and the three dots, then lands at the bottom.
-    await page.route('**/api/copilot/turn', async (route) => {
+    await page.route('**/api/copilot/stream', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 1_500));
       await route.continue();
     });
@@ -95,7 +95,7 @@ for (const locale of ['en', 'ar'] as const) {
 
     // Scrolled up to read while the next reply is on its way: the reply does
     // not pull the reader down; "New message" offers the way back.
-    await page.route('**/api/copilot/turn', async (route) => {
+    await page.route('**/api/copilot/stream', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 2_500));
       await route.continue();
     });

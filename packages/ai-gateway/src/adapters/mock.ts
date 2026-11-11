@@ -609,6 +609,164 @@ function factChangeStep(
   return { toolKey: key, arguments: { factId, body } };
 }
 
+/*
+ * PR A (smart Copilot, D-604) — THE TOOL LOOP, AS A MODEL WOULD PLAY IT.
+ *
+ * Keyword-driven and deterministic, so the E2E suite exercises the real path:
+ * a request about a post makes a DRAFT (and, when it asks for an image, then
+ * an image for it); one about the calendar, the brand or approvals reads the
+ * matching tool first; a tool result is answered in one line. With
+ * `onDelta`, the answer arrives word by word; a request that says "slowly"
+ * ("ببطء") streams slowly enough for Stop to land mid-answer, and Stop (the
+ * aborted signal) ends it like a real provider.
+ */
+async function agentTurn(request: TextRequest, ctx: AdapterContext): Promise<TextResult> {
+  const turns = request.conversation ?? [];
+  const firstUser = [...turns].reverse().find((turn) => turn.role === 'user');
+  const asked = firstUser?.role === 'user' ? firstUser.text : '';
+  const arabic = /[\u0600-\u06FF]/.test(asked);
+  const offered = new Set((request.tools ?? []).map((tool) => tool.name));
+  const last = turns[turns.length - 1];
+  const callsSoFar = turns.flatMap((turn) =>
+    turn.role === 'assistant' ? (turn.toolCalls ?? []).map((call) => call.name) : [],
+  );
+  const call = (name: string, args: Record<string, unknown>): TextResult => ({
+    text: '',
+    toolCalls: [{ id: `call_${callsSoFar.length + 1}`, name, arguments: JSON.stringify(args) }],
+    usage: { promptTokens: 400, completionTokens: 40 },
+    modelKey: request.modelKey,
+  });
+
+  const context = request.untrustedContext ?? [];
+  if (last?.role === 'user') {
+    // A fact the person asked to save, change or remove: the card (or, for
+    // someone who cannot edit, the hand-off to Brand Brain → Add).
+    if (SAVE_WORDS.test(asked)) {
+      const fact = {
+        area: /\b(?:offer|price|menu|sell)/iu.test(asked) ? 'OFFERS' : 'IDENTITY',
+        title: asked.replace(SAVE_WORDS, '').trim().slice(0, 80) || asked.slice(0, 80),
+        body: asked.replace(SAVE_WORDS, '').trim().slice(0, 2_000) || asked.slice(0, 2_000),
+      };
+      if (offered.has('brand_brain__add_fact')) return call('brand_brain__add_fact', fact);
+      if (offered.has('brand_brain__hand_off')) return call('brand_brain__hand_off', fact);
+    }
+    const factId = /BRAND KNOWLEDGE [A-Z_]+ v\d+ id ([0-9a-f-]{36})/u.exec(context.join('\n'))?.[1];
+    if (factId && CHANGE_WORDS.test(asked) && offered.has('brand_brain__edit_fact')) {
+      return call('brand_brain__edit_fact', {
+        factId,
+        body: /\bto\s+(.+)$/iu.exec(asked)?.[1]?.trim() ?? asked,
+      });
+    }
+    if (factId && REMOVE_WORDS.test(asked) && offered.has('brand_brain__remove_fact')) {
+      return call('brand_brain__remove_fact', { factId });
+    }
+    if (
+      /campaign|حملة/iu.test(asked) &&
+      /\b(create|launch|start)\b|أنشئ/iu.test(asked) &&
+      offered.has('campaign__create')
+    ) {
+      return call('campaign__create', {
+        name: arabic ? 'حملة الخريف' : 'Autumn awareness',
+        objective: 'AWARENESS',
+      });
+    }
+    const wantsPost = /\b(post|draft|caption)s?\b|بوست|منشور|مسود/iu.test(asked);
+    if (wantsPost && offered.has('post__create_draft')) {
+      return call('post__create_draft', {
+        title: arabic ? 'منشور من المساعد' : 'Post from the Copilot',
+        caption: arabic
+          ? 'نصل إليك أينما كنت. احجز زيارتك اليوم.'
+          : 'We come to you, wherever you are. Book your visit today.',
+        hashtags: arabic ? ['#علامتنا'] : ['#ourbrand'],
+        platformKeys: ['instagram'],
+        locale: arabic ? 'AR' : 'EN',
+      });
+    }
+    if (/calendar|schedule|تقويم|جدول/iu.test(asked) && offered.has('calendar__lookup')) {
+      return call('calendar__lookup', { daysAhead: 14 });
+    }
+    if (/approval|موافق/iu.test(asked) && offered.has('approvals__summary')) {
+      return call('approvals__summary', {});
+    }
+    if (/\bbrand\b|colou?r|براند|العلامة|ألوان/iu.test(asked) && offered.has('brand__profile')) {
+      return call('brand__profile', {});
+    }
+  }
+  if (last?.role === 'tool') {
+    const draftId = /Draft created: id ([0-9a-f-]{36})/.exec(last.text)?.[1];
+    const wantsImage = /\b(image|picture|photo)\b|صورة/iu.test(asked);
+    if (
+      draftId &&
+      wantsImage &&
+      offered.has('post__generate_image') &&
+      !callsSoFar.includes('post__generate_image')
+    ) {
+      return call('post__generate_image', {
+        contentItemId: draftId,
+        // The request's own words keep each drawing new: the library refuses
+        // a byte-identical file, and a real provider never repeats one.
+        brief: `${arabic ? 'صورة بسيطة بألوان العلامة' : 'A simple picture in the brand colours'}: ${asked.slice(0, 120)}`,
+        formatKey: 'square',
+        quality: 'low',
+      });
+    }
+  }
+
+  const done = callsSoFar.length > 0;
+  const toolSaid = last?.role === 'tool' ? last.text : '';
+  const sentImages = firstUser?.role === 'user' && (firstUser.images?.length ?? 0) > 0;
+  const material = answerFrom(
+    context.filter((block) => block.includes('BRAND BRAIN CONTEXT')),
+    request.maxOutputTokens,
+  )
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 400);
+  const greeting =
+    /^\W*(hi|hello|hey|مرحب|أهل|السلام)\b/iu.test(asked) || /\bslowly\b|ببطء/iu.test(asked);
+  const text = toolSaid.startsWith('PROPOSED')
+    ? arabic
+      ? 'جهّزت ذلك، وهو بانتظار تأكيدك أدناه.'
+      : 'I prepared that; it waits for your confirmation below.'
+    : toolSaid.startsWith('HANDED OFF')
+      ? arabic
+        ? 'لا أستطيع حفظها بنفسي؛ أضفها من عقل العلامة.'
+        : 'I cannot save it myself; add it from Brand Brain.'
+      : sentImages && !done
+        ? arabic
+          ? 'أرى الصورة التي أرسلتها.'
+          : 'I can see the image you sent.'
+        : !done && !greeting && material
+          ? material
+          : arabic
+            ? done
+              ? callsSoFar.includes('post__create_draft')
+                ? 'أنشأت مسودة منشور لك. لم تُجدول ولم تُنشر؛ راجعها من المنشورات.'
+                : 'راجعت ما طلبته، وهذه خلاصته في سطر واحد.'
+              : 'أهلًا! كيف أساعدك في علامتك اليوم؟'
+            : done
+              ? callsSoFar.includes('post__create_draft')
+                ? 'I made a draft post for you. It is not scheduled or published; review it in Posts.'
+                : 'I checked what you asked about; here it is in one line.'
+              : 'Hello! How can I help with your brand today?';
+  const slow = /\bslowly\b|ببطء/iu.test(asked);
+  const words = slow
+    ? Array.from({ length: 40 }, (_, i) => `${text.split(' ')[i % text.split(' ').length]}`)
+    : text.split(' ');
+  const answer = words.join(' ');
+  if (request.onDelta) {
+    for (const [index, word] of words.entries()) {
+      await abortableDelay(slow ? 150 : 15, ctx.signal);
+      request.onDelta(index === 0 ? word : ` ${word}`);
+    }
+  }
+  return {
+    text: answer,
+    usage: { promptTokens: 600, completionTokens: words.length + 5 },
+    modelKey: request.modelKey,
+  };
+}
+
 function copilotDocument(
   prompt: string,
   context: readonly string[],
@@ -729,6 +887,8 @@ export class MockProviderAdapter implements AiProviderAdapter {
 
   async generateText(request: TextRequest, ctx: AdapterContext): Promise<TextResult> {
     await this.#enter(request.modelKey, 'generateText', ctx);
+    // PR A (D-604) — the Copilot's tool loop, played deterministically.
+    if (request.conversation) return agentTurn(request, ctx);
 
     const context = request.untrustedContext ?? [];
     const bytes = digest([

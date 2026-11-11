@@ -2502,6 +2502,23 @@ const copilotSchema = z.object({
       retentionDays: z.number().int().min(1).max(3_650).default(90),
     })
     .default({}),
+
+  /*
+   * PR A (smart Copilot, D-603/D-604) — THE TOOL LOOP.
+   *
+   * `maxRounds`: model calls one message may make (each read is a round); the
+   * last one is asked to answer with no tools, so a message always ends.
+   * `autoSpendLimitCredits`: the credits the Copilot may spend on images in ONE
+   * message without a confirmation card (owner: "credit spend above a
+   * threshold you propose"). Above it, the image is proposed and waits for the
+   * person, like scheduling. Whole credits, as customers see them.
+   */
+  agent: z
+    .object({
+      maxRounds: z.number().int().min(1).max(12).default(4),
+      autoSpendLimitCredits: z.number().int().min(0).max(1_000).default(30),
+    })
+    .default({}),
 });
 
 /**
