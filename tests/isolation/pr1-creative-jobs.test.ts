@@ -3,7 +3,12 @@ import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { AiGateway, MockProviderAdapter, type AiConfiguration } from '@brandspace/ai-gateway';
-import { AssetUploadService, TenantAssetPolicySource } from '@brandspace/assets';
+import {
+  AssetProcessingService,
+  AssetUploadService,
+  MockVirusScanner,
+  TenantAssetPolicySource,
+} from '@brandspace/assets';
 import { CreditLedgerService, UsageService } from '@brandspace/entitlements';
 import {
   CREATIVE_JOB_MAX_ATTEMPTS,
@@ -14,6 +19,8 @@ import {
   type CreativeJobRunHost,
 } from '@brandspace/creative';
 import { createObjectStore } from '@brandspace/storage';
+import { defaultPayload } from '@brandspace/config';
+import { ContentLibraryService, parseContentPolicy } from '@brandspace/content';
 import { appRoleClient, createIsolationFixtures, platformRoleClient } from './fixtures';
 import type { IsolationFixtures } from './fixtures';
 
@@ -129,6 +136,30 @@ const IDENTITY = {
 
 let revoked = false;
 
+/**
+ * THE ASSET WORKER, IN THE TEST (PR A, the #122 race). A made image is
+ * scanned by the worker after upload, and the job now waits for that verdict
+ * before it succeeds. These tests run no worker, so the host's `sleep` —
+ * called between the job's looks at the image — does the worker's job: it
+ * scans what is queued in the workspace, through the real processing service.
+ */
+async function scanQueued(workspaceId: string): Promise<void> {
+  const queued = await inWs(workspaceId, (db) =>
+    db.assetProcessingJob.findMany({ where: { stage: 'QUEUED' }, select: { id: true } }),
+  );
+  for (const job of queued) {
+    await inWs(workspaceId, async (db) =>
+      new AssetProcessingService({
+        db,
+        workspaceId,
+        store: createObjectStore({ appEnv: 'test' }),
+        policy: await new TenantAssetPolicySource(db, 'DEVELOPMENT').load(),
+        scanner: new MockVirusScanner(),
+      }).process(job.id),
+    );
+  }
+}
+
 function host(workspaceId: string, userId: string): CreativeJobRunHost {
   return {
     workspaceId,
@@ -151,6 +182,7 @@ function host(workspaceId: string, userId: string): CreativeJobRunHost {
     identityFor: async () => IDENTITY,
     authorize: async () =>
       revoked ? null : { userId, permissionKeys: ['assets.upload', 'assets.read'], brandScope: [] },
+    sleep: () => scanQueued(workspaceId),
   };
 }
 
@@ -657,5 +689,203 @@ describe('PR 1 · carried into PR 2: the scheduler, end to end', () => {
         data: { aiContentRetentionDays: workspace.aiContentRetentionDays },
       });
     }
+  });
+});
+
+/**
+ * PR A — THE #122 RACE, ORDER FORCED (owner, 2026-11-11).
+ *
+ * The job used to succeed and attach while its image was still being
+ * scanned, and the editor's save — which takes only READY + CLEAN media —
+ * answered NOT_FOUND. These tests hold the scan back on purpose and look at
+ * the job, the post and the save in each order.
+ */
+describe('PR A · the image is checked before the job succeeds (the #122 race)', () => {
+  const CONTENT_POLICY = parseContentPolicy(defaultPayload('content'));
+
+  /** The editor's own save: the variant with these images, through the real service. */
+  const save = (assetIds: readonly string[]) =>
+    inA((db) =>
+      new ContentLibraryService({
+        db,
+        workspaceId: fixtures.a.workspaceId,
+        policy: CONTENT_POLICY,
+      }).editVariant({
+        variantId: fixtures.a.contentVariantId,
+        body: 'Spring window, now with the picture.',
+        assetIds,
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
+      }),
+    );
+
+  const view = (id: string) =>
+    inA((db) =>
+      new CreativeGenerationJobs({ db, workspaceId: fixtures.a.workspaceId }).get(id, {
+        userId: fixtures.a.userId,
+        brandScope: [],
+      }),
+    );
+
+  const clearVariant = () =>
+    platform.contentVariant.update({
+      where: { id: fixtures.a.contentVariantId },
+      data: { assetIds: [] },
+    });
+
+  it('the image still being checked: the job stays RUNNING, nothing is attached, the save is NOT_FOUND; once READY + CLEAN it succeeds, attaches, and the save is SAVED', async () => {
+    await clearVariant();
+    const { job } = await enqueueA({ contentVariantId: fixtures.a.contentVariantId });
+    let looked = 0;
+    const base = host(fixtures.a.workspaceId, fixtures.a.userId);
+    const outcome = await runCreativeGenerationJob(
+      {
+        ...base,
+        sleep: async () => {
+          looked += 1;
+          // THE IMAGE IS MADE AND STORED, AND NOT YET CHECKED.
+          const row = await jobRow(job.id);
+          expect(row.assetId).not.toBeNull();
+          const asset = await platform.asset.findUniqueOrThrow({
+            where: { id: String(row.assetId) },
+            select: { status: true, scanStatus: true },
+          });
+          expect(asset.status).not.toBe('READY');
+          expect(asset.scanStatus).not.toBe('CLEAN');
+          // The job waits: RUNNING, no image named to the person, none attached.
+          expect(row).toMatchObject({ status: 'RUNNING', attachedAt: null, completedAt: null });
+          expect((await view(job.id)).assetId).toBeNull();
+          expect(await variantAssets()).toEqual([]);
+          // The editor saving that image now is refused — which is why the
+          // job must not hand it over yet.
+          await expect(save([String(row.assetId)])).rejects.toMatchObject({ code: 'NOT_FOUND' });
+          // Now the worker scans it.
+          await base.sleep?.(0);
+        },
+      },
+      job.id,
+    );
+    expect(looked).toBeGreaterThanOrEqual(1);
+    expect(outcome).toBe('succeeded');
+
+    const row = await jobRow(job.id);
+    expect(row.status).toBe('SUCCEEDED');
+    expect(row.attachedAt).not.toBeNull();
+    const asset = await platform.asset.findUniqueOrThrow({
+      where: { id: String(row.assetId) },
+      select: { status: true, scanStatus: true },
+    });
+    expect(asset).toEqual({ status: 'READY', scanStatus: 'CLEAN' });
+    expect(await variantAssets()).toEqual([row.assetId]);
+    expect((await view(job.id)).assetId).toBe(row.assetId);
+    // The editor's save of the attached image now goes through.
+    const saved = await save(await variantAssets());
+    expect(saved.assetIds).toEqual([row.assetId]);
+  });
+
+  it('the check refuses the image (quarantined): the job FAILS image_not_checked and nothing is attached', async () => {
+    await clearVariant();
+    const { job } = await enqueueA({ contentVariantId: fixtures.a.contentVariantId });
+    const outcome = await runCreativeGenerationJob(
+      {
+        ...host(fixtures.a.workspaceId, fixtures.a.userId),
+        // The worker's verdict on this image: infected, quarantined.
+        sleep: async () => {
+          const row = await jobRow(job.id);
+          await platform.asset.update({
+            where: { id: String(row.assetId) },
+            data: { status: 'QUARANTINED', scanStatus: 'INFECTED' },
+          });
+        },
+      },
+      job.id,
+    );
+    expect(outcome).toBe('failed');
+    const row = await jobRow(job.id);
+    expect(row).toMatchObject({
+      status: 'FAILED',
+      failureReason: 'image_not_checked',
+      attachedAt: null,
+    });
+    expect(await variantAssets()).toEqual([]);
+    expect((await view(job.id)).assetId).toBeNull();
+    expect(
+      await platform.auditEvent.count({
+        where: {
+          workspaceId: fixtures.a.workspaceId,
+          action: 'content.media.attached_by_generation',
+          after: { path: ['creativeGenerationJobId'], equals: job.id },
+        },
+      }),
+    ).toBe(0);
+  });
+
+  it('the attach re-checks in its own transaction: an image not READY + CLEAN finishes nothing', async () => {
+    await clearVariant();
+    const { job } = await enqueueA({ contentVariantId: fixtures.a.contentVariantId });
+    const jobs = (db: TenantScopedClient) =>
+      new CreativeGenerationJobs({ db, workspaceId: fixtures.a.workspaceId });
+    const claimed = await inA((db) => jobs(db).claim(job.id));
+    if (!claimed) throw new Error('not claimed');
+    const run = host(fixtures.a.workspaceId, fixtures.a.userId);
+    const made = await CreativeStudioService.generateWith(
+      (fn) => run.inWorkspace(async (db) => fn(await run.studioFor(db))),
+      {
+        brandId: fixtures.a.brandId,
+        brief: claimed.brief,
+        formatKey: 'square',
+        identity: IDENTITY,
+        idempotencyKey: claimed.idempotencyKey,
+        actorUserId: fixtures.a.userId,
+        planKey: null,
+        actor: { userId: fixtures.a.userId, permissionKeys: ['assets.upload'], brandScope: [] },
+      },
+    );
+    expect(await inA((db) => jobs(db).recordGenerated(claimed, made))).toBe(true);
+
+    // Not scanned yet: succeed() itself refuses, and writes nothing.
+    expect(await inA((db) => jobs(db).succeed(claimed))).toEqual({ kind: 'not_clean' });
+    expect(await jobRow(job.id)).toMatchObject({ status: 'RUNNING', attachedAt: null });
+    expect(await variantAssets()).toEqual([]);
+
+    // Scanned clean: the same call now finishes and attaches.
+    await scanQueued(fixtures.a.workspaceId);
+    const finished = await inA((db) => jobs(db).succeed(claimed));
+    expect(finished.kind).toBe('done');
+    expect(await variantAssets()).toEqual([made.assetId]);
+
+    // A second finish of the same claim writes nothing more.
+    expect(await inA((db) => jobs(db).succeed(claimed))).toEqual({ kind: 'lost' });
+  });
+
+  it('a check still undecided when the run stops waiting leaves the job RUNNING for the sweep, attached nowhere', async () => {
+    await clearVariant();
+    const { job } = await enqueueA({ contentVariantId: fixtures.a.contentVariantId });
+    const outcome = await runCreativeGenerationJob(
+      { ...host(fixtures.a.workspaceId, fixtures.a.userId), checkWaitMs: 0, sleep: async () => {} },
+      job.id,
+    );
+    expect(outcome).toBe('skipped');
+    expect(await jobRow(job.id)).toMatchObject({ status: 'RUNNING', attachedAt: null });
+    expect(await variantAssets()).toEqual([]);
+    // The worker scans it later; the sweep's re-run finishes it, uncharged.
+    const before = await balance();
+    const calls = imageCalls();
+    await scanQueued(fixtures.a.workspaceId);
+    await platform.creativeGenerationJob.update({
+      where: { id: job.id },
+      data: { startedAt: new Date(Date.now() - 20 * 60_000) },
+    });
+    expect(
+      await runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), job.id, {
+        staleBefore: new Date(Date.now() - 15 * 60_000),
+      }),
+    ).toBe('succeeded');
+    expect(imageCalls()).toBe(calls);
+    expect(await balance()).toBe(before);
+    const row = await jobRow(job.id);
+    expect(row.creditsChargedMilli).toBeGreaterThan(0n);
+    expect(await variantAssets()).toEqual([row.assetId]);
   });
 });

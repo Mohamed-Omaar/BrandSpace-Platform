@@ -23,7 +23,8 @@ import {
  *   2. `runCreativeGenerationJob` claims the row (compare-and-set), calls the
  *      studio with NO transaction open, and finishes it SUCCEEDED or FAILED;
  *   3. a job asked for from a post attaches the image to that variant on the
- *      server, audited, even if nobody is looking. Publishing still needs the
+ *      server, audited, even if nobody is looking — ONLY ONCE THE IMAGE HAS
+ *      PASSED ITS CHECK (below). Publishing still needs the
  *      post's own approval: attaching changes media, never status.
  *
  * NEVER CHARGED TWICE. The job's idempotency key is the studio's: a second
@@ -31,6 +32,17 @@ import {
  * stored asset and calls no provider, or gets the gateway's recorded outcome
  * for the same AI request. The ledger's reserve -> confirm -> settle is the
  * gateway's and is never touched here.
+ *
+ * THE IMAGE IS CHECKED BEFORE THE JOB SUCCEEDS (the #122 race, fixed in PR A
+ * on the owner's word, 2026-11-11). A made image enters the library through
+ * the person's own upload path, and the asset worker scans it afterwards. The
+ * job used to succeed and attach at once, while the image was still
+ * PROCESSING: the editor then saved a post holding an image that was not yet
+ * usable, and the save — which accepts only READY + CLEAN media — answered
+ * NOT_FOUND. Now the job records its image and STAYS RUNNING until the image
+ * is READY + CLEAN, then succeeds and attaches; the attach checks READY +
+ * CLEAN again in its own transaction. An image the check refuses (quarantined,
+ * failed, gone) FAILS the job `image_not_checked` and is attached nowhere.
  */
 
 export type CreativeJobStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
@@ -56,7 +68,29 @@ export type CreativeJobFailure =
   | 'storage_full'
   | 'not_found'
   | 'access_revoked'
-  | 'stuck_timeout';
+  | 'stuck_timeout'
+  // The made image did not pass its check (quarantined, failed or gone).
+  | 'image_not_checked';
+
+/**
+ * How long ONE run waits for the made image's check before handing the job
+ * to the recovery sweep (it stays RUNNING; the sweep's re-run replays the
+ * image, uncharged, and waits again). Well under the RUNNING stale limit.
+ */
+export const CREATIVE_JOB_CHECK_WAIT_MS = 120_000;
+/** How often a waiting run looks at the image again. */
+export const CREATIVE_JOB_CHECK_POLL_MS = 1_000;
+
+/** Where a made image stands: usable, not yet decided, or refused for good. */
+export type CreativeImageCheck = 'clean' | 'pending' | 'refused';
+
+/** What finishing a job came to. */
+export type CreativeJobFinish =
+  | { readonly kind: 'done'; readonly view: CreativeJobView }
+  /** The image is not READY + CLEAN (any more): nothing was written. */
+  | { readonly kind: 'not_clean' }
+  /** This run no longer holds the job (finished, or claimed by another run). */
+  | { readonly kind: 'lost' };
 
 export interface CreativeJobView {
   readonly id: string;
@@ -115,7 +149,9 @@ export function viewOf(row: JobRow): CreativeJobView {
     status: row.status as CreativeJobStatus,
     formatKey: row.formatKey,
     contentVariantId: row.contentVariantId,
-    assetId: row.assetId,
+    // The image is the person's only once the job has SUCCEEDED: a RUNNING job
+    // waiting for the check, or a FAILED one the check refused, names none.
+    assetId: row.status === 'SUCCEEDED' ? row.assetId : null,
     attached: row.attachedAt !== null,
     failureReason: row.failureReason,
     creditsChargedMilli:
@@ -297,36 +333,103 @@ export class CreativeGenerationJobs {
   }
 
   /**
-   * SUCCEEDED, and — for a job asked for from a post — the image added to the
-   * variant's media, once, audited. Only the RUNNING row on this attempt is
-   * finished: a stale runner that lost its claim writes nothing.
+   * THE MADE IMAGE, RECORDED ON THE RUNNING JOB — which stays RUNNING until
+   * the image has passed its check. Only this attempt's RUNNING row is
+   * written. A re-run (the recovery sweep) that finds the image already
+   * recorded keeps the first record, charge included: the replay was free.
    */
-  async succeed(
+  async recordGenerated(
     job: { readonly id: string; readonly attempts: number },
     result: {
       readonly assetId: string;
       readonly aiRequestId: string;
       readonly creditsChargedMilli: bigint;
     },
-  ): Promise<CreativeJobView | null> {
-    const now = this.#clock.now();
-    const finished = await this.#db.creativeGenerationJob.updateMany({
-      where: {
-        id: job.id,
-        workspaceId: this.#workspaceId,
-        status: 'RUNNING',
-        attempts: job.attempts,
-      },
+  ): Promise<boolean> {
+    const mine = {
+      id: job.id,
+      workspaceId: this.#workspaceId,
+      status: 'RUNNING',
+      attempts: job.attempts,
+    };
+    const recorded = await this.#db.creativeGenerationJob.updateMany({
+      where: { ...mine, assetId: null },
       data: {
-        status: 'SUCCEEDED',
-        completedAt: now,
         assetId: result.assetId,
-        aiRequestId: result.aiRequestId,
+        ...(result.aiRequestId ? { aiRequestId: result.aiRequestId } : {}),
         creditsChargedMilli: result.creditsChargedMilli,
-        failureReason: null,
       },
     });
-    if (finished.count !== 1) return null;
+    if (recorded.count === 1) return true;
+    const row = await this.#db.creativeGenerationJob.findFirst({
+      where: mine,
+      select: { assetId: true },
+    });
+    return row !== null && row.assetId === result.assetId;
+  }
+
+  /** Where the made image stands. A missing or deleted image is refused. */
+  async imageCheck(assetId: string): Promise<CreativeImageCheck> {
+    const asset = await this.#db.asset.findFirst({
+      where: { id: assetId, workspaceId: this.#workspaceId, deletedAt: null },
+      select: { status: true, scanStatus: true },
+    });
+    if (!asset) return 'refused';
+    if (asset.status === 'READY' && asset.scanStatus === 'CLEAN') return 'clean';
+    if (
+      asset.status === 'QUARANTINED' ||
+      asset.status === 'PROCESSING_FAILED' ||
+      asset.status === 'ARCHIVED' ||
+      asset.scanStatus === 'INFECTED'
+    ) {
+      return 'refused';
+    }
+    return 'pending';
+  }
+
+  /**
+   * SUCCEEDED, and — for a job asked for from a post — the image added to the
+   * variant's media, once, audited. Only the RUNNING row on this attempt is
+   * finished: a stale runner that lost its claim writes nothing.
+   *
+   * THE CHECK IS READ AGAIN HERE, in this transaction, before anything is
+   * written: an image that is not READY + CLEAN finishes nothing and is
+   * attached nowhere.
+   */
+  async succeed(job: {
+    readonly id: string;
+    readonly attempts: number;
+  }): Promise<CreativeJobFinish> {
+    const mine = {
+      id: job.id,
+      workspaceId: this.#workspaceId,
+      status: 'RUNNING',
+      attempts: job.attempts,
+    };
+    const running = await this.#db.creativeGenerationJob.findFirst({
+      where: mine,
+      select: { assetId: true },
+    });
+    if (!running?.assetId) return { kind: 'lost' };
+    const usable = await this.#db.asset.findFirst({
+      where: {
+        id: running.assetId,
+        workspaceId: this.#workspaceId,
+        deletedAt: null,
+        status: 'READY',
+        scanStatus: 'CLEAN',
+      },
+      select: { id: true },
+    });
+    if (!usable) return { kind: 'not_clean' };
+    const assetId = usable.id;
+
+    const now = this.#clock.now();
+    const finished = await this.#db.creativeGenerationJob.updateMany({
+      where: { ...mine, assetId },
+      data: { status: 'SUCCEEDED', completedAt: now, failureReason: null },
+    });
+    if (finished.count !== 1) return { kind: 'lost' };
     const row = await this.#db.creativeGenerationJob.findFirstOrThrow({
       where: { id: job.id, workspaceId: this.#workspaceId },
     });
@@ -337,10 +440,10 @@ export class CreativeGenerationJobs {
         where: { id: row.contentVariantId, workspaceId: this.#workspaceId, brandId: row.brandId },
         select: { id: true, assetIds: true, contentItemId: true },
       });
-      if (variant && !variant.assetIds.includes(result.assetId)) {
+      if (variant && !variant.assetIds.includes(assetId)) {
         await this.#db.contentVariant.update({
           where: { id: variant.id },
-          data: { assetIds: [...variant.assetIds, result.assetId] },
+          data: { assetIds: [...variant.assetIds, assetId] },
         });
         attachedAt = now;
         await writeAuditEvent(this.#db, this.#workspaceId, {
@@ -350,7 +453,7 @@ export class CreativeGenerationJobs {
           resourceId: variant.id,
           brandId: row.brandId,
           after: {
-            assetId: result.assetId,
+            assetId,
             creativeGenerationJobId: row.id,
             contentItemId: variant.contentItemId,
             ...(row.requestedByUserId ? { requestedByUserId: row.requestedByUserId } : {}),
@@ -371,12 +474,12 @@ export class CreativeGenerationJobs {
       resourceId: row.id,
       brandId: row.brandId,
       after: {
-        assetId: result.assetId,
+        assetId,
         attached: attachedAt !== null,
-        creditsChargedMilli: result.creditsChargedMilli.toString(),
+        creditsChargedMilli: (row.creditsChargedMilli ?? 0n).toString(),
       },
     });
-    return viewOf(done);
+    return { kind: 'done', view: viewOf(done) };
   }
 
   /** FAILED with a reason key. Only a job not already finished. */
@@ -457,6 +560,13 @@ export interface CreativeJobRunHost {
   ) => Promise<AssetActor | null>;
   readonly planKey: string | null;
   readonly clock?: Clock;
+  /**
+   * Waits between looks at the made image's check. The api waits on a timer;
+   * a test hands in its own, to decide the check's outcome between looks.
+   */
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** How long one run waits for the check (default `CREATIVE_JOB_CHECK_WAIT_MS`). */
+  readonly checkWaitMs?: number;
 }
 
 export type CreativeJobOutcome = 'succeeded' | 'failed' | 'skipped';
@@ -516,14 +626,34 @@ export async function runCreativeGenerationJob(
       planKey: host.planKey,
       actor,
     });
-    const done = await host.inWorkspace((db) =>
-      jobs(db).succeed(claimed, {
+    const recorded = await host.inWorkspace((db) =>
+      jobs(db).recordGenerated(claimed, {
         assetId: result.assetId,
         aiRequestId: result.aiRequestId,
         creditsChargedMilli: result.creditsChargedMilli,
       }),
     );
-    return done ? 'succeeded' : 'skipped';
+    if (!recorded) return 'skipped';
+
+    /*
+     * WAIT FOR THE CHECK, with no transaction open. The job stays RUNNING;
+     * the editor and the Copilot keep showing "making the image".
+     */
+    const sleep = host.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    const deadline = Date.now() + (host.checkWaitMs ?? CREATIVE_JOB_CHECK_WAIT_MS);
+    for (;;) {
+      const check = await host.inWorkspace((db) => jobs(db).imageCheck(result.assetId));
+      if (check === 'refused') return failWith('image_not_checked');
+      if (check === 'clean') {
+        const finish = await host.inWorkspace((db) => jobs(db).succeed(claimed));
+        if (finish.kind === 'done') return 'succeeded';
+        if (finish.kind === 'lost') return 'skipped';
+        // Not clean any more between the two reads: look again.
+      }
+      // Still undecided: left RUNNING for the recovery sweep's re-run.
+      if (Date.now() >= deadline) return 'skipped';
+      await sleep(CREATIVE_JOB_CHECK_POLL_MS);
+    }
   } catch (error: unknown) {
     return failWith(failureReasonOf(error));
   }

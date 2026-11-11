@@ -32,6 +32,8 @@ export type {
 export { CREATIVE_FORMATS, adaptationsFor, findCreativeFormat } from './formats';
 export type { CreativeFormat } from './formats';
 export {
+  CREATIVE_JOB_CHECK_POLL_MS,
+  CREATIVE_JOB_CHECK_WAIT_MS,
   CREATIVE_JOB_MAX_ATTEMPTS,
   CREATIVE_JOB_QUEUED_STALE_MS,
   CREATIVE_JOB_RUNNING_STALE_MS,
@@ -42,7 +44,9 @@ export {
   viewOf,
 } from './generation-jobs';
 export type {
+  CreativeImageCheck,
   CreativeJobFailure,
+  CreativeJobFinish,
   CreativeJobOutcome,
   CreativeJobRunHost,
   CreativeJobStatus,

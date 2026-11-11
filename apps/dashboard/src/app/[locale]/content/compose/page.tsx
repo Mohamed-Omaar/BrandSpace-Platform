@@ -1718,6 +1718,7 @@ const EDITOR_KEYS = [
   'creative.job.failed.not_found',
   'creative.job.failed.access_revoked',
   'creative.job.failed.stuck_timeout',
+  'creative.job.failed.image_not_checked',
   'editor.preview.slide',
   'editor.preview.previousSlide',
   'editor.preview.nextSlide',

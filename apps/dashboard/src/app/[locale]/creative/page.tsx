@@ -167,6 +167,7 @@ export default async function CreativeStudioPage({
       not_found: t('creative.job.failed.not_found'),
       access_revoked: t('creative.job.failed.access_revoked'),
       stuck_timeout: t('creative.job.failed.stuck_timeout'),
+      image_not_checked: t('creative.job.failed.image_not_checked'),
     },
     cost: t('creative.cost'),
     costUnit: t('creative.costUnit'),

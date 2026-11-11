@@ -1877,6 +1877,7 @@ export const messages = {
       'لم تعد لديك صلاحية إنشاء الصور لهذه العلامة. لم يُحتسب أي رصيد.',
     'creative.job.failed.stuck_timeout':
       'استغرق إنشاء الصورة وقتًا طويلًا وتوقف. لم يُحتسب أي رصيد. حاول مرة أخرى.',
+    'creative.job.failed.image_not_checked': 'لم تجتز الصورة الفحص، لذلك لم تُضف.',
     'editor.preview.slide': 'الشريحة {index} من {count}',
     'editor.preview.previousSlide': 'الشريحة السابقة',
     'editor.preview.nextSlide': 'الشريحة التالية',
@@ -6371,6 +6372,7 @@ export const messages = {
       'You can no longer make images for this brand. No credits were used.',
     'creative.job.failed.stuck_timeout':
       'Making the image took too long and was stopped. No credits were used. Try again.',
+    'creative.job.failed.image_not_checked': "The image didn't pass the check, so it wasn't added.",
     'editor.preview.slide': 'Slide {index} of {count}',
     'editor.preview.previousSlide': 'Previous slide',
     'editor.preview.nextSlide': 'Next slide',
