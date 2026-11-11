@@ -316,7 +316,9 @@ test.describe('the AI Copilot', () => {
     if ((await settle(page)) === 'plan') {
       // Outcome 1. THE CONFIRMATION IS IN FRONT OF THE ACTION, not beside it.
       await expect(page.getByTestId('copilot-confirm')).toBeVisible();
-      await expect(page.getByTestId('copilot-reject')).toBeVisible();
+      // The plan card's own Cancel: the screen also draws the design system's
+      // approval region for the same plan, with a second Cancel.
+      await expect(page.getByTestId('copilot-plan').getByTestId('copilot-reject')).toBeVisible();
       // And nothing has executed yet: there is no result until it is confirmed.
       await expect(page.getByTestId('copilot-result')).toHaveCount(0);
       return;
@@ -337,7 +339,7 @@ test.describe('the AI Copilot', () => {
 
     if ((await settle(page)) !== 'plan') return; // The refusal branch; covered above.
 
-    const reject = page.getByTestId('copilot-reject');
+    const reject = page.getByTestId('copilot-plan').getByTestId('copilot-reject');
     await expect(reject).toBeVisible();
     await reject.click();
     await expect(page.getByTestId('copilot-plan')).toHaveCount(0);
@@ -1136,7 +1138,7 @@ test.describe('P6-12 · copilot and automations', () => {
     await page.getByTestId('copilot-propose').click();
     const outcome = await settle(page);
     if (outcome !== 'plan') return; // a refusal is an honest answer too
-    const reject = page.getByTestId('copilot-reject');
+    const reject = page.getByTestId('copilot-plan').getByTestId('copilot-reject');
     if ((await reject.count()) === 0) return; // a read-only plan needs no decision
     const cancelled = page.waitForResponse(
       (response) =>
