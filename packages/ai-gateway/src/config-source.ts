@@ -73,6 +73,8 @@ export class ConfigurationAiSource implements AiConfigurationSource {
         imageCostPerImageMicroMinor: model.imageCostPerImageMicroMinor,
         // PR A (item 6) — which sizes this image model accepts.
         imageSizing: model.imageSizing,
+        // Owner, 2026-11-12 — a model that reasons by default takes no temperature.
+        defaultReasoningEffort: model.defaultReasoningEffort,
       })),
       // Only models whose rates an operator has actually entered get a cost
       // basis. The rest have none, and `providerCostMicroMinor` refuses them

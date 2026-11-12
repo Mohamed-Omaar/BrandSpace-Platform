@@ -311,6 +311,7 @@ export class OpenAiAdapter implements AiProviderAdapter {
         messages,
         max_completion_tokens: request.maxOutputTokens,
         ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+        ...(request.reasoningEffort ? { reasoning_effort: request.reasoningEffort } : {}),
         ...(request.outputFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),
         ...(tools ? { tools, tool_choice: 'auto' } : {}),
         ...(streaming ? { stream: true, stream_options: { include_usage: true } } : {}),
