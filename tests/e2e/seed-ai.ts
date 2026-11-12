@@ -219,6 +219,11 @@ const PAYLOADS = {
         costUnit: '1k_tokens',
         costCurrency: 'USD',
         qualityBenchmarkRef: null,
+        // PR A (D-605) — the Copilot's tool loop: it calls tools and reads the
+        // images a person sends (the mock answers both deterministically).
+        supportsVision: true,
+        supportsToolUse: true,
+        supportsStreaming: true,
       },
       {
         key: IMAGE_MODEL_KEY,

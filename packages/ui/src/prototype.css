@@ -8452,6 +8452,14 @@ img.bsp-pf-art {
 .bsp-tgl[aria-pressed='true'] .bsp-tgl-k {
   inset-inline-start: var(--bsp-px-16);
 }
+/*
+ * PR A (owner, 2026-11-12): BUSY while the server answers — the same
+ * disabled treatment as `.bsp-tgl-in:disabled` (design-system extension).
+ */
+.bsp-tgl:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
 /* The ⋯ button (`.ibtn`, 30 × 30) and its glass menu (160px, radius 14). */
 .bsp-au-more {
   position: static;
@@ -14032,6 +14040,21 @@ select.bs-select.bsp-chevron {
 }
 .bs-cpt > * {
   flex: none;
+}
+/* PR A (D-605) — under the Copilot's answer: knowledge %, the drafts it made,
+   the images waiting to send. A caption line, and a tight list of them. */
+.bs-cpa-note {
+  margin: 0;
+  font-size: var(--bsp-fs-9);
+  line-height: var(--bsp-rem-0-75);
+  color: var(--bs-text-secondary);
+}
+.bs-cpa-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--bs-space-xs);
 }
 .bs-cpt > .bs-cpt-search {
   flex: 1 1 auto;

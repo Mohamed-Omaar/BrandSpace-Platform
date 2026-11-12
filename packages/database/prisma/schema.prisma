@@ -5139,6 +5139,11 @@ model CopilotMessage {
   citations             Json?
   /// The answer declined for lack of approved knowledge.
   insufficientKnowledge Boolean @default(false)
+  /// PR A (smart Copilot, D-605) — what an answer read and did on the way
+  /// ("worked on": tool keys and their outcome, the drafts and images it made)
+  /// and the ids of the images the person sent with the message. Ids, keys and
+  /// statuses only — never customer text, never a tool's raw result.
+  activity              Json?
 
   expiresAt DateTime? @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)

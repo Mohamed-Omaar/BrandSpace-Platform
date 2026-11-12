@@ -725,9 +725,16 @@ export function CopilotBody({
               </span>
             ) : null}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.sm }}>
-              <Button variant="neutral" size="sm" onClick={onReject} data-testid="copilot-reject">
-                {labels.reject}
-              </Button>
+              {/*
+                Cancel is drawn here only when the screen has no Cancel of its
+                own: the dashboard's plan card carries the one Cancel (owner
+                decision, 2026-11-11), so it does not pass `onReject`.
+              */}
+              {onReject ? (
+                <Button variant="neutral" size="sm" onClick={onReject} data-testid="copilot-reject">
+                  {labels.reject}
+                </Button>
+              ) : null}
               <Button variant="primary" size="sm" onClick={onApprove} data-testid="copilot-approve">
                 {labels.approve}
               </Button>

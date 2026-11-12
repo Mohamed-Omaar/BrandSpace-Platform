@@ -1047,3 +1047,23 @@ transport. Covered: routing and fallback (mock and adapter), every failure class
 timeout or filter, idempotent replay, both ceilings and the sum rule (including concurrent admission
 against PostgreSQL), the currency rule, the egress rules, the leak check, and that no customer response
 carries a provider cost.
+
+## 19. Conversations, tools, streaming and Stop (PR A, D-605)
+
+A text request may carry, all optional:
+
+- `input.conversation` — the turns after the instruction (`user`, `assistant`, `tool`); a user turn may carry
+  images, sent only to a model the catalogue declares `supportsVision` (another is skipped like an
+  unavailable model, nothing charged);
+- `input.tools` — the tools the model may call (name, description, JSON Schema). The answer then carries
+  `output.toolCalls`. A conversation is never put in the provider's JSON mode;
+- `onDelta` — each piece of the answer as it arrives (the adapter streams; the egress transport hands
+  over each chunk, decoded across UTF-8 boundaries, under the same size cap);
+- `chargeWhen(output)` — whether a successful output is charged. The Copilot's tool loop answers `false`
+  for a step that only asked for tools, which settles at zero credits with its provider cost still
+  recorded, so ONE message is charged once;
+- `signal` — Stop. The running attempt is aborted; the request ends `CANCELLED`, its reservation is
+  released, and it is neither retried nor sent to the next model.
+
+The reservation is unchanged: every step reserves the route's price, so a wallet that cannot cover the
+message is refused before any provider is called.

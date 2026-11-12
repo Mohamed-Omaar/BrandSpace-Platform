@@ -2247,6 +2247,13 @@ the credits charged, `attachedAt` and a `failureReason` key.
 - Partial index on `(status, createdAt)` for unfinished jobs, for the recovery sweep; it is in the
   migration and not in the Prisma schema, which cannot express it.
 - CHECKs: a finished job has `completedAt`; only FAILED has a reason; only SUCCEEDED is attached.
+- THE IMAGE IS CHECKED BEFORE THE JOB SUCCEEDS (PR A, the #122 race, owner 2026-11-11). A RUNNING
+  job records its `assetId` (and the AI request and charge) as soon as the image is stored, and stays
+  RUNNING until the asset is READY + CLEAN; only then is it SUCCEEDED and attached, the attach
+  reading READY + CLEAN again in its own transaction. An image the scan refuses (quarantined,
+  processing failed, gone) fails the job `image_not_checked`, attached nowhere. A run that stops
+  waiting leaves the job RUNNING for the recovery sweep. The job's view names the image only once
+  SUCCEEDED. No schema change: `failureReason` is a key, CHECK-shaped.
 - RLS forced; `tenant_isolation` for `brandspace_app`, `platform_access` for the sweep.
 - Retention: a finished row is deleted on the workspace's AI-content schedule, counted from
   `completedAt` (`purgeCreativeJobs`). Credits live in the ledger, never here.

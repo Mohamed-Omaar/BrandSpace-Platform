@@ -393,6 +393,31 @@ export const COPILOT_TOOLS = [
     messageKey: 'calendarPlace',
   },
 
+  /*
+   * PR A (smart Copilot, D-604/D-605) — AN IMAGE FOR A DRAFT, through the #119
+   * generation job (attached to the draft's first variant when ready). The
+   * tool loop runs it without a card while the message's image spend stays
+   * under `copilot.agent.autoSpendLimitCredits`; above it, it is proposed and
+   * confirmed here like any other step. Not undoable: the credits are spent
+   * by the provider call, and the image stays in the library.
+   */
+  {
+    key: 'post.generate_image',
+    input: brandArgument.extend({
+      contentItemId: z.string().uuid(),
+      brief: z.string().min(1).max(1_500),
+      formatKey: z.enum(['square', 'portrait', 'story', 'landscape']).default('square'),
+      quality: z.enum(['low', 'medium', 'high']).default('medium'),
+    }),
+    permission: 'assets.upload',
+    brandScope: 'required',
+    actionClass: 'INTERNAL_REVERSIBLE',
+    spendsCredits: true,
+    undoable: false,
+    entitlementKey: 'ai.copilot',
+    messageKey: 'generateImage',
+  },
+
   // --- C. EXTERNAL_OR_DESTRUCTIVE ------------------------------------------
   //
   // It leaves the platform. CLAUDE.md §2.5 and A-17: the Copilot may PROPOSE and

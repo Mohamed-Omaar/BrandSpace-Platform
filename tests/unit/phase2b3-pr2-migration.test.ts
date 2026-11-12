@@ -85,6 +85,8 @@ describe('M2 — PREFLIGHT_REFUSED on PublishAttemptOutcome', () => {
       '20261103120000_one_assistant',
       // PR 1 (D-597): image generation as a background job.
       '20261104090000_creative_generation_job',
+      // PR A (D-605): the Copilot's "worked on" and images on a message.
+      '20261111090000_copilot_message_activity',
     ]);
   });
 

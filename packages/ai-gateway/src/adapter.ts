@@ -91,10 +91,56 @@ export interface TextRequest {
    * Optional: an adapter that does not care never has to look.
    */
   readonly outputFormat?: 'text' | 'json';
+  /** PR A (D-605) — the turns after the instruction; the instruction is `prompt`. */
+  readonly conversation?: readonly ChatTurn[];
+  readonly tools?: readonly ToolSpec[];
+  /** Called with each piece of the answer as it arrives. Absent: one answer at the end. */
+  readonly onDelta?: (text: string) => void;
+}
+
+/*
+ * PR A (smart Copilot, D-605) — A CONVERSATION, TOOLS, IMAGES AND STREAMING.
+ *
+ * All optional: a task that sends one prompt is unchanged. The Copilot sends
+ * its turns as `conversation`, offers `tools` the model may call, attaches the
+ * images a person sent in the chat, and asks for the answer word by word.
+ * Tool results come back as `tool` turns and are UNTRUSTED data, like every
+ * other reference material.
+ */
+
+/** An image a person sent in the chat, read from their own Asset Library. */
+export interface ChatImage {
+  readonly mimeType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+  readonly base64: string;
+}
+
+/** A tool the model asked to run: its id, name and JSON-encoded arguments. */
+export interface ToolCallRequest {
+  readonly id: string;
+  readonly name: string;
+  readonly arguments: string;
+}
+
+export type ChatTurn =
+  | { readonly role: 'user'; readonly text: string; readonly images?: readonly ChatImage[] }
+  | {
+      readonly role: 'assistant';
+      readonly text: string;
+      readonly toolCalls?: readonly ToolCallRequest[];
+    }
+  | { readonly role: 'tool'; readonly toolCallId: string; readonly text: string };
+
+/** A tool offered to the model: a name, what it does, and its JSON Schema. */
+export interface ToolSpec {
+  readonly name: string;
+  readonly description: string;
+  readonly parameters: Readonly<Record<string, unknown>>;
 }
 
 export interface TextResult {
   readonly text: string;
+  /** PR A (D-605) — the tools the model asked to run instead of (or before) answering. */
+  readonly toolCalls?: readonly ToolCallRequest[];
   readonly usage: UsageUnits;
   /** What the provider says it used, when it differs from what was asked for. */
   readonly modelKey: string;

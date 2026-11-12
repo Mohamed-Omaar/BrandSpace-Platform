@@ -58,3 +58,89 @@ export async function proxyCopilot(request: Request, upstreamPath: string): Prom
     return NextResponse.json({ error: { code: 'INTERNAL' } }, { status: 502 });
   }
 }
+
+/**
+ * PR A (smart Copilot, D-605) — THE ANSWER AS A STREAM.
+ *
+ * The same session handling as `proxyCopilot`, but the upstream body is
+ * PASSED THROUGH as it arrives (server-sent events) rather than read whole,
+ * and the browser's abort is passed on: when the person presses Stop (or
+ * leaves), the request to the API is cancelled, its connection closes, and
+ * the running model call is aborted and never charged. A refusal before the
+ * stream starts is JSON, exactly as before.
+ */
+export async function proxyCopilotStream(
+  request: Request,
+  upstreamPath: string,
+): Promise<Response> {
+  const base = process.env['BRANDSPACE_API_URL'];
+  if (!base) {
+    log.warn('BRANDSPACE_API_URL is not configured; the Copilot is unavailable');
+    return NextResponse.json({ error: { code: 'INTERNAL' } }, { status: 503 });
+  }
+  const store = await cookies();
+  const token = store.get(CUSTOMER_REALM.cookieName)?.value;
+  if (!token) return NextResponse.json({ error: { code: 'UNAUTHENTICATED' } }, { status: 401 });
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: { code: 'VALIDATION_FAILED' } }, { status: 422 });
+  }
+
+  /*
+   * STOP MUST REACH THE MODEL. Closing the browser's stream cancels the body
+   * handed back below, and that cancel aborts this upstream request: the API
+   * sees its connection close and cancels the running model call. The
+   * request's own signal is passed on too, for a disconnect before the first
+   * byte. Without this the provider would finish an answer nobody reads.
+   */
+  const upstreamAbort = new AbortController();
+  request.signal.addEventListener('abort', () => upstreamAbort.abort(), { once: true });
+  try {
+    const upstream = await fetch(`${base.replace(/\/$/, '')}${upstreamPath}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'text/event-stream',
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+      signal: upstreamAbort.signal,
+    });
+    const type = upstream.headers.get('content-type') ?? '';
+    if (!type.startsWith('text/event-stream') || !upstream.body) {
+      const payload: unknown = await upstream.json().catch(() => ({ error: { code: 'INTERNAL' } }));
+      return NextResponse.json(payload, { status: upstream.status });
+    }
+    const reader = upstream.body.getReader();
+    const passThrough = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        try {
+          const { value, done } = await reader.read();
+          if (done) controller.close();
+          else controller.enqueue(value);
+        } catch {
+          controller.close();
+        }
+      },
+      cancel() {
+        upstreamAbort.abort();
+        void reader.cancel().catch(() => undefined);
+      },
+    });
+    return new Response(passThrough, {
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache, no-store, no-transform',
+        'x-accel-buffering': 'no',
+      },
+    });
+  } catch (error: unknown) {
+    if (request.signal.aborted) return new Response(null, { status: 499 });
+    log.error('copilot upstream failed', { upstreamPath, ...internalErrorFields(error) });
+    return NextResponse.json({ error: { code: 'INTERNAL' } }, { status: 502 });
+  }
+}

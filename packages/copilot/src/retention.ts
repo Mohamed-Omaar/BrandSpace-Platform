@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@brandspace/database';
+import { Prisma, type PrismaClient } from '@brandspace/database';
 import type { Clock } from '@brandspace/shared';
 import type { CopilotPolicy } from './policy';
 
@@ -90,7 +90,9 @@ export async function pruneCopilot(input: {
             where: { id: { in: staleMessages.map((row) => row.id) } },
             // BOTH COLUMNS TOGETHER. The CHECK constraint refuses a purge stamp
             // without a cleared body, so a half-applied purge is unrepresentable.
-            data: { body: null, bodyPurgedAt: now },
+            // PR A (D-605, owner condition) — "worked on" and the ids of the
+            // images sent go with the words, on the same retention.
+            data: { body: null, bodyPurgedAt: now, activity: Prisma.DbNull },
           })
         ).count;
 

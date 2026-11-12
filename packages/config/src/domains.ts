@@ -2502,6 +2502,32 @@ const copilotSchema = z.object({
       retentionDays: z.number().int().min(1).max(3_650).default(90),
     })
     .default({}),
+
+  /*
+   * PR A (smart Copilot, D-604/D-605) — THE TOOL LOOP.
+   *
+   * `maxRounds`: model calls one message may make (each read is a round); the
+   * last one is asked to answer with no tools, so a message always ends.
+   * `maxInputTokensPerMessage`: the cap on what one message sends in total.
+   * `autoSpendLimitCredits`: the credits the Copilot may spend on images in ONE
+   * message without a confirmation card (owner: "credit spend above a
+   * threshold you propose"). Above it, the image is proposed and waits for the
+   * person, like scheduling. Whole credits, as customers see them.
+   */
+  agent: z
+    .object({
+      maxRounds: z.number().int().min(1).max(12).default(3),
+      /*
+       * Owner condition (2026-11-11): the input tokens ONE message may send,
+       * across all its rounds, counted conservatively (non-Latin text at 1.5
+       * characters a token, the rest at 3; an image at 3,000). With 3 rounds
+       * of 1,200 output tokens on gpt-5.4 this holds the worst case at
+       * $0.114 against 4 credits ($0.232): a 50.9% margin.
+       */
+      maxInputTokensPerMessage: z.number().int().min(8_000).max(400_000).default(24_000),
+      autoSpendLimitCredits: z.number().int().min(0).max(1_000).default(30),
+    })
+    .default({}),
 });
 
 /**

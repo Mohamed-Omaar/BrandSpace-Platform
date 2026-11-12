@@ -431,8 +431,21 @@ export class ContentLibraryService {
      * A template of another brand, or outside the member's scope, is NOT_FOUND.
      */
     readonly templateId?: string | null | undefined;
+    /**
+     * PR A (smart Copilot, D-605) — WHO WROTE THE WORDS. Absent: the person
+     * typed them (HUMAN, no request). The Copilot passes AI_GENERATED and the
+     * gateway request that wrote the caption, so provenance stays honest
+     * (D-65): the draft is still created by the person, through this same
+     * path, with the same checks and the same audit event.
+     */
+    readonly provenance?: {
+      readonly origin: 'AI_GENERATED';
+      readonly aiRequestId: string | null;
+      readonly actorType: 'COPILOT';
+    };
   }): Promise<{ item: ContentItem; variants: ContentVariant[]; replayed: boolean }> {
     await this.requireItemForBrandScope(input.brandId, input.actorBrandScope);
+    const origin = input.provenance?.origin ?? 'HUMAN';
 
     let templateId: string | null = null;
     if (input.templateId) {
@@ -545,9 +558,11 @@ export class ContentLibraryService {
           contentType: input.contentType ?? 'POST',
           primaryLocale: input.locale,
           status: 'DRAFT',
-          // HUMAN, and no `aiRequestId`. Nothing on this path can set either
-          // differently, which is what makes the zero-credit claim checkable.
-          origin: 'HUMAN',
+          // HUMAN and no `aiRequestId` unless the Copilot wrote the words — the
+          // only caller that passes `provenance`. This path itself never calls
+          // a model, which is what makes its zero-credit claim checkable.
+          origin,
+          ...(input.provenance?.aiRequestId ? { aiRequestId: input.provenance.aiRequestId } : {}),
           createdByUserId: input.actorUserId,
           ...(campaignId ? { campaignId } : {}),
           ...(input.pillar ? { pillar: input.pillar } : {}),
@@ -637,7 +652,7 @@ export class ContentLibraryService {
             ...(validation.errors.length > 0
               ? { validationErrors: validation.errors as unknown as Prisma.InputJsonValue }
               : {}),
-            origin: 'HUMAN',
+            origin,
             arabicDialect: input.locale === 'AR' ? dialect.key : null,
             expiresAt: input.expiresAt,
           },
@@ -647,13 +662,13 @@ export class ContentLibraryService {
 
     await writeAuditEvent(this.db, this.workspaceId, {
       action: 'content.item.authored',
-      actorType: 'USER',
+      actorType: input.provenance?.actorType ?? 'USER',
       actorId: input.actorUserId,
       resourceType: 'ContentItem',
       resourceId: item.id,
       brandId: item.brandId,
       after: {
-        origin: 'HUMAN',
+        origin,
         variants: written.length,
         platformKeys: input.variants.map((v) => v.platformKey),
         ...(templateId ? { templateId } : {}),

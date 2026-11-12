@@ -2,6 +2,7 @@ import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
 import { request as httpsRequest } from 'node:https';
 import type { IncomingHttpHeaders } from 'node:http';
 import type { LookupFunction } from 'node:net';
+import { StringDecoder } from 'node:string_decoder';
 import { isPublicIpAddress, unsafeProviderUrlReason } from '@brandspace/shared';
 
 /**
@@ -109,6 +110,12 @@ export interface EgressRequest {
   readonly headers: Readonly<Record<string, string>>;
   readonly body?: string;
   readonly signal: AbortSignal;
+  /**
+   * PR A (D-605) — each piece of a SUCCESSFUL (2xx) answer as it arrives,
+   * decoded as UTF-8 across chunk boundaries. The whole body is still
+   * returned at the end; the same size cap applies.
+   */
+  readonly onChunk?: (text: string) => void;
 }
 
 export interface EgressResponse {
@@ -179,6 +186,8 @@ export function pinnedHttpsTransport(
           }
           const chunks: Buffer[] = [];
           let size = 0;
+          const streaming =
+            request.onChunk && status >= 200 && status < 300 ? new StringDecoder('utf8') : null;
           response.on('data', (chunk: Buffer) => {
             size += chunk.length;
             if (size > MAX_RESPONSE_BYTES) {
@@ -186,14 +195,20 @@ export function pinnedHttpsTransport(
               return;
             }
             chunks.push(chunk);
+            if (streaming) {
+              const text = streaming.write(chunk);
+              if (text) request.onChunk?.(text);
+            }
           });
-          response.on('end', () =>
+          response.on('end', () => {
+            const rest = streaming?.end();
+            if (rest) request.onChunk?.(rest);
             resolvePromise({
               status,
               headers: response.headers,
               body: Buffer.concat(chunks).toString('utf8'),
-            }),
-          );
+            });
+          });
           response.on('error', reject);
         },
       );

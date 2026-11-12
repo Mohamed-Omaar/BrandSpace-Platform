@@ -316,7 +316,13 @@ test.describe('the AI Copilot', () => {
     if ((await settle(page)) === 'plan') {
       // Outcome 1. THE CONFIRMATION IS IN FRONT OF THE ACTION, not beside it.
       await expect(page.getByTestId('copilot-confirm')).toBeVisible();
-      await expect(page.getByTestId('copilot-reject')).toBeVisible();
+      // EXACTLY ONE Cancel, and it is the plan card's: the approval region
+      // above the composer draws none (owner decision, 2026-11-11).
+      await expect(page.getByTestId('copilot-reject')).toHaveCount(1);
+      await expect(page.getByTestId('copilot-plan').getByTestId('copilot-reject')).toBeVisible();
+      await expect(page.getByTestId('copilot-approval').getByTestId('copilot-reject')).toHaveCount(
+        0,
+      );
       // And nothing has executed yet: there is no result until it is confirmed.
       await expect(page.getByTestId('copilot-result')).toHaveCount(0);
       return;
@@ -337,11 +343,19 @@ test.describe('the AI Copilot', () => {
 
     if ((await settle(page)) !== 'plan') return; // The refusal branch; covered above.
 
+    // Exactly one Cancel on the page, the plan card's.
     const reject = page.getByTestId('copilot-reject');
-    await expect(reject).toBeVisible();
+    await expect(reject).toHaveCount(1);
+    await expect(page.getByTestId('copilot-plan').getByTestId('copilot-reject')).toBeVisible();
+    const confirmed: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().endsWith('/api/copilot/confirm')) confirmed.push(request.url());
+    });
     await reject.click();
     await expect(page.getByTestId('copilot-plan')).toHaveCount(0);
     await expect(page.getByTestId('copilot-result')).toHaveCount(0);
+    // Cancelling runs nothing: no confirmation was ever sent.
+    expect(confirmed).toEqual([]);
   });
 
   test('the assistant never shows a model name, a prompt or a credential', async ({ page }) => {
@@ -512,6 +526,29 @@ async function chooseHarmlessAction(page: Page): Promise<void> {
   await expect(person).not.toHaveValue('');
 }
 
+/**
+ * TURN A RULE'S SWITCH AND WAIT FOR THE SERVER'S ANSWER (PR A, owner
+ * 2026-11-12). The switch shows where it is going at once and stays BUSY
+ * (disabled, `aria-busy`) until the server answers; the next click is made
+ * only after that answer, and the switch then shows the server's state.
+ */
+async function turnRule(
+  page: Page,
+  row: ReturnType<Page['locator']>,
+  to: 'on' | 'off',
+): Promise<void> {
+  const toggle = row.locator('button[data-testid^="automation-toggle-"]');
+  const answered = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      response.request().headers()['next-action'] !== undefined,
+  );
+  await row.getByRole('button', { name: to === 'on' ? /enable/i : /disable/i }).click();
+  await answered;
+  await expect(toggle).not.toHaveAttribute('aria-busy', 'true');
+  await expect(toggle).toBeEnabled();
+}
+
 test.describe('automations', () => {
   test('a rule can be created, is listed, and starts ON', async ({ page }) => {
     /*
@@ -587,7 +624,7 @@ test.describe('automations', () => {
       .filter({ has: page.getByTitle(name, { exact: true }) })
       .first();
     // Round 4 (5.2): the switch turns in place — no redirect, no toast.
-    await row.getByRole('button', { name: /enable/i }).click();
+    await turnRule(page, row, 'on');
     // The row's switch is on, and now offers to switch it off.
     await expect(
       page
@@ -629,7 +666,7 @@ test.describe('automations', () => {
       .filter({ has: page.getByTitle(name, { exact: true }) })
       .first();
     // Round 4 (5.2): the switch turns in place — no redirect, no toast.
-    await row.getByRole('button', { name: /enable/i }).click();
+    await turnRule(page, row, 'on');
     // The row's switch is on, and now offers to switch it off.
     await expect(
       page
@@ -772,7 +809,7 @@ test.describe('automations', () => {
       .filter({ has: page.getByTitle(name, { exact: true }) })
       .first();
     // Round 4 (5.2): the switch turns in place — no redirect, no toast.
-    await row.getByRole('button', { name: /enable/i }).click();
+    await turnRule(page, row, 'on');
     // The row's switch is on, and now offers to switch it off.
     await expect(
       page
@@ -824,9 +861,9 @@ test.describe('automations', () => {
         .first()
         .getByRole('button', { name: label });
     await expect(switchOf(/disable/i)).toHaveAttribute('aria-pressed', 'true');
-    await row.getByRole('button', { name: /disable/i }).click();
+    await turnRule(page, row, 'off');
     await expect(switchOf(/enable/i)).toHaveAttribute('aria-pressed', 'false');
-    await row.getByRole('button', { name: /enable/i }).click();
+    await turnRule(page, row, 'on');
     // The row's switch is on, and now offers to switch it off.
     await expect(switchOf(/disable/i)).toHaveAttribute('aria-pressed', 'true');
   });
@@ -918,11 +955,73 @@ test.describe('automations', () => {
         .first()
         .getByRole('button', { name: label });
     await expect(switchOf(/disable/i)).toHaveAttribute('aria-pressed', 'true');
-    await row.getByRole('button', { name: /disable/i }).click();
+    await turnRule(page, row, 'off');
     await expect(switchOf(/enable/i)).toHaveAttribute('aria-pressed', 'false');
-    await row.getByRole('button', { name: /enable/i }).click();
+    await turnRule(page, row, 'on');
     // The row's switch is on, and now offers to switch it off.
     await expect(switchOf(/disable/i)).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('A QUICK SECOND CLICK ON A RULE SWITCH IS NEVER SILENTLY DROPPED', async ({ page }) => {
+    /*
+     * PR A (owner, 2026-11-12). The switch used to flip at once and ignore
+     * every click until the server answered, so off-then-on in quick
+     * succession left the rule off with nothing said. The server is held back
+     * here so the first request is surely in flight: the switch must be BUSY
+     * (disabled, aria-busy) — a click cannot be taken and then lost — and the
+     * second click, made as soon as the switch takes clicks again, must count.
+     */
+    const name = `E2E quick ${Date.now()}`;
+    const ruleId = await seedOlderRule({
+      name,
+      triggerType: 'SCHEDULED_TIME',
+      triggerConfig: { hourLocal: 7, daysOfWeek: [] },
+    });
+    // The shared workspace's brand may hold only so many rules, and the other
+    // tests here create theirs: this one leaves the count as it found it.
+    try {
+      await signIn(page);
+      await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+      const toggle = page.getByTestId(`automation-toggle-${ruleId}`);
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+      const posted: string[] = [];
+      page.on('request', (request) => {
+        if (request.method() === 'POST' && request.headers()['next-action'] !== undefined) {
+          posted.push(request.url());
+        }
+      });
+      await page.route('**/automations**', async (route) => {
+        if (route.request().method() === 'POST') {
+          await new Promise((resolve) => setTimeout(resolve, 1_500));
+        }
+        await route.continue();
+      });
+
+      // First click: on. While the server works, the switch is busy.
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+      await expect(toggle).toBeDisabled();
+      await expect(toggle).toHaveAttribute('aria-busy', 'true');
+      // Second click, straight away: it is taken the moment the switch is free.
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+      await expect(toggle).toBeEnabled();
+      await expect(toggle).not.toHaveAttribute('aria-busy', 'true');
+      await expect(page.getByTestId(`automation-toggle-failed-${ruleId}`)).toHaveCount(0);
+
+      // BOTH clicks reached the server, and the server agrees: off.
+      expect(posted).toHaveLength(2);
+      const stored = await withPlatformPrisma((prisma) =>
+        prisma.automationRule.findUniqueOrThrow({
+          where: { id: ruleId },
+          select: { enabled: true },
+        }),
+      );
+      expect(stored.enabled).toBe(false);
+    } finally {
+      await withPlatformPrisma((prisma) => prisma.automationRule.delete({ where: { id: ruleId } }));
+    }
   });
 
   test('CHANGING THE FIELD RESETS AN OPERATOR THAT NO LONGER APPLIES', async ({ page }) => {
@@ -1138,6 +1237,9 @@ test.describe('P6-12 · copilot and automations', () => {
     if (outcome !== 'plan') return; // a refusal is an honest answer too
     const reject = page.getByTestId('copilot-reject');
     if ((await reject.count()) === 0) return; // a read-only plan needs no decision
+    // Exactly one Cancel, the plan card's.
+    await expect(reject).toHaveCount(1);
+    await expect(page.getByTestId('copilot-plan').getByTestId('copilot-reject')).toHaveCount(1);
     const cancelled = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/copilot/cancel') && response.request().method() === 'POST',

@@ -52,6 +52,7 @@ export type {
   ExecutorContext,
   ExecutorResult,
   ExternalActionPort,
+  ImageJobPort,
   AutomationRuleCheck,
   AutomationRulePair,
   AutomationRulePort,
@@ -119,3 +120,35 @@ export {
 } from './orchestrator';
 export { productFactsLines, readableSize, typeName } from './product-facts';
 export type { ProductFacts } from './product-facts';
+
+// PR A (smart Copilot, D-605) — the tool loop.
+export {
+  AGENT_TOOLS,
+  IMAGE_FORMAT_KEYS,
+  agentInstruction,
+  agentToolName,
+  agentToolsFor,
+  findAgentTool,
+  runAgentTurn,
+} from './agent';
+export type {
+  AgentActivityEntry,
+  AgentDeps,
+  AgentEvent,
+  AgentKnowledge,
+  AgentLimits,
+  AgentToolDefinition,
+  AgentToolOutcome,
+  AgentToolPort,
+  AgentTurnInput,
+  AgentTurnResult,
+  AgentProposedStep,
+} from './agent';
+export type { AgentPrepared } from './orchestrator';
+export {
+  ACTIVITY_MAX_BYTES,
+  ACTIVITY_MAX_IMAGES,
+  ACTIVITY_MAX_STEPS,
+  answerActivity,
+  messageActivity,
+} from './activity';
