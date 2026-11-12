@@ -73,6 +73,7 @@ function configuration(input: {
   solDefault: ReasoningEffort | null;
   routeEffort?: ReasoningEffort | null;
   primary?: string;
+  temperature?: number;
 }): AiConfiguration {
   const model = (key: string, defaultReasoningEffort: ReasoningEffort | null) =>
     ({
@@ -114,7 +115,7 @@ function configuration(input: {
       maxCostPerRequestMinor: null,
       priority: 0,
       parameters: {
-        temperature: 0.7,
+        temperature: input.temperature ?? 0.7,
         maxOutputTokens: 2_000,
         promptTemplateVersion: 1,
         persistOutput: false,
@@ -241,6 +242,38 @@ describe('reasoning · strategy and the monthly plan on a reasoning model', () =
       select: { failureClass: true, creditsChargedMilli: true },
     });
     expect(row).toEqual({ failureClass: 'INVALID_REQUEST', creditsChargedMilli: 0n });
+  });
+});
+
+describe('reasoning · a temperature set explicitly on the route (staging v2: temperature 1)', () => {
+  for (const taskKey of ['strategy.generate', 'plan.monthly']) {
+    it(`${taskKey} with temperature 1 on the route: still not sent to the reasoning model, which succeeds`, async () => {
+      active = configuration({ solDefault: 'medium', temperature: 1 });
+      const ws = await workspace();
+      seen.length = 0;
+      const result = await ask(ws, taskKey);
+      expect(result.status).toBe('SUCCEEDED');
+      expect(result.modelKey).toBe('sol');
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.temperature).toBeUndefined();
+    });
+  }
+
+  it('the same route on a model that does not reason sends its temperature of 1', async () => {
+    active = configuration({ solDefault: 'medium', temperature: 1, primary: 'mini' });
+    const ws = await workspace();
+    seen.length = 0;
+    expect((await ask(ws, 'strategy.generate')).status).toBe('SUCCEEDED');
+    expect(seen[0]).toMatchObject({ modelKey: 'mini', temperature: 1 });
+  });
+
+  it('a route naming an effort with temperature 1: the effort is sent, the temperature is not', async () => {
+    active = configuration({ solDefault: null, temperature: 1, routeEffort: 'high' });
+    const ws = await workspace();
+    seen.length = 0;
+    expect((await ask(ws, 'plan.monthly')).status).toBe('SUCCEEDED');
+    expect(seen[0]!.temperature).toBeUndefined();
+    expect(seen[0]!.reasoningEffort).toBe('high');
   });
 });
 

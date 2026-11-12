@@ -16,7 +16,9 @@ import { ConfigurationAiSource, reasonsWith } from '@brandspace/ai-gateway';
  * the catalogue's `defaultReasoningEffort`, or the route's `reasoningEffort`.
  */
 
-const routing = JSON.parse(readFileSync('docs/pricing/staging-active-ai-routing.json', 'utf8'));
+// The ACTIVE staging routing: v2, read by the owner on 2026-11-12. Every
+// rule sets parameters; strategy and the monthly plan set temperature 1.
+const routing = JSON.parse(readFileSync('docs/pricing/staging-active-ai-routing-v2.json', 'utf8'));
 const change = JSON.parse(readFileSync('docs/pricing/reasoning-ai-models-change.json', 'utf8'));
 
 /** The two staging models these routes use, as `pr-3-pricing` records them. */
@@ -105,7 +107,7 @@ describe('reasoning · the settings', () => {
 });
 
 describe('reasoning · staging’s strategy and monthly plan', () => {
-  it('TODAY: both route to gpt-6.1-sol with temperature 0.7 and no reasoning declared — the request carries a temperature', async () => {
+  it('TODAY: both route to gpt-6.1-sol with temperature 1 set on the route and no reasoning declared — the request carries a temperature', async () => {
     const config = await runtimeLoad({
       'ai.models': { models: STAGING_MODELS },
       'ai.routing': routing,
@@ -115,12 +117,13 @@ describe('reasoning · staging’s strategy and monthly plan', () => {
     for (const taskKey of ['strategy.generate', 'plan.monthly']) {
       const route = config.routingRules.find((r) => r.taskKey === taskKey)!;
       expect(route.primaryModelKey).toBe('gpt-6.1-sol');
-      expect(route.parameters.temperature).toBe(0.7);
+      expect(route.parameters.temperature).toBe(1);
+      expect(route.parameters.maxOutputTokens).toBe(6_000);
       expect(reasonsWith(sol, route.parameters)).toBe(false);
     }
   });
 
-  it('WITH THE ACTIVATION SNIPPET: gpt-6.1-sol reasons at medium, so neither route sends a temperature; the mini fallback still does', async () => {
+  it('WITH THE ACTIVATION SNIPPET: gpt-6.1-sol reasons at medium, so neither route sends its temperature of 1; the mini fallback still does', async () => {
     expect(change).toEqual({ model: 'gpt-6.1-sol', add: { defaultReasoningEffort: 'medium' } });
     const models = {
       models: STAGING_MODELS.map((m) => (m.key === change.model ? { ...m, ...change.add } : m)),
@@ -132,6 +135,8 @@ describe('reasoning · staging’s strategy and monthly plan', () => {
     expect(sol.defaultReasoningEffort).toBe('medium');
     for (const taskKey of ['strategy.generate', 'plan.monthly']) {
       const route = config.routingRules.find((r) => r.taskKey === taskKey)!;
+      // The route sets temperature 1 explicitly; it is still not sent to sol.
+      expect(route.parameters.temperature).toBe(1);
       expect(reasonsWith(sol, route.parameters)).toBe(true);
       expect(reasonsWith(mini, route.parameters)).toBe(false);
     }

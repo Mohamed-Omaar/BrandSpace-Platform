@@ -81,7 +81,11 @@ const PASTED_MODELS = {
   ],
 };
 const ACTIVE_RULES = JSON.parse(readFileSync('docs/pricing/pr-3-ai-credit-rules.json', 'utf8'));
-const ACTIVE_ROUTING = JSON.parse(readFileSync('docs/pricing/pr-3-ai-routing.json', 'utf8'));
+// The ACTIVE routing on staging: v2 as the owner read it on 2026-11-12, with
+// parameters on every rule (copilot.chat: temperature 1, 1,500 tokens).
+const ACTIVE_ROUTING = JSON.parse(
+  readFileSync('docs/pricing/staging-active-ai-routing-v2.json', 'utf8'),
+);
 
 // --- The three edits, as the guide describes them. ---------------------------
 type Doc = Record<string, unknown>;
@@ -161,9 +165,9 @@ describe('PR A — the Copilot’s model and price, as the guide activates them'
     });
     expect(errors(report)).toEqual([]);
     expect(d15(report)).toEqual([
-      // The current route still allows 800 output tokens; step 3 raises it.
+      // The active route still allows 1,500 output tokens; step 3 lowers it.
       expect.stringMatching(
-        /^copilot\.chat on gpt-5\.4 earns 53\.4% gross margin at its worst case, below the 65% target/,
+        /^copilot\.chat on gpt-5\.4 earns 48\.9% gross margin at its worst case, below the 65% target/,
       ),
     ]);
     for (const summary of buildImpactPreview('ai.credit-rules', ACTIVE_RULES, RULES).changes.map(
@@ -203,7 +207,12 @@ describe('PR A — the Copilot’s model and price, as the guide activates them'
       fallbackModelKeys: ['gpt-5.4-mini'],
       timeoutMs: 120_000,
     });
-    expect(route?.parameters).toMatchObject({ maxOutputTokens: 1_200, attemptTimeoutMs: 90_000 });
+    // The active rule's temperature is kept; the tokens per call are lowered.
+    expect(route?.parameters).toMatchObject({
+      temperature: 1,
+      maxOutputTokens: 1_200,
+      attemptTimeoutMs: 90_000,
+    });
     for (const key of ['gpt-5.4', 'gpt-5.4-mini']) {
       const model = config.models.find((m) => m.key === key);
       expect(model?.features).toMatchObject({ vision: true, toolUse: true });
