@@ -9,6 +9,7 @@ import {
   AUTOMATION_RULE_VERSION_CONFLICT_REASON,
 } from '@brandspace/automation';
 import type { AutomationActionType, AutomationTrigger } from '@brandspace/database';
+import { statusMessage } from '../../../i18n/messages';
 import { requireWorkspace } from '../../../server/customer-context';
 import { inAnalytics, callPhase7Api } from '../../../server/analytics-context';
 import {
@@ -221,7 +222,12 @@ export async function skipAutomationRunAction(formData: FormData): Promise<void>
  * script the form posts and redirects exactly as before.
  */
 export type ToggleResult =
-  { readonly ok: true; readonly enabled: boolean } | { readonly ok: false; readonly code: string };
+  | { readonly ok: true; readonly enabled: boolean }
+  /**
+   * PR A (owner, 2026-11-12) — the refusal's reason in the reader's language,
+   * the same words the screen's banner gives the code; null when it has none.
+   */
+  | { readonly ok: false; readonly code: string; readonly message: string | null };
 
 export async function toggleAutomationAction(formData: FormData): Promise<void | ToggleResult> {
   const locale = String(formData.get('locale') ?? 'en');
@@ -230,10 +236,12 @@ export async function toggleAutomationAction(formData: FormData): Promise<void |
   const enabled = formData.get('enabled') === '1';
   const inPlace = formData.get('inPlace') === '1';
 
+  // The SERVER's state after the change: what the switch then shows.
+  let kept = enabled;
   try {
     await inAnalytics(session.workspace.workspaceId, async (services) => {
       const engine = await services.automations();
-      await engine.updateRule({
+      const rule = await engine.updateRule({
         ruleId,
         enabled,
         actor: {
@@ -243,13 +251,17 @@ export async function toggleAutomationAction(formData: FormData): Promise<void |
           brandScope: session.workspace.brandScope,
         },
       });
+      kept = rule.enabled;
     });
   } catch (error: unknown) {
-    if (inPlace) return { ok: false, code: codeFrom(error) };
+    if (inPlace) {
+      const code = codeFrom(error);
+      return { ok: false, code, message: statusMessage(code, locale) };
+    }
     redirect(`/${locale}/automations?error=${codeFrom(error)}`);
   }
 
-  if (inPlace) return { ok: true, enabled };
+  if (inPlace) return { ok: true, enabled: kept };
   revalidatePath(`/${locale}/automations`);
   redirect(`/${locale}/automations?ok=AUTOMATION_UPDATED`);
 }

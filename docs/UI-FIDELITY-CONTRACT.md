@@ -2433,6 +2433,14 @@ APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2); the prototype draws none of these scr
 No new colour, font, shadow or interaction model; en and ar. Measured by `tests/e2e/ai-apps.spec.ts`
 (axe in both languages, RTL) and covered in the reviewer screenshots.
 
+### 6.x `/[locale]/automations` — the rule switch's busy state (PR A, owner 2026-11-12)
+
+An addition to an existing extension route. While a switch's request is in flight, the switch shows
+where it is going and is BUSY: `disabled` and `aria-busy`, styled `.bsp-tgl:disabled` with the
+treatment `.bsp-tgl-in:disabled` already uses (opacity 0.5), and the `progress` cursor. When the server
+answers, the switch shows the server's state. A refusal puts it back and shows the reason in the
+screen's own words. Composed from the existing switch; no new component, colour or motion.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The

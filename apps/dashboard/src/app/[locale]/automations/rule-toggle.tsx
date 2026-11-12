@@ -8,10 +8,18 @@ import type { ToggleResult } from './actions';
  *
  * The prototype's switch changes only itself and the "On / Off" beside it.
  * This posts the row's own form to the same `toggleAutomationAction`, asked
- * for an answer (`inPlace=1`) instead of a redirect, and shows the new state
- * when the server has kept it — the list does not reload, flicker or reset.
- * A refusal puts the switch back and says why. Without script the form still
- * posts and redirects as it always did.
+ * for an answer (`inPlace=1`) instead of a redirect — the list does not
+ * reload, flicker or reset. Without script the form still posts and
+ * redirects as it always did.
+ *
+ * A CLICK IS NEVER LOST (PR A, owner 2026-11-12). The switch used to flip at
+ * once and then silently ignore any click until the server answered, so a
+ * quick second click (off, then on again) did nothing and the rule stayed
+ * off. Now, while a request is in flight, the switch shows where it is going
+ * and is BUSY: `disabled` and `aria-busy`, so a second click cannot be taken
+ * and then dropped. When the server answers, the switch shows the SERVER's
+ * state; a refusal puts it back and says why, in the screen's own words for
+ * that refusal.
  */
 export function RuleToggle({
   locale,
@@ -30,12 +38,13 @@ export function RuleToggle({
   readonly label: { readonly on: string; readonly off: string };
   readonly onLabel: string;
   readonly offLabel: string;
+  /** The words when the refusal has none of its own. */
   readonly failedLabel: string;
   readonly action: (formData: FormData) => Promise<void | ToggleResult>;
 }) {
   const [on, setOn] = useState(enabled);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   return (
     <>
       <span
@@ -49,23 +58,26 @@ export function RuleToggle({
         className="bsp-au-tglf"
         onSubmit={(event) => {
           event.preventDefault();
+          // The button is disabled while busy, so this is only a guard.
           if (busy) return;
           const data = new FormData(event.currentTarget);
           data.set('inPlace', '1');
-          const next = !on;
-          setOn(next);
+          const before = on;
+          setOn(!before);
           setBusy(true);
-          setFailed(false);
+          setFailure(null);
           void action(data)
             .then((result) => {
               if (result && !result.ok) {
-                setOn(!next);
-                setFailed(true);
+                setOn(before);
+                setFailure(result.message ?? failedLabel);
+              } else if (result) {
+                setOn(result.enabled);
               }
             })
             .catch(() => {
-              setOn(!next);
-              setFailed(true);
+              setOn(before);
+              setFailure(failedLabel);
             })
             .finally(() => setBusy(false));
         }}
@@ -77,6 +89,7 @@ export function RuleToggle({
           type="submit"
           className="bsp-tgl"
           aria-pressed={on}
+          disabled={busy}
           aria-busy={busy || undefined}
           aria-label={on ? label.on : label.off}
           data-testid={`automation-toggle-${ruleId}`}
@@ -84,13 +97,13 @@ export function RuleToggle({
           <span className="bsp-tgl-k" aria-hidden="true" />
         </button>
       </form>
-      {failed ? (
+      {failure !== null ? (
         <span
           className="bsp-au-tgl-failed"
           role="alert"
           data-testid={`automation-toggle-failed-${ruleId}`}
         >
-          {failedLabel}
+          {failure}
         </span>
       ) : null}
     </>

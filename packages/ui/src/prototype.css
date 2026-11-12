@@ -8452,6 +8452,14 @@ img.bsp-pf-art {
 .bsp-tgl[aria-pressed='true'] .bsp-tgl-k {
   inset-inline-start: var(--bsp-px-16);
 }
+/*
+ * PR A (owner, 2026-11-12): BUSY while the server answers — the same
+ * disabled treatment as `.bsp-tgl-in:disabled` (design-system extension).
+ */
+.bsp-tgl:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
 /* The ⋯ button (`.ibtn`, 30 × 30) and its glass menu (160px, radius 14). */
 .bsp-au-more {
   position: static;
