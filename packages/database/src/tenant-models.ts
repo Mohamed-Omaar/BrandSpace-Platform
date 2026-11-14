@@ -312,6 +312,15 @@ export type TenantModel =
 
 export type PlatformOwnedModel = (typeof PLATFORM_OWNED_MODELS)[number];
 
+/**
+ * PR D (D-608). Strict tenant models whose policy is STRICTER than the usual
+ * one: a row is visible only to its own writer in its own workspace (both
+ * app.workspace_id and app.user_id must match), so the policy is named
+ * personal_owner rather than tenant_isolation. They stay in the strict list
+ * above for every other check.
+ */
+export const PERSONAL_OWNER_MODELS = ['PersonalNote', 'PersonalNoteReminder'] as const;
+
 /** Every model that must carry an RLS policy. */
 export const MODELS_REQUIRING_RLS = [
   ...STRICT_TENANT_MODELS,
