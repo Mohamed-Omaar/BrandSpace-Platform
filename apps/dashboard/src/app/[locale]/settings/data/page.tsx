@@ -76,6 +76,8 @@ export default async function DataControlsPage({
     available: boolean;
     detail?: string;
     href?: string;
+    /** A file this row downloads (a route handler), not a screen it opens. */
+    download?: boolean;
   }[] = [
     {
       key: 'retention',
@@ -97,6 +99,8 @@ export default async function DataControlsPage({
       ? [{ key: 'brandSources', available: true, href: '/brand-brain' }]
       : []),
     { key: 'workspaceExport', available: false },
+    // PR D (D-607, owner condition 2): every member's own notes, theirs alone.
+    { key: 'myNotes', available: true, href: '/notes/export', download: true },
   ];
 
   const surface = controls.filter((control) => control.key === 'workspaceExport');
@@ -235,6 +239,7 @@ function ControlRow({
     readonly available: boolean;
     readonly detail?: string;
     readonly href?: string;
+    readonly download?: boolean;
   };
   readonly locale: string;
   readonly t: (key: MessageKey) => string;
@@ -247,7 +252,17 @@ function ControlRow({
           {control.detail ?? t(`data.${control.key}.body` as MessageKey)}
         </span>
       </span>
-      {control.available && control.href ? (
+      {control.available && control.href && control.download ? (
+        // A file, not a page: a plain link the browser downloads (no prefetch).
+        <a
+          href={`/${locale}${control.href}`}
+          download
+          className="bsp-btn bsp-sm"
+          data-testid={`data-download-${control.key}`}
+        >
+          {t('data.download')}
+        </a>
+      ) : control.available && control.href ? (
         <Link href={`/${locale}${control.href}`} className="bsp-btn bsp-sm">
           {t('data.open')}
         </Link>

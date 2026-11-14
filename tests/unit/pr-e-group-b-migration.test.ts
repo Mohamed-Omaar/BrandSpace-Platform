@@ -68,7 +68,7 @@ describe('PR E — the Group B fields', () => {
   });
 
   it('comes directly after batch 7 PR C, and only connectors A and B, the AI apps migrations and the D-573 ceiling follow it', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-18)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-20)).toEqual([
       '20261016090000_content_item_publish_time',
       NAME,
       '20261021090000_connectors_a_handles_and_subjects',

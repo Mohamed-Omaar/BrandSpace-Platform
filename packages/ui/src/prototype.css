@@ -10029,6 +10029,51 @@ img.bsp-pf-art {
   }
 }
 
+/* PR D (D-607) — MY NOTES, a design-system extension of the panes above
+   (CLAUDE.md §4.2; contract §6). The tabs are the shared `.seg` of links; the
+   list and pane are `.bsp-nts`. Only what the team pane has no slot for: the
+   search row at the head of the list, the editor's stacked fields, the
+   reminder block under a hairline, and the quiet danger word for delete. */
+.bsp-seg.bsp-pn-tabs {
+  align-self: flex-start;
+  inline-size: fit-content;
+  margin-block-end: var(--bsp-px-16);
+}
+.bsp-pn-search {
+  display: flex;
+  gap: var(--bsp-px-8);
+  align-items: center;
+  padding: var(--bsp-px-12) var(--bsp-px-16) var(--bsp-px-6);
+}
+.bsp-pn-search .bs-control {
+  flex-grow: 1;
+  min-inline-size: 0;
+}
+.bsp-pn-editor {
+  display: grid;
+  gap: var(--bsp-px-6);
+}
+.bsp-pn-editor textarea.bs-control.bsp-pn-body {
+  min-block-size: var(--bsp-px-70);
+  resize: vertical;
+  font-size: var(--bsp-fs-14);
+  line-height: 1.55;
+}
+.bsp-pn-reminder {
+  display: grid;
+  gap: var(--bsp-px-10);
+  border-top: var(--bs-notes-divider);
+  padding-top: var(--bsp-px-12);
+}
+.bsp-btn.bsp-pn-delete {
+  color: var(--bs-danger);
+}
+@media (max-width: 767.98px) {
+  .bsp-pn-reminder .bsp-nts-bar {
+    flex-wrap: wrap;
+  }
+}
+
 /* Gate 2b — STRATEGY, as the prototype draws it (`Main.dc.html` lines
    975–1110). The period switch is the shared `.seg`, each half carrying its
    `.xstatus` at `margin-inline-start: 4px`. */

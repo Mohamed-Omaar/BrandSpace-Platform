@@ -196,7 +196,7 @@ describe('D-566 · the AI apps migration', () => {
   });
 
   it('comes directly after connectors B; only its D-112 fix (D-568) and the D-573 ceiling follow', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-13)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-15)).toEqual([
       '20261022092000_publish_job_handle_lookup_index',
       NAME,
       '20261023091000_ai_app_token_replaced_scoped',
