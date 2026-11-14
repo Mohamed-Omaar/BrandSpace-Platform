@@ -2,7 +2,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AssetUploadService, TenantAssetPolicySource, type AssetPolicy } from '@brandspace/assets';
 import {
+  CREATIVE_DO_DONT_AREAS,
   CREATIVE_KNOWLEDGE_AREAS,
+  CREATIVE_VOICE_AREAS,
   CREATIVE_KNOWLEDGE_LINES,
   CreativeGenerationJobs,
   CreativeStudioService,
@@ -17,7 +19,7 @@ import { createLogger, internalErrorFields, maySpendCredits } from '@brandspace/
 import { writingFactsInAreas } from '@brandspace/brand-brain';
 import { createObjectStore, type ObjectStore } from '@brandspace/storage';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
-import type { PrismaClient } from '@brandspace/database';
+import type { BrandKnowledgeArea, PrismaClient } from '@brandspace/database';
 import {
   EntitlementService,
   QUOTA_FEATURES,
@@ -79,6 +81,10 @@ const generateSchema = z.object({
    * workspace; anything else is the same miss as a brand out of scope.
    */
   contentVariantId: z.string().uuid().optional(),
+  /** PR B — put the brand's real logo on the image (default: yes). */
+  addLogo: z.boolean().optional(),
+  /** PR B — an optional headline drawn on the image. */
+  headline: z.string().max(200).nullable().optional(),
 });
 
 const jobIdSchema = z.object({ id: z.string().uuid() });
@@ -297,6 +303,8 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
               brief: parsed.data.brief,
               formatKey: parsed.data.formatKey,
               ...(parsed.data.quality ? { quality: parsed.data.quality } : {}),
+              ...(parsed.data.addLogo !== undefined ? { addLogo: parsed.data.addLogo } : {}),
+              ...(parsed.data.headline ? { headline: parsed.data.headline } : {}),
               ...(parsed.data.contentVariantId
                 ? { contentVariantId: parsed.data.contentVariantId }
                 : {}),
@@ -442,22 +450,68 @@ export async function creativeIdentity(
       description: true,
       colorPalette: true,
       typography: true,
+      primaryLogoAssetId: true,
+      secondaryLogoAssetId: true,
     },
   });
   if (!brand) return null;
-  const knowledge = await writingFactsInAreas(db, {
-    brandId: brand.id,
-    areas: CREATIVE_KNOWLEDGE_AREAS,
-    maxItems: CREATIVE_KNOWLEDGE_LINES,
-  });
+  const lines = async (areas: readonly BrandKnowledgeArea[]) =>
+    (
+      await writingFactsInAreas(db, {
+        brandId: brand.id,
+        areas,
+        maxItems: CREATIVE_KNOWLEDGE_LINES,
+      })
+    )
+      .map((item) => localizedLine(item.body))
+      .filter((line) => line !== '');
+  const [knowledge, voice, doDont, logos] = await Promise.all([
+    lines(CREATIVE_KNOWLEDGE_AREAS),
+    lines(CREATIVE_VOICE_AREAS),
+    lines(CREATIVE_DO_DONT_AREAS),
+    brandLogos(db, brand.primaryLogoAssetId, brand.secondaryLogoAssetId),
+  ]);
   return {
     name: brand.name,
     industry: brand.industry,
     description: brand.description,
     palette: stringArray(brand.colorPalette),
     typography: brandTypography(brand.typography),
-    knowledge: knowledge.map((item) => localizedLine(item.body)).filter((line) => line !== ''),
+    typographyStored: brand.typography,
+    knowledge,
+    voice,
+    doDont,
+    logos,
   };
+}
+
+/**
+ * PR B — THE BRAND'S OWN LOGO FILES, for the image. Only a logo the library
+ * would publish: READY + CLEAN, an image, not deleted, in this workspace (RLS
+ * and the explicit predicate). Anything else contributes nothing.
+ */
+async function brandLogos(
+  db: TenantScopedClient,
+  primaryId: string | null,
+  secondaryId: string | null,
+): Promise<{ primary: Uint8Array | null; secondary: Uint8Array | null }> {
+  const read = async (assetId: string | null): Promise<Uint8Array | null> => {
+    if (!assetId) return null;
+    const asset = await db.asset.findFirst({
+      where: {
+        id: assetId,
+        deletedAt: null,
+        status: 'READY',
+        scanStatus: 'CLEAN',
+        kind: 'IMAGE',
+      },
+      select: { storageKey: true },
+    });
+    if (!asset) return null;
+    return (await objectStore().get(asset.storageKey)) ?? null;
+  };
+  const [primary, secondary] = await Promise.all([read(primaryId), read(secondaryId)]);
+  return { primary, secondary };
 }
 
 /**

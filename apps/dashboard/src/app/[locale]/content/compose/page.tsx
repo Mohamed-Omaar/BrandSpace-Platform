@@ -13,7 +13,7 @@ import {
   nextDayKey,
   readSlides,
 } from '@brandspace/content';
-import { CREATIVE_FORMATS } from '@brandspace/creative';
+import { CREATIVE_FORMATS } from '@brandspace/creative/catalogue';
 import {
   areaDefinition,
   brandBrainEnabledForWriting,
@@ -1699,6 +1699,11 @@ const EDITOR_KEYS = [
   'editor.media.addThis',
   'editor.media.prompt',
   'editor.media.format',
+  // PR B — the logo and the headline on a made image.
+  'editor.media.addLogo',
+  'editor.media.addLogoHint',
+  'editor.media.headline',
+  'editor.media.headlineHint',
   'editor.media.estimate',
   'editor.media.generate',
   'editor.media.generateHint',

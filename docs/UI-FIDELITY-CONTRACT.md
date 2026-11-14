@@ -2433,6 +2433,13 @@ APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2); the prototype draws none of these scr
 No new colour, font, shadow or interaction model; en and ar. Measured by `tests/e2e/ai-apps.spec.ts`
 (axe in both languages, RTL) and covered in the reviewer screenshots.
 
+### 6.x `/[locale]/content/compose` (media drawer) and `/[locale]/creative` — the logo and the headline (PR B, D-607)
+
+Additions inside screens that are already extensions. Under the image's size (and quality): "Add our logo"
+as the existing toggle row (`bsp-tg-row` with `bsp-tgl-in`, as the TikTok options use it), on by default,
+and "Headline on the image (optional)", a plain text input of the form's own control class with a hint.
+No new component, colour, font or motion.
+
 ### 6.x `/[locale]/automations` — the rule switch's busy state (PR A, owner 2026-11-12)
 
 An addition to an existing extension route. While a switch's request is in flight, the switch shows

@@ -10,12 +10,15 @@ import {
   SegmentPill,
 } from '@brandspace/ui';
 import { writingFactsInAreas } from '@brandspace/brand-brain';
+// PR B — the catalogue subpath: no image library is loaded by this page.
 import {
+  CREATIVE_DO_DONT_AREAS,
   CREATIVE_FORMATS,
   CREATIVE_KNOWLEDGE_AREAS,
   CREATIVE_KNOWLEDGE_LINES,
+  CREATIVE_VOICE_AREAS,
   brandTypography,
-} from '@brandspace/creative';
+} from '@brandspace/creative/catalogue';
 import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
@@ -100,8 +103,8 @@ export default async function CreativeStudioPage({
    * identity / voice notes Brand Brain contributes — the same selection the
    * generation route reads, through the same grounding-layer call
    * (`writingFactsInAreas`: usable facts, the workspace's day, the brand's "Use
-   * Brand Brain" switch; IDENTITY or TONE_OF_VOICE, at most six). Counted,
-   * never scored; nothing here is sent anywhere.
+   * Brand Brain" switch; IDENTITY, TONE_OF_VOICE and DO_DONT (PR B), at most
+   * six of each). Counted, never scored; nothing here is sent anywhere.
    */
   const identity = brand
     ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
@@ -109,13 +112,19 @@ export default async function CreativeStudioPage({
           where: { id: brand.id, deletedAt: null },
           select: { colorPalette: true, typography: true },
         });
-        const notes = (
-          await writingFactsInAreas(db, {
-            brandId: brand.id,
-            areas: CREATIVE_KNOWLEDGE_AREAS,
-            maxItems: CREATIVE_KNOWLEDGE_LINES,
-          })
-        ).length;
+        const counts = await Promise.all(
+          [CREATIVE_KNOWLEDGE_AREAS, CREATIVE_VOICE_AREAS, CREATIVE_DO_DONT_AREAS].map(
+            async (areas) =>
+              (
+                await writingFactsInAreas(db, {
+                  brandId: brand.id,
+                  areas,
+                  maxItems: CREATIVE_KNOWLEDGE_LINES,
+                })
+              ).length,
+          ),
+        );
+        const notes = counts.reduce((sum, count) => sum + count, 0);
         const strings = (value: unknown): string[] =>
           Array.isArray(value)
             ? value.filter((entry): entry is string => typeof entry === 'string')
@@ -147,6 +156,10 @@ export default async function CreativeStudioPage({
     formatHint: t('creative.formatHint'),
     quality: t('creative.quality'),
     qualityHint: t('creative.qualityHint'),
+    addLogo: t('editor.media.addLogo'),
+    addLogoHint: t('editor.media.addLogoHint'),
+    headline: t('editor.media.headline'),
+    headlineHint: t('editor.media.headlineHint'),
     qualityLow: t('creative.qualityLow'),
     qualityMedium: t('creative.qualityMedium'),
     qualityHigh: t('creative.qualityHigh'),

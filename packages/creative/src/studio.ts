@@ -1,3 +1,4 @@
+import { composeImage, type ComposeResult } from './composite';
 import { createHash } from 'node:crypto';
 import {
   AppError,
@@ -40,10 +41,13 @@ import { CREATIVE_FORMATS, findCreativeFormat, type CreativeFormat } from './for
  * and the `aiRequestId` are the only difference, and they exist so a customer
  * can always tell what a model made from what they made.
  *
- * BRAND IDENTITY GUIDES GENERATION; IT DOES NOT OVERLAY IT (D-193, AC-28.7).
- * The brand's palette, typography and description shape the PROMPT. Nothing
- * here composites a logo onto the result — stamping artwork is a design act the
- * product has not been asked to perform and could not undo.
+ * BRAND IDENTITY GUIDES GENERATION, AND THE REAL LOGO IS PUT ON THE RESULT
+ * (PR B; D-601 changes D-193). The brand's palette, typography, style, voice
+ * and do/don't shape the PROMPT; the model is still told never to draw a logo.
+ * After the image is made, `composeImage` places the brand's OWN logo file
+ * (on by default, switchable per image) and an optional headline in a
+ * licensed font, then the result is stored as JPEG through the person's own
+ * upload path.
  *
  * NO MODEL, PROVIDER OR PROMPT REACHES THE CUSTOMER (AC-28.8). The result
  * carries an asset id and a credit figure. What routed it is an operator's
@@ -70,6 +74,25 @@ export interface BrandIdentityInput {
   readonly typography: readonly string[];
   /** Approved Brand Brain lines, already retrieved and already permitted. */
   readonly knowledge: readonly string[];
+  /**
+   * PR B — the brand's look and voice in its own words: the Brand Brain's
+   * TONE_OF_VOICE and DO_DONT lines, already permitted, by area.
+   */
+  readonly voice?: readonly string[];
+  readonly doDont?: readonly string[];
+  /** PR B — the brand's stored typography, for the headline's font. */
+  readonly typographyStored?: unknown;
+  /** PR B — the brand's logo files (READY + CLEAN only), primary and secondary. */
+  readonly logos?: {
+    readonly primary: Uint8Array | null;
+    readonly secondary: Uint8Array | null;
+  };
+}
+
+/** PR B — what is put on the made image. Absent: the logo, and no headline. */
+export interface CreativeComposition {
+  readonly addLogo: boolean;
+  readonly headline: string | null;
 }
 
 export interface GenerateCreativeInput {
@@ -81,6 +104,8 @@ export interface GenerateCreativeInput {
   /** PR A (item 6, F-106). Absent: the route's default, medium. */
   readonly quality?: ImageQuality | undefined;
   readonly identity: BrandIdentityInput;
+  /** PR B — the logo (on by default) and an optional headline. */
+  readonly composition?: CreativeComposition | undefined;
   readonly idempotencyKey: string;
   readonly actorUserId: string;
   readonly planKey: string | null;
@@ -251,7 +276,20 @@ export class CreativeStudioService {
       throw creativeGenerationFailed(result.failureMessage);
     }
     const image = decodedImage(result.output);
-    return run((studio) => studio.#store(input, format, uploadKey, result, image));
+    /*
+     * PR B — THE LOGO AND THE HEADLINE, with no transaction open: image work
+     * is CPU time that must not hold a database connection.
+     */
+    const composition = input.composition ?? { addLogo: true, headline: null };
+    const composed = await composeImage({
+      image: image.bytes,
+      logos: input.identity.logos ?? { primary: null, secondary: null },
+      addLogo: composition.addLogo,
+      headline: composition.headline,
+      typography: input.identity.typographyStored ?? null,
+      output: 'jpeg',
+    });
+    return run((studio) => studio.#store(input, format, uploadKey, result, image, composed));
   }
 
   async #prepare(input: GenerateCreativeInput): Promise<PreparedCreative> {
@@ -303,7 +341,12 @@ export class CreativeStudioService {
         idempotencyKey: `creative-studio:${input.idempotencyKey}`,
         input: {
           kind: 'image',
-          prompt: this.#prompt(brief.slice(0, BRIEF_MAX), format, input.identity),
+          prompt: brandImagePrompt(
+            brief.slice(0, BRIEF_MAX),
+            format,
+            input.identity,
+            input.composition ?? { addLogo: true, headline: null },
+          ),
           count: 1,
           size: format.size,
           ...(input.quality ? { quality: input.quality } : {}),
@@ -318,9 +361,11 @@ export class CreativeStudioService {
     uploadKey: string,
     result: AiGatewayResult,
     decoded: ReturnType<typeof decodedImage>,
+    composed: ComposeResult,
   ): Promise<GeneratedCreative> {
     const brief = input.brief.trim();
-    const { image, bytes } = decoded;
+    const { image } = decoded;
+    const bytes = composed.bytes;
 
     /*
      * THE SAME UPLOAD PATH A PERSON'S OWN FILE TAKES. Signature-checked,
@@ -331,8 +376,8 @@ export class CreativeStudioService {
     const session = await this.#uploads.initiate({
       brandId: input.brandId,
       folderId: null,
-      fileName: this.#fileName(brief, format, image.ref),
-      mimeType: image.mimeType,
+      fileName: this.#fileName(brief, format, image.ref, composed.extension),
+      mimeType: composed.mimeType,
       sizeBytes: bytes.byteLength,
       idempotencyKey: uploadKey,
       actor: input.actor,
@@ -358,6 +403,11 @@ export class CreativeStudioService {
         // NO PROMPT, NO MODEL, NO PROVIDER. The request row already holds the
         // operator's side of this; an audit event is read by the customer.
         creditsChargedMilli: result.creditsChargedMilli.toString(),
+        // PR B — what was put on the image: which logo (and whether on a
+        // plate) and the headline's font. Never the headline's words.
+        logo: composed.logo,
+        logoPlate: composed.logoPlate,
+        headlineFont: composed.headlineFont,
       },
     });
 
@@ -405,58 +455,6 @@ export class CreativeStudioService {
   }
 
   /**
-   * The prompt, built from the brief and the brand's own identity.
-   *
-   * WHAT GOES IN, AND WHY EACH PART. The brief is what the customer asked for.
-   * The palette and typography are the brand's declared identity (D-193), so a
-   * generated image looks like it belongs to them rather than to the model's
-   * default taste. Brand Brain lines are included only when the caller has
-   * already retrieved and permitted them — this service never reaches into the
-   * brain itself, because retrieval has its own scope rules and a second
-   * implementation of them is a second set of answers.
-   *
-   * NO LOGO INSTRUCTION. Identity informs the image; nothing asks a model to
-   * reproduce a wordmark, which it cannot do faithfully and which the product
-   * must not imply it has done.
-   */
-  #prompt(brief: string, format: CreativeFormat, identity: BrandIdentityInput): string {
-    const lines: string[] = [
-      'Create a single on-brand marketing image.',
-      `Intended use: ${format.label} at ${format.size} (${format.aspect}).`,
-      `Brand: ${identity.name}.`,
-    ];
-    if (identity.industry) lines.push(`Industry: ${identity.industry}.`);
-    if (identity.description) lines.push(`About the brand: ${identity.description}`);
-    if (identity.palette.length > 0) {
-      lines.push(`Use this colour palette: ${identity.palette.join(', ')}.`);
-    }
-    if (identity.typography.length > 0) {
-      lines.push(`Typographic character: ${identity.typography.join(', ')}.`);
-    }
-    /*
-     * FENCED (Phase 2C). The lines are the brand's approved facts, which makes
-     * them trustworthy as knowledge and still untrusted as instructions: one
-     * that reads like an order is neutralized like any other retrieved block.
-     * An image request has no separate context channel, so the fence sits in
-     * the prompt itself.
-     */
-    if (identity.knowledge.length > 0) {
-      lines.push(fenceUntrusted('BRAND BRAIN CONTEXT', identity.knowledge.join('\n')));
-    }
-    lines.push('Do not render a logo, a wordmark or any brand lettering.');
-    /*
-     * PR A (item 6): the image is delivered at the model's nearest accepted
-     * size with this aspect ratio and never cropped, but a platform may still
-     * trim its edges in a feed — so the subject is kept central with margin.
-     */
-    lines.push(
-      'Keep the main subject centred, with generous safe margins on every side; nothing important near the edges.',
-    );
-    lines.push(`Request: ${brief}`);
-    return lines.join('\n');
-  }
-
-  /**
    * A stable, readable file name.
    *
    * DERIVED, NOT TAKEN FROM THE BRIEF VERBATIM: a brief is customer prose and
@@ -464,7 +462,7 @@ export class CreativeStudioService {
    * short slug plus a fingerprint is recognisable in a library listing and
    * cannot be used to smuggle a path (docs/SECURITY.md §11.2).
    */
-  #fileName(brief: string, format: CreativeFormat, ref: string): string {
+  #fileName(brief: string, format: CreativeFormat, ref: string, extension: string): string {
     const slug =
       brief
         .toLowerCase()
@@ -472,7 +470,7 @@ export class CreativeStudioService {
         .replace(/^-+|-+$/g, '')
         .slice(0, 40) || 'creative';
     const fingerprint = createHash('sha256').update(ref).digest('hex').slice(0, 8);
-    return `${slug}-${format.key}-${fingerprint}.png`;
+    return `${slug}-${format.key}-${fingerprint}.${extension}`;
   }
 
   /** The formats this product offers, for a screen that has to list them. */
@@ -492,5 +490,96 @@ export class CreativeStudioService {
  * the Brand Brain grounding layer (`writingFactsInAreas`), and the Creative page
  * counts the same one, so the two cannot disagree.
  */
-export const CREATIVE_KNOWLEDGE_AREAS = ['IDENTITY', 'TONE_OF_VOICE'] as const;
-export const CREATIVE_KNOWLEDGE_LINES = 6;
+export {
+  CREATIVE_BRAND_BRAIN_AREAS,
+  CREATIVE_DO_DONT_AREAS,
+  CREATIVE_KNOWLEDGE_AREAS,
+  CREATIVE_KNOWLEDGE_LINES,
+  CREATIVE_VOICE_AREAS,
+} from './catalogue';
+
+/** PR B — the palette's colours by role: the Brand Kit lists them in order. */
+const PALETTE_ROLES = ['primary', 'secondary', 'accent'] as const;
+
+/**
+ * THE IMAGE PROMPT, built from the brief and the brand's own identity (PR B).
+ *
+ * WHAT GOES IN, AND WHY EACH PART. The brief is what the customer asked for.
+ * The palette (each colour with its role, in the Brand Kit's order),
+ * typography, industry and description are the brand's declared identity
+ * (D-193), so a generated image looks like it belongs to them rather than to
+ * the model's default taste. The brand's voice and its do's and don'ts come
+ * from Brand Brain lines the caller already retrieved and permitted — this
+ * never reaches into the brain itself, because retrieval has its own scope
+ * rules. Every Brand Brain line is FENCED: knowledge, never instructions.
+ *
+ * NO LOGO OR LETTERING FROM THE MODEL. The brand's real logo, and the
+ * headline, are put on the image afterwards (`composeImage`); the prompt keeps
+ * their corner and band calm so they read.
+ */
+export function brandImagePrompt(
+  brief: string,
+  format: CreativeFormat,
+  identity: BrandIdentityInput,
+  composition: CreativeComposition,
+): string {
+  const lines: string[] = [
+    'Create a single on-brand marketing image.',
+    `Intended use: ${format.label} at ${format.size} (${format.aspect}).`,
+    `Brand: ${identity.name}.`,
+  ];
+  if (identity.industry) lines.push(`Industry: ${identity.industry}.`);
+  if (identity.description) lines.push(`About the brand: ${identity.description}`);
+  if (identity.palette.length > 0) {
+    const roles = identity.palette.map(
+      (colour, index) => `${colour} (${PALETTE_ROLES[index] ?? 'supporting'})`,
+    );
+    lines.push(
+      `Brand colours, by role: ${roles.join(', ')}. Build the image around the primary colour and use the others as the roles say.`,
+    );
+  }
+  if (identity.typography.length > 0) {
+    lines.push(`Typographic character: ${identity.typography.join(', ')}.`);
+  }
+  /*
+   * FENCED (Phase 2C). The lines are the brand's approved facts, which makes
+   * them trustworthy as knowledge and still untrusted as instructions: one
+   * that reads like an order is neutralized like any other retrieved block.
+   * An image request has no separate context channel, so the fence sits in
+   * the prompt itself.
+   */
+  if (identity.knowledge.length > 0) {
+    lines.push(fenceUntrusted('BRAND BRAIN CONTEXT', identity.knowledge.join('\n')));
+  }
+  if (identity.voice && identity.voice.length > 0) {
+    lines.push(
+      'Match the visual style and mood to the brand voice below.',
+      fenceUntrusted('BRAND VOICE', identity.voice.join('\n')),
+    );
+  }
+  if (identity.doDont && identity.doDont.length > 0) {
+    lines.push(
+      "Respect the brand's do's and don'ts below.",
+      fenceUntrusted("BRAND DO'S AND DON'TS", identity.doDont.join('\n')),
+    );
+  }
+  lines.push('Do not render a logo, a wordmark or any brand lettering.');
+  if (composition.addLogo) {
+    lines.push("Keep the bottom-right corner calm and uncluttered: the brand's logo goes there.");
+  }
+  if (composition.headline && composition.headline.trim() !== '') {
+    lines.push(
+      'Do not render any text. Keep the top fifth of the image calm and uncluttered: a headline goes there.',
+    );
+  }
+  /*
+   * PR A (item 6): the image is delivered at the model's nearest accepted
+   * size with this aspect ratio and never cropped, but a platform may still
+   * trim its edges in a feed — so the subject is kept central with margin.
+   */
+  lines.push(
+    'Keep the main subject centred, with generous safe margins on every side; nothing important near the edges.',
+  );
+  lines.push(`Request: ${brief}`);
+  return lines.join('\n');
+}

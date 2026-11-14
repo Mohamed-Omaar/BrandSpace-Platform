@@ -116,6 +116,9 @@ export function MediaDrawer({
   );
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [formatKey, setFormatKey] = useState(defaultFormat);
+  // PR B — the brand's real logo (on by default) and an optional headline.
+  const [addLogo, setAddLogo] = useState(true);
+  const [headline, setHeadline] = useState('');
   const [estimate, setEstimate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // P1: when the image request was sent, while it is on its way.
@@ -332,6 +335,31 @@ export function MediaDrawer({
               </option>
             ))}
           </select>
+          {/* PR B — the brand's real logo goes on the image unless switched off. */}
+          <label className="bsp-tg-row">
+            <span className="bsp-tg-text">
+              <span className="bsp-tg-l">{t['editor.media.addLogo']}</span>
+              <span className="bsp-tg-s">{t['editor.media.addLogoHint']}</span>
+            </span>
+            <input
+              type="checkbox"
+              className="bsp-tgl-in"
+              checked={addLogo}
+              onChange={(event) => setAddLogo(event.target.checked)}
+              data-testid="media-generate-logo"
+            />
+          </label>
+          <label htmlFor={`${fieldId}-headline`}>{t['editor.media.headline']}</label>
+          <input
+            id={`${fieldId}-headline`}
+            type="text"
+            value={headline}
+            maxLength={80}
+            dir="auto"
+            data-testid="media-generate-headline"
+            onChange={(event) => setHeadline(event.target.value)}
+          />
+          <p className="cs-hint">{t['editor.media.headlineHint']}</p>
           {estimate !== null ? (
             <p className="cs-hint" data-testid="media-generate-estimate">
               {fill(t['editor.media.estimate'] ?? '{credits}', {
@@ -380,7 +408,12 @@ export function MediaDrawer({
                     brandId,
                     brief: prompt.trim(),
                     formatKey,
-                    idempotencyKey: `composer:${itemId}:${attempt}:${formatKey}:${fingerprint(prompt.trim())}`,
+                    // A different logo choice or headline is a different ask.
+                    idempotencyKey: `composer:${itemId}:${attempt}:${formatKey}:${fingerprint(
+                      `${prompt.trim()}|${addLogo ? 1 : 0}|${headline.trim()}`,
+                    )}`,
+                    addLogo,
+                    ...(headline.trim() !== '' ? { headline: headline.trim() } : {}),
                     ...(variantId ? { contentVariantId: variantId } : {}),
                   });
                 } catch {
