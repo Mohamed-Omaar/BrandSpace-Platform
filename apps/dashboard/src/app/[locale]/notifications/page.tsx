@@ -1,3 +1,5 @@
+import { inPersonalNotes } from '../../../server/personal-notes-context';
+import { noteIdFromLink } from '../../../server/note-links';
 import Link from 'next/link';
 import {
   LinkTabs,
@@ -77,6 +79,22 @@ export default async function NotificationsPage({
     kind === 'approval'
       ? allItems.filter((item) => item.templateKey.startsWith('approval.'))
       : allItems;
+
+  // PR D (D-607): a note reminder's title, read in the reader's own context.
+  const reminderNoteIds = items
+    .filter((item) => item.templateKey === 'note.reminder')
+    .map((item) => noteIdFromLink(item.linkPath))
+    .filter((id): id is string => id !== null);
+  const noteTitles =
+    reminderNoteIds.length > 0
+      ? await inPersonalNotes(locale, (notes) => notes.titles(reminderNoteIds))
+      : new Map<string, string>();
+  const contextOf = (item: (typeof items)[number]): string | null =>
+    item.templateKey === 'note.reminder'
+      ? (noteTitles.get(noteIdFromLink(item.linkPath) ?? '') ?? null)
+      : typeof item.payload.itemTitle === 'string' && item.payload.itemTitle
+        ? item.payload.itemTitle
+        : null;
 
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
   const dateFormat = {
@@ -177,7 +195,7 @@ export default async function NotificationsPage({
                       )}
                     </div>
                     <span style={metaStyle}>
-                      {item.payload.itemTitle ? `${item.payload.itemTitle} · ` : ''}
+                      {contextOf(item) ? `${contextOf(item)} · ` : ''}
                       <time dateTime={item.createdAt.toISOString()}>
                         {dateFormat.format(item.createdAt)}
                       </time>

@@ -176,6 +176,9 @@ describe('connectors B · order', () => {
       '20261104090000_creative_generation_job',
       // PR A (D-605): the Copilot's "worked on" and images on a message.
       '20261111090000_copilot_message_activity',
+      // PR D: personal notes and reminders, avatars, the workspace logo.
+      '20261111120000_personal_notes_avatars_workspace_logo',
+      '20261111120100_note_reminder_email_preference',
     ]);
   });
 });

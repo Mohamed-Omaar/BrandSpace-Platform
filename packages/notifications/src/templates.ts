@@ -102,6 +102,15 @@ export const NOTIFICATION_TEMPLATES = {
    * so it went back to planned. Goes to the post's author.
    */
   'calendar.unplanned_by_timezone_change': { severity: 'warning' },
+  /**
+   * PR D (D-607) — a reminder the person set on one of their own notes is due.
+   * Goes to that person only. NO NOTE TEXT IN THE ROW (owner condition 1): the
+   * platform role can read notifications and can never read a note, so the row
+   * carries only the link to the note; the dashboard shows the note's title
+   * when the OWNER opens the feed, read in their own workspace-and-person
+   * context.
+   */
+  'note.reminder': { severity: 'info' },
 } as const;
 
 export type NotificationTemplateKey = keyof typeof NOTIFICATION_TEMPLATES;

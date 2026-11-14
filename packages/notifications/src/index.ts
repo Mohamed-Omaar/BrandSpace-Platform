@@ -9,6 +9,9 @@ export {
   categoryOf,
   isNotificationCategory,
   mutedRecipients,
+  NOTE_REMINDER_EMAIL_CATEGORY,
+  noteReminderEmailOn,
+  setNoteReminderEmail,
 } from './preferences';
 export type { NotificationCategory, NotificationPreferences } from './preferences';
 export { resolveRecipients } from './recipients';

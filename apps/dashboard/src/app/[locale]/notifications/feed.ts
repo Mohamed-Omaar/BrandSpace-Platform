@@ -1,9 +1,10 @@
 'use server';
 
+import { inPersonalNotes } from '../../../server/personal-notes-context';
 import { requireWorkspace, inWorkspace } from '../../../server/customer-context';
 import { notificationService } from '../../../server/approvals-context';
 import { inNotes } from '../../../server/notes-context';
-import { noteThreadHref } from '../../../server/note-links';
+import { noteIdFromLink, noteThreadHref } from '../../../server/note-links';
 import { relativeTime } from '../../../server/home';
 import { optionalMessage } from '../../../i18n/messages';
 import { systemClock } from '@brandspace/shared';
@@ -95,6 +96,20 @@ export async function loadNotificationFeed(
     author: entry.lastMention ? (names.get(entry.lastMention.authorUserId) ?? null) : null,
   }));
 
+  /*
+   * PR D (D-607) — A NOTE REMINDER NAMES ITS NOTE, FOR ITS OWNER ONLY. The row
+   * holds no note text (owner condition 1); the title is read here, in the
+   * reader's own workspace-and-person context, so it can only ever be theirs.
+   */
+  const reminderNoteIds = notifications
+    .filter((item) => item.templateKey === 'note.reminder')
+    .map((item) => noteIdFromLink(item.linkPath))
+    .filter((id): id is string => id !== null);
+  const noteTitles =
+    reminderNoteIds.length > 0
+      ? await inPersonalNotes(locale, (notes) => notes.titles(reminderNoteIds))
+      : new Map<string, string>();
+
   const kindOf = (templateKey: string): FeedKind =>
     templateKey.startsWith('approval.')
       ? 'approval'
@@ -112,7 +127,12 @@ export async function loadNotificationFeed(
         '',
       who: null,
       excerpt: null,
-      context: typeof item.payload.itemTitle === 'string' ? item.payload.itemTitle : null,
+      context:
+        item.templateKey === 'note.reminder'
+          ? (noteTitles.get(noteIdFromLink(item.linkPath) ?? '') ?? null)
+          : typeof item.payload.itemTitle === 'string'
+            ? item.payload.itemTitle
+            : null,
       href: item.linkPath ? `/${locale}${item.linkPath}` : null,
       when: relativeTime(item.createdAt, now, locale),
       at: item.createdAt.toISOString(),

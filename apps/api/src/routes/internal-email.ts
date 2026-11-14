@@ -165,7 +165,7 @@ function linkIsOurs(link: string): boolean {
  * slow vendor cannot hold a tenant transaction open behind a provider that
  * does not need one — `withWorkspace` is entered only for the outbox.
  */
-async function deliver(
+export async function deliverEmail(
   message: EmailMessageInput,
   workspaceId: string | undefined,
 ): Promise<{ readonly messageId: string; readonly provider: string }> {
@@ -234,7 +234,7 @@ export function registerInternalEmailRoutes(app: FastifyInstance): void {
       };
 
       try {
-        const result = await deliver(message, parsed.data.workspaceId);
+        const result = await deliverEmail(message, parsed.data.workspaceId);
         /*
          * THE TEMPLATE KEY AND THE PROVIDER, AND NOTHING ELSE. Not the
          * recipient, not the link, not the variables — this line ends up in an

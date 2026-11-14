@@ -788,6 +788,11 @@ export const messages = {
     'notificationPrefs.title': 'ما الذي يصلني إشعار به',
     'notificationPrefs.colEvent': 'الحدث',
     'notificationPrefs.colInApp': 'داخل التطبيق',
+    'notificationPrefs.colEmail': 'البريد',
+    // PR D (D-607): the person's own note reminders, by email (off unless switched on).
+    'notificationPrefs.noteReminders': 'تذكيرات ملاحظاتي',
+    'notificationPrefs.noteReminders.hint':
+      'رسالة تخبرك بأن لإحدى ملاحظاتك تذكيرًا، مع رابط إليها. لا يُرسَل عنوان الملاحظة ولا نصها بالبريد.',
     'notificationPrefs.body':
       'مفاتيحك الخاصة لجرس الإشعارات في مساحة العمل هذه. لا يراها أحد غيرك. تصلك دائمًا الإشعارات الخاصة بمساحة العمل نفسها، وبحساب يحتاج إلى إعادة الربط، وبمنشور مجدول أعاده تغيير المنطقة الزمنية إلى المخطط.',
     'notificationPrefs.approvals': 'الموافقات',
@@ -2847,6 +2852,8 @@ export const messages = {
       'سنخبرك هنا عندما يحتاج محتوى إلى مراجعتك أو يصدر قرار بشأن ما أرسلته.',
     'notifications.view': 'عرض',
     'notifications.template.approval.requested': 'منشور بانتظار مراجعتك',
+    // PR D (D-607): the person's own note reminder; the note's title shows beside it.
+    'notifications.template.note.reminder': 'تذكير بملاحظة',
     'notifications.template.approval.approved': 'تمت الموافقة على منشورك',
     'notifications.template.approval.changes_requested': 'طُلبت تعديلات على منشورك',
     'notifications.template.approval.rejected': 'رُفض منشورك',
@@ -5256,6 +5263,10 @@ export const messages = {
     'notificationPrefs.title': 'What notifies me',
     'notificationPrefs.colEvent': 'Event',
     'notificationPrefs.colInApp': 'In app',
+    'notificationPrefs.colEmail': 'Email',
+    'notificationPrefs.noteReminders': 'My note reminders',
+    'notificationPrefs.noteReminders.hint':
+      'An email saying one of your notes has a reminder, with a link to it. The note’s title and text are never emailed.',
     'notificationPrefs.body':
       'Your own switches for the bell in this workspace. Nobody else sees them. Notices about the workspace itself, an account that needs reconnecting, and a scheduled post a time-zone change sent back to planned always arrive.',
     'notificationPrefs.approvals': 'Approvals',
@@ -7372,6 +7383,7 @@ export const messages = {
       'We will tell you here when content needs your review, or when something you sent is decided.',
     'notifications.view': 'View',
     'notifications.template.approval.requested': 'A post is waiting for your review',
+    'notifications.template.note.reminder': 'Reminder for your note',
     'notifications.template.approval.approved': 'Your post was approved',
     'notifications.template.approval.changes_requested': 'Changes were requested on your post',
     'notifications.template.approval.rejected': 'Your post was turned down',
