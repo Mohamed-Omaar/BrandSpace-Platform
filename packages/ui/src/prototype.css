@@ -8031,6 +8031,68 @@ img.bsp-pf-art {
   background: var(--bs-text-primary) !important;
   color: var(--bs-surface) !important;
 }
+/*
+ * A COPILOT ANSWER AS MARKDOWN (owner, 2026-11-14) — `packages/ui/src/markdown.tsx`.
+ * Paragraphs and lists get room between them; bullets and numbers sit at the
+ * START of the line (the right in Arabic) through logical properties; every
+ * colour follows the bubble's own (`currentColor`), so light and dark both hold.
+ */
+.bs-md {
+  display: grid;
+  gap: var(--bsp-px-8);
+  min-inline-size: 0;
+}
+.bs-md > p,
+.bs-md > ul,
+.bs-md > ol,
+.bs-md > .bs-md-h {
+  margin: 0;
+}
+.bs-md > ul,
+.bs-md > ol {
+  padding-inline-start: var(--bsp-px-20);
+  display: grid;
+  gap: var(--bsp-px-4);
+}
+.bs-md > ul {
+  list-style: disc;
+}
+.bs-md > ol {
+  list-style: decimal;
+}
+.bs-md li::marker {
+  color: var(--bs-brand-purple);
+}
+.bs-md > .bs-md-h {
+  font-size: var(--bsp-fs-14-5);
+  font-weight: 700;
+  line-height: 1.35;
+}
+.bs-md strong {
+  font-weight: 700;
+}
+.bs-md a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--bs-brand-purple);
+  text-underline-offset: var(--bsp-px-2);
+  overflow-wrap: anywhere;
+}
+.bs-md code {
+  font-family: var(--bs-font-mono);
+  font-size: var(--bsp-fs-12-5);
+  padding-inline: var(--bsp-px-4);
+  border-radius: calc(var(--bsp-px-4) * var(--bs-radius-scale));
+  background: var(--bs-border);
+}
+.bs-cpb-plain {
+  white-space: pre-wrap;
+}
+.bs-cpb-note {
+  display: block;
+  font-size: var(--bsp-fs-12);
+  color: var(--bs-text-secondary);
+}
 .bsp-cp .bs-cpb-foot {
   order: 3;
   position: sticky;

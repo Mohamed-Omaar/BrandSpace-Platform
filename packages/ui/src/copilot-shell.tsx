@@ -1,5 +1,6 @@
 'use client';
 
+import { Markdown } from './markdown';
 import {
   useCallback,
   useEffect,
@@ -68,6 +69,13 @@ export interface CopilotMessage {
    * bubbles; `text` is their translated label. Absent means a message.
    */
   readonly kind?: 'message' | 'day' | 'topic_break';
+  /**
+   * A line ABOVE the answer, never inside it — "Worked on: …" (owner,
+   * 2026-11-14). Plain text.
+   */
+  readonly note?: string | undefined;
+  /** The answer is still arriving: its Markdown renders without flicker. */
+  readonly streaming?: boolean;
 }
 
 /** A suggested action chip. The id is stable; the label is a translated string. */
@@ -258,8 +266,19 @@ function MessageRow({
         </span>
         {/* PR U — the text decides its own direction: Arabic in an English UI
             reads right to left (and its "؟" lands at the end), and the reverse. */}
+        {message.note ? (
+          <span className="bs-cpb-note" dir="auto" data-testid="copilot-worked-on">
+            {message.note}
+          </span>
+        ) : null}
         <div className="bs-cpb-bubble" dir="auto" style={bubbleStyle(message.author)}>
-          {message.text}
+          {/* An answer is safe Markdown (elements only, never HTML); what the
+              person typed is shown exactly as typed, line breaks kept. */}
+          {assistant ? (
+            <Markdown text={message.text} streaming={message.streaming === true} />
+          ) : (
+            <span className="bs-cpb-plain">{message.text}</span>
+          )}
         </div>
       </div>
     </div>

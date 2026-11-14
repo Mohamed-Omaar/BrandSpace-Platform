@@ -11,6 +11,7 @@ export * from './use-calendar-drag';
 export * from './charts';
 export * from './composer';
 export * from './copilot-shell';
+export { Markdown, markdownBlocks, safeHref } from './markdown';
 export * from './copilot-types';
 export * from './data';
 export * from './design-studio';
