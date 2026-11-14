@@ -56,6 +56,11 @@ export interface SourceCardLabels {
   readonly rejected: string;
   readonly alreadyAdded: string;
   readonly foundTitles: string;
+  /** PR C — the website card: its question, its button, and how a refusal reads. */
+  readonly websiteAsk: string;
+  readonly websiteBody: string;
+  readonly websiteRead: string;
+  readonly websiteFailure: (code: string) => string;
 }
 
 type Phase =
@@ -109,7 +114,8 @@ async function sourceStatus(id: string): Promise<SourceStatus | null> {
 }
 
 export function SourceCard({
-  file,
+  file = null,
+  website = null,
   locale,
   brandId,
   canReview,
@@ -117,7 +123,13 @@ export function SourceCard({
   onAdded,
   onDone,
 }: {
-  readonly file: File;
+  /** A file the person attached — or, for the website card, null. */
+  readonly file?: File | null;
+  /**
+   * PR C — the brand's own website, read into Brand Brain through Brand
+   * Brain's own action (`readWebsiteAction`), after the person presses Read.
+   */
+  readonly website?: { readonly host: string | null } | null;
   readonly locale: string;
   readonly brandId: string;
   readonly canReview: boolean;
@@ -142,7 +154,8 @@ export function SourceCard({
     [],
   );
 
-  const detail = `${file.name} · ${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+  const name = file ? file.name : (website?.host ?? '');
+  const detail = file ? `${file.name} · ${(file.size / (1024 * 1024)).toFixed(1)} MB` : name;
 
   const add = async () => {
     onAdded?.();
@@ -150,14 +163,24 @@ export function SourceCard({
     const form = new FormData();
     form.set('locale', locale);
     form.set('brandId', brandId);
-    form.set('file', file);
+    if (file) form.set('file', file);
     try {
-      const outcome = await sendWithProgress('brand-source', form, (percent) => {
-        if (live.current) setPhase({ kind: 'uploading', percent });
-      });
+      const outcome = await sendWithProgress(
+        file ? 'brand-source' : 'brand-website',
+        form,
+        (percent) => {
+          if (live.current) setPhase({ kind: 'uploading', percent });
+        },
+      );
       const location = typeof outcome['location'] === 'string' ? outcome['location'] : '';
       const params = new URL(location, window.location.origin).searchParams;
       const sourceId = params.get('source');
+      // PR C — the website was not read: say why, in the screen's own words.
+      const websiteError = params.get('error');
+      if (!file && websiteError?.startsWith('WEBSITE_')) {
+        setPhase({ kind: 'failed', refused: true, reason: websiteError });
+        return;
+      }
       // PR 2 (D-598): a file already in Brand Brain is said so, not "failed".
       if (params.get('error') === 'CONFLICT') {
         setPhase({ kind: 'already' });
@@ -241,16 +264,21 @@ export function SourceCard({
     >
       {phase.kind === 'ask' ? (
         <>
-          <b data-testid="copilot-source-ask">{labels.askTitle.replace('{file}', file.name)}</b>
-          <span className="bsp-st-hint">{labels.askBody}</span>
+          <b data-testid="copilot-source-ask">
+            {file
+              ? labels.askTitle.replace('{file}', name)
+              : labels.websiteAsk.replace('{site}', name)}
+          </b>
+          <span className="bsp-st-hint">{file ? labels.askBody : labels.websiteBody}</span>
           <span className="bsp-bb-bulk-acts">
             <button
               type="button"
               className="bsp-btn bsp-sm bsp-pur"
               data-testid="copilot-source-add"
+              disabled={!file && !website?.host}
               onClick={() => void add()}
             >
-              {labels.add}
+              {file ? labels.add : labels.websiteRead}
             </button>
             <button
               type="button"
@@ -281,7 +309,7 @@ export function SourceCard({
                   ? 90
                   : (STAGE_PERCENT[phase.stage ?? 'QUEUED'] ?? 10)
             }
-            label={labels.progressLabel.replace('{file}', file.name)}
+            label={labels.progressLabel.replace('{file}', name)}
             testId="copilot-source-progress"
           />
           <span className="bsp-st-hint" data-testid="copilot-source-detail">
@@ -375,9 +403,11 @@ export function SourceCard({
 
       {phase.kind === 'failed' ? (
         <b data-testid="copilot-source-failed" dir="auto">
-          {phase.refused && !phase.reason
-            ? labels.refused
-            : `${labels.failureReason(phase.reason)} ${labels.failed}`}
+          {phase.reason?.startsWith('WEBSITE_')
+            ? labels.websiteFailure(phase.reason)
+            : phase.refused && !phase.reason
+              ? labels.refused
+              : `${labels.failureReason(phase.reason)} ${labels.failed}`}
         </b>
       ) : null}
     </section>

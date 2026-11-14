@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getURLFromRedirectError } from 'next/dist/client/components/redirect';
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { uploadAssetAction, uploadAssetFileAction } from '../../../[locale]/assets/actions';
-import { uploadSourceAction } from '../../../[locale]/brand-brain/actions';
+import { readWebsiteAction, uploadSourceAction } from '../../../[locale]/brand-brain/actions';
 import { uploadComposerMediaAction } from '../../../[locale]/content/actions';
 import { uploadChatImageAction } from '../../../[locale]/copilot/actions';
 
@@ -26,6 +26,8 @@ const KINDS = {
   'asset-file': uploadAssetFileAction,
   'composer-media': uploadComposerMediaAction,
   'brand-source': uploadSourceAction,
+  // PR C — the brand's own website, read into Brand Brain (same path, no file).
+  'brand-website': readWebsiteAction,
   // PR A (smart Copilot, D-605) — an image the person sends the Copilot.
   'chat-image': uploadChatImageAction,
 } as const satisfies Record<string, (formData: FormData) => Promise<unknown>>;

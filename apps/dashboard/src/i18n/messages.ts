@@ -1228,6 +1228,11 @@ export const messages = {
     'bb.tab.knowledge': 'المعرفة',
     'bb.tab.look': 'المظهر والأسلوب',
     'bb.tab.sources': 'المصادر',
+    'bb.website.read': 'اقرأ موقعنا',
+    'bb.website.reading': 'تجري قراءة الموقع…',
+    'bb.website.hint':
+      'تُقرأ الصفحة الرئيسية وحتى 5 صفحات أخرى من الموقع نفسه؛ ما يُقترح يبقى بانتظار المراجعة.',
+    'bb.website.missing': 'أضف عنوان موقعك في الإعدادات ← العلامة لقراءته من هنا.',
     // D-496 (Brand Brain 1, Strategy 1) — the first-visit hints, Main.dc.html L759 / L977.
     'hint.close': 'إغلاق',
     'hint.brain':
@@ -1293,6 +1298,10 @@ export const messages = {
     'bb.voice.unsortedNote':
       'قواعد قديمة لم تُصنَّف «افعل» أو «لا تفعل». أزلها وأضفها في مكانها الصحيح.',
     'bb.look.title': 'الألوان والشعار والخطوط',
+    'bb.look.fromLogo': 'اقترح ألوانًا من الشعار',
+    'bb.look.fromLogoHint': 'ألوان مأخوذة من الشعار. لا يتغيّر شيء قبل الحفظ.',
+    'bb.look.fromLogoAdd': 'أضف هذه الألوان',
+    'bb.look.fromLogoNone': 'لم نجد ألوانًا واضحة في الشعار.',
     'bb.look.colours': 'الألوان',
     'bb.look.coloursEmpty': 'لا توجد ألوان للعلامة بعد.',
     'bb.look.colourPicker': 'اللون {n}',
@@ -3273,6 +3282,7 @@ export const messages = {
     'copilot.missingAdd': 'أضفها الآن',
     'copilot.stopped': 'تم الإيقاف. لم يُحتسب أي رصيد.',
     'copilot.tool.generateImage': 'إنشاء صورة لمنشور',
+    'copilot.tool.postCreateDraft': 'إنشاء مسودة منشور',
     'copilot.preview.imageQuality': 'الجودة والمقاس',
     'copilot.worked.brand.profile': 'قرأ ملف العلامة',
     'copilot.worked.brand.context': 'راجع حقائق عقل العلامة',
@@ -3283,6 +3293,8 @@ export const messages = {
     'copilot.worked.credits.balance': 'راجع الرصيد',
     'copilot.worked.post.create_draft': 'أنشأ مسودة منشور',
     'copilot.worked.post.generate_image': 'بدأ إنشاء صورة',
+    'copilot.worked.web.read_link': 'قرأ صفحة ويب',
+    'copilot.worked.brand_brain.read_website': 'عرض قراءة موقع العلامة',
     'copilot.worked.calendar.place': 'اقترح جدولة منشور',
     'copilot.worked.publishing.publish_now': 'اقترح نشر منشور',
     'copilot.worked.brand_brain.add_fact': 'اقترح حفظ حقيقة في عقل العلامة',
@@ -3299,6 +3311,11 @@ export const messages = {
     'copilot.imageUploading': 'جارٍ رفع الصورة…',
     'copilot.imageFailed': 'تعذّر رفع الصورة. الصور فقط، حتى 8 ميغابايت.',
     'copilot.removeImage': 'إزالة',
+    'copilot.website.ask': 'قراءة موقع {site} وإضافته إلى عقل العلامة؟',
+    'copilot.website.body':
+      'تُقرأ الصفحة الرئيسية وحتى 5 صفحات أخرى من الموقع نفسه. لا يُعتمد شيء قبل مراجعتك: ما يقترحه يبقى بانتظار المراجعة.',
+    'copilot.website.read': 'اقرأ الموقع',
+    'copilot.website.failed': 'تعذّرت قراءة الموقع.',
     'copilot.source.askTitle': 'هل أضيف «{file}» إلى عقل العلامة؟',
     'copilot.source.askBody': 'لا يُحفظ شيء ولا يُقرأ قبل أن تضغط «إضافة».',
     'copilot.source.add': 'إضافة',
@@ -5705,6 +5722,11 @@ export const messages = {
     'bb.tab.knowledge': 'Knowledge',
     'bb.tab.look': 'Look & voice',
     'bb.tab.sources': 'Sources',
+    'bb.website.read': 'Read our website',
+    'bb.website.reading': 'Reading the website…',
+    'bb.website.hint':
+      'The home page and up to 5 more pages of the same site are read; what they propose waits for review.',
+    'bb.website.missing': 'Add your website address in Settings → Brand to read it from here.',
     // D-496 (Brand Brain 1, Strategy 1) — the first-visit hints, Main.dc.html L759 / L977.
     'hint.close': 'Close',
     'hint.brain':
@@ -5772,6 +5794,10 @@ export const messages = {
     'bb.voice.unsortedNote':
       "Older rules not filed as Do or Don't. Remove one and add it again in the right place.",
     'bb.look.title': 'Colours, logo and fonts',
+    'bb.look.fromLogo': 'Suggest colours from the logo',
+    'bb.look.fromLogoHint': 'Colours taken from your logo. Nothing changes until you save.',
+    'bb.look.fromLogoAdd': 'Add these colours',
+    'bb.look.fromLogoNone': 'No clear colours were found in the logo.',
     'bb.look.colours': 'Colours',
     'bb.look.coloursEmpty': 'No brand colours yet.',
     'bb.look.colourPicker': 'Colour {n}',
@@ -7826,6 +7852,7 @@ export const messages = {
     'copilot.missingAdd': 'Add it now',
     'copilot.stopped': 'Stopped. Nothing was charged.',
     'copilot.tool.generateImage': 'Make an image for a post',
+    'copilot.tool.postCreateDraft': 'Create a post draft',
     'copilot.preview.imageQuality': 'Quality and size',
     'copilot.worked.brand.profile': 'Read the Brand Kit',
     'copilot.worked.brand.context': 'Checked Brand Brain facts',
@@ -7836,6 +7863,8 @@ export const messages = {
     'copilot.worked.credits.balance': 'Checked credits',
     'copilot.worked.post.create_draft': 'Created a post draft',
     'copilot.worked.post.generate_image': 'Started an image',
+    'copilot.worked.web.read_link': 'Read a web page',
+    'copilot.worked.brand_brain.read_website': 'Offered to read the brand website',
     'copilot.worked.calendar.place': 'Proposed scheduling a post',
     'copilot.worked.publishing.publish_now': 'Proposed publishing a post',
     'copilot.worked.brand_brain.add_fact': 'Proposed saving a fact to Brand Brain',
@@ -7852,6 +7881,11 @@ export const messages = {
     'copilot.imageUploading': 'Uploading the image…',
     'copilot.imageFailed': 'The image could not be uploaded. Images only, up to 8 MB.',
     'copilot.removeImage': 'Remove',
+    'copilot.website.ask': 'Read {site} into Brand Brain?',
+    'copilot.website.body':
+      'The home page and up to 5 more pages of the same site are read. Nothing is approved without you: what it proposes waits for your review.',
+    'copilot.website.read': 'Read the website',
+    'copilot.website.failed': "The website couldn't be read.",
     'copilot.source.askTitle': 'Add “{file}” to Brand Brain?',
     'copilot.source.askBody': 'Nothing is stored or read before you press Add.',
     'copilot.source.add': 'Add',
@@ -9582,6 +9616,43 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   CANDIDATE_REJECTED: {
     en: 'Rejected. Approved knowledge is unchanged.',
     ar: 'تم الرفض. لم تتغيّر المعرفة المعتمدة.',
+  },
+  // PR C — the brand's own website, read into Brand Brain.
+  WEBSITE_READ: {
+    en: 'Your website was read. It is being processed now; what it proposes will wait in Pending for your review.',
+    ar: 'تمت قراءة موقعك. تجري معالجته الآن، وما يقترحه سيبقى بانتظار مراجعتك.',
+  },
+  WEBSITE_MISSING: {
+    en: 'Add your website address in Settings → Brand first.',
+    ar: 'أضف عنوان موقعك أولًا في الإعدادات ← العلامة.',
+  },
+  WEBSITE_NOT_READ_unsafe_address: {
+    en: "The website address can't be read: it must be a public https:// address.",
+    ar: 'تعذّرت قراءة عنوان الموقع: يجب أن يكون عنوانًا عامًا يبدأ بـ https://.',
+  },
+  WEBSITE_NOT_READ_robots_disallowed: {
+    en: "The website asks robots not to read it (robots.txt), so it wasn't read.",
+    ar: 'يطلب الموقع من برامج القراءة عدم قراءته (robots.txt)، لذلك لم تتم قراءته.',
+  },
+  WEBSITE_NOT_READ_too_many_redirects: {
+    en: "The website redirects too many times, so it wasn't read.",
+    ar: 'يعيد الموقع التوجيه مرات كثيرة، لذلك لم تتم قراءته.',
+  },
+  WEBSITE_NOT_READ_not_a_page: {
+    en: "The website address doesn't lead to a web page.",
+    ar: 'عنوان الموقع لا يؤدي إلى صفحة ويب.',
+  },
+  WEBSITE_NOT_READ_http_error: {
+    en: "The website answered with an error, so it wasn't read. Try again later.",
+    ar: 'ردّ الموقع بخطأ، لذلك لم تتم قراءته. حاول لاحقًا.',
+  },
+  WEBSITE_NOT_READ_timed_out: {
+    en: "The website took too long to answer, so it wasn't read. Try again later.",
+    ar: 'استغرق الموقع وقتًا طويلًا للرد، لذلك لم تتم قراءته. حاول لاحقًا.',
+  },
+  WEBSITE_NOT_READ_unreachable: {
+    en: "The website couldn't be reached. Check the address in Settings → Brand.",
+    ar: 'تعذّر الوصول إلى الموقع. تحقّق من العنوان في الإعدادات ← العلامة.',
   },
   SOURCE_UPLOADED: {
     en: 'Document uploaded. It is being read now; what it proposes will wait for your review.',
