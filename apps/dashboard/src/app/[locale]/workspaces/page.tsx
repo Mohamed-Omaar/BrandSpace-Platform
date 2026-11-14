@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { logoVersions, workspaceLogoHref } from '../../../server/pictures';
 import { colorTokens, initialsFrom } from '@brandspace/ui';
 import {
   getCustomerAuth,
@@ -60,6 +61,7 @@ export default async function WorkspacePickerPage({
       : null,
   );
 
+  const logos = await logoVersions(workspaces.map((w) => w.workspaceId));
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
 
@@ -85,8 +87,28 @@ export default async function WorkspacePickerPage({
                   data-testid={`choose-workspace-${w.workspaceSlug}`}
                   className="bs-liftable bsp-auth-ws"
                 >
-                  <span className="bsp-auth-wsini" aria-hidden="true">
-                    {initialsFrom(w.workspaceName)}
+                  {/* PR D (D-608): the business's logo, or its letters. */}
+                  <span
+                    className="bsp-auth-wsini"
+                    aria-hidden="true"
+                    data-pic={logos.has(w.workspaceId) ? 'true' : undefined}
+                  >
+                    {logos.has(w.workspaceId) ? (
+                      <img
+                        className="bsp-pic"
+                        src={
+                          workspaceLogoHref(
+                            locale,
+                            w.workspaceId,
+                            logos.get(w.workspaceId) ?? null,
+                          ) ?? ''
+                        }
+                        alt=""
+                        data-testid={`workspace-logo-${w.workspaceSlug}`}
+                      />
+                    ) : (
+                      initialsFrom(w.workspaceName)
+                    )}
                   </span>
                   <span className="bsp-auth-wsmain">
                     <span className="bsp-auth-wsname">{w.workspaceName}</span>

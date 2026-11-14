@@ -240,6 +240,8 @@ const DASHBOARD_PAGES: ReadonlyArray<readonly string[]> = [
   ['strategy', 'analytics', 'copilot', 'creative'],
   ['automations', 'notes', 'members', 'integrations', 'publishing'],
   ['settings', 'settings/brand', 'billing', 'plan', 'activity'],
+  // PR D (D-608): My notes, the photo card on the account page, Data's download.
+  ['notes?tab=mine', 'notes?tab=mine&note=new', 'settings/security', 'settings/data', 'workspaces'],
 ];
 const ENTRY_PAGES = ['sign-in', 'sign-up', 'reset'] as const;
 const CONSOLE_PAGES = [

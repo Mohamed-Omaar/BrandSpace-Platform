@@ -190,7 +190,10 @@ export class PersonalNotesService {
     return toView(row);
   }
 
-  async update(noteId: string, input: { title?: unknown; body?: unknown }): Promise<PersonalNoteView> {
+  async update(
+    noteId: string,
+    input: { title?: unknown; body?: unknown },
+  ): Promise<PersonalNoteView> {
     const text = cleanText(input);
     const { count } = await this.#db.personalNote.updateMany({
       where: { id: noteId, ...this.#mine },

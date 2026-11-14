@@ -18,6 +18,45 @@ import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from '.
  *      nobody outside a workspace can fetch its logo or a stranger's photo.
  */
 
+// One owner account across these tests: run them in order, not side by side.
+test.describe.configure({ mode: 'serial' });
+
+/**
+ * A GET from inside the page, so the browser sends the session cookie as it
+ * would (the cookie is `Secure`, which the test runner's own HTTP client does
+ * not send to plain-http localhost).
+ */
+async function fetchInPage(
+  page: Page,
+  url: string,
+): Promise<{
+  status: number;
+  headers: Record<string, string>;
+  text: string;
+  square: boolean | null;
+}> {
+  return page.evaluate(async (target) => {
+    const response = await fetch(target, { credentials: 'same-origin', redirect: 'manual' });
+    const headers: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+    const buffer = await response.arrayBuffer();
+    const view = new DataView(buffer);
+    // A PNG's IHDR: width at byte 16, height at byte 20.
+    const square =
+      buffer.byteLength > 24 && view.getUint32(0) === 0x89504e47
+        ? view.getUint32(16) === view.getUint32(20)
+        : null;
+    return {
+      status: response.status,
+      headers,
+      text: new TextDecoder().decode(buffer),
+      square,
+    };
+  }, url);
+}
+
 function credentials(): E2eAdminCredentials {
   return JSON.parse(readFileSync(E2E_CREDENTIALS_FILE, 'utf8')) as E2eAdminCredentials;
 }
@@ -148,18 +187,18 @@ for (const locale of ['en', 'ar'] as const) {
     await expect(viewer.getByTestId(`my-note-pane-${noteId}`)).toHaveCount(0);
     await expect(viewer.getByText(title)).toHaveCount(0);
     // And their download holds none of it.
-    const theirs = await viewer.request.get(`${DASHBOARD_BASE_URL}/${locale}/notes/export`);
-    expect(theirs.status()).toBe(200);
-    expect(await theirs.text()).not.toContain(title);
+    const theirs = await fetchInPage(viewer, `/${locale}/notes/export`);
+    expect(theirs.status).toBe(200);
+    expect(theirs.text).not.toContain(title);
     await viewer.context().close();
 
     // The writer's download holds it.
-    const mine = await page.request.get(`${DASHBOARD_BASE_URL}/${locale}/notes/export`);
-    expect(mine.status()).toBe(200);
-    expect(mine.headers()['content-disposition']).toMatch(
+    const mine = await fetchInPage(page, `/${locale}/notes/export`);
+    expect(mine.status).toBe(200);
+    expect(mine.headers['content-disposition']).toMatch(
       /^attachment; filename="brandspace-my-notes-\d{4}-\d{2}-\d{2}\.json"$/,
     );
-    const file = (await mine.json()) as { notes: { title: string; pinned: boolean }[] };
+    const file = JSON.parse(mine.text) as { notes: { title: string; pinned: boolean }[] };
     expect(file.notes.find((n) => n.title === title)?.pinned).toBe(true);
 
     // Delete.
@@ -206,13 +245,12 @@ test('A photo and a logo: uploaded, shown, and only to members', async ({
   await expect(avatar).toBeVisible();
   const src = (await avatar.getAttribute('src'))!;
   expect(src).toMatch(/^\/en\/people\/[0-9a-f-]{36}\/avatar\?v=\d+$/);
-  const served = await page.request.get(`${DASHBOARD_BASE_URL}${src}`);
-  expect(served.status()).toBe(200);
-  expect(served.headers()['content-type']).toBe('image/png');
-  expect(served.headers()['x-content-type-options']).toBe('nosniff');
-  // Cropped square by the browser before it was sent.
-  const bytes = await served.body();
-  expect(bytes.readUInt32BE(16)).toBe(bytes.readUInt32BE(20));
+  const served = await fetchInPage(page, src);
+  expect(served.status).toBe(200);
+  expect(served.headers['content-type']).toBe('image/png');
+  expect(served.headers['x-content-type-options']).toBe('nosniff');
+  // Cropped square by the browser before it was sent (the original is 6 × 4).
+  expect(served.square).toBe(true);
 
   // A teammate sees it on Team, beside the name.
   const viewer = await asTeammate(browser, 'en');
@@ -230,13 +268,18 @@ test('A photo and a logo: uploaded, shown, and only to members', async ({
   });
   await page.getByTestId('workspace-logo-upload-save').click();
   await expect(page).toHaveURL(/ok=picture-saved/);
-  await expect(page.getByTestId('workspace-logo').first()).toBeVisible();
+  // On the business list (and, where the rail card is the business, on the card).
+  await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+  await expect(page.getByTestId(`workspace-logo-${loaded.customer.workspaceSlug}`)).toBeVisible();
+  await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+  await expect(page.getByTestId('workspace-logo-upload').locator('img')).toBeVisible();
 
-  // Refused: a type the rules do not allow, by its bytes.
+  // Refused on the server: bytes that are not the picture they claim to be (the
+  // browser cannot draw them, so they are sent as they are).
   await page.getByTestId('workspace-logo-upload-file').setInputFiles({
-    name: 'logo.svg',
-    mimeType: 'image/svg+xml',
-    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    name: 'logo.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('this is not a picture'),
   });
   await page.getByTestId('workspace-logo-upload-save').click();
   await expect(page).toHaveURL(/error=picture-type/);
@@ -254,13 +297,11 @@ test('A photo and a logo: uploaded, shown, and only to members', async ({
     }),
   );
   if (viewerIsMember === 0) {
-    const logo = await viewer.request.get(`${DASHBOARD_BASE_URL}/en/workspace-logo/${second.id}`);
-    expect(logo.status()).toBe(404);
+    const logo = await fetchInPage(viewer, `/en/workspace-logo/${second.id}`);
+    expect(logo.status).toBe(404);
   }
-  const stranger = await viewer.request.get(
-    `${DASHBOARD_BASE_URL}/en/people/${randomUUID()}/avatar`,
-  );
-  expect(stranger.status()).toBe(404);
+  const stranger = await fetchInPage(viewer, `/en/people/${randomUUID()}/avatar`);
+  expect(stranger.status).toBe(404);
   await viewer.context().close();
 
   // Removed: the initials come back.

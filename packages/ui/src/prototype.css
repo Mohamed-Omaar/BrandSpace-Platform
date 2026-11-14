@@ -10079,6 +10079,7 @@ img.bsp-pf-art {
   block-size: 100%;
   object-fit: cover;
 }
+.bsp-auth-wsini[data-pic='true'],
 .bsp-bcard-mark[data-pic='true'],
 .bsp-ucard-mark[data-pic='true'],
 .bsp-tm-av[data-pic='true'] {
