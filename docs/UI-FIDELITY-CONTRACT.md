@@ -2694,3 +2694,27 @@ D-582's generated palette), and light mode is unchanged token for token.
 - **Proof:** `tests/e2e/pr-e-dark-mode.spec.ts` (switching without a reload; axe and painted
   contrast on every main page in dark, en and ar, desktop and phone) and
   `tests/unit/pr-e-dark-palette.test.ts`.
+
+### 6.3.83 PR D — My notes, photos and the workspace logo (D-609)
+
+APPROVED DESIGN-SYSTEM EXTENSIONS (CLAUDE.md §4.2): the prototype draws no personal notes, no
+photo upload and no logo upload.
+
+- **My notes** (`/notes?tab=mine`): the team Notes screen's own two panes (`.bsp-nts`), rows,
+  pills and controls; the tabs are the shared `.seg` of links. New classes, each for what the team
+  pane has no slot for: `.bsp-pn-search` (the search row), `.bsp-pn-editor` and `.bsp-pn-body`
+  (the stacked fields), `.bsp-pn-reminder` (under a hairline, `--bs-notes-divider`, the
+  composer's own 1px `#f0f0f2`), `.bsp-pn-delete` (the danger word).
+- **A picture in a mark**: `.bsp-pic` fills the existing mark (`.bsp-bcard-mark`,
+  `.bsp-ucard-mark`, `.bsp-tm-av`) with `object-fit: cover`; a person is a circle, a logo keeps the
+  mark's corners; the letters are the fallback, so nothing moves without a picture.
+  `.bsp-person-mini` is the avatar at a line's height before its words (approvals, notifications,
+  a post's "created by").
+- **The picture card** (`.bsp-picard`, `.bsp-picup`): the security card's title and line over the
+  mark at 64px and the file field.
+- **The business logo field** (`.bsp-picfield`): a field of the General settings form, in the cell
+  beside the time zone, with the shared `Field` label and hint, the mark at its own size and the
+  file input; saved by the form's own "Save changes", so the bar stays the column's last row.
+- **Owner decision (D-468 (a))**: a post card's "created by" is the author's photo, not the
+  written name; the name is its tooltip and accessible name.
+- **Proof**: `tests/e2e/pr-d-personal-notes-pictures.spec.ts`; screenshots in the PR.

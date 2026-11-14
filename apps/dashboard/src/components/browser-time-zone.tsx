@@ -19,10 +19,16 @@ export function detectedTimeZone(): string {
   }
 }
 
-export function BrowserTimeZoneInput({ name = 'timezone' }: { readonly name?: string }) {
+export function BrowserTimeZoneInput({
+  name = 'timezone',
+  testId = 'signup-timezone',
+}: {
+  readonly name?: string;
+  readonly testId?: string;
+}) {
   const [zone, setZone] = useState('');
   useEffect(() => {
     setZone(detectedTimeZone());
   }, []);
-  return <input type="hidden" name={name} value={zone} data-testid="signup-timezone" />;
+  return <input type="hidden" name={name} value={zone} data-testid={testId} />;
 }

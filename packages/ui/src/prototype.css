@@ -1711,7 +1711,7 @@ a[data-pending] {
   padding-inline: var(--bsp-px-6) var(--bsp-px-18);
   border: 1px solid var(--bs-lit-ffffff-a7);
   border-radius: var(--bsp-px-99);
-  background: var(--bs-lit-ffffff-a62);
+  background: var(--bs-fab-surface);
   -webkit-backdrop-filter: var(--bs-fx-backdrop-18-sat-170);
   backdrop-filter: var(--bs-fx-backdrop-18-sat-170);
   color: var(--bs-text-primary);
@@ -10026,6 +10026,137 @@ img.bsp-pf-art {
 @media (max-width: 1023.98px) {
   .bsp-nts {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* PR D (D-609) — MY NOTES, a design-system extension of the panes above
+   (CLAUDE.md §4.2; contract §6). The tabs are the shared `.seg` of links; the
+   list and pane are `.bsp-nts`. Only what the team pane has no slot for: the
+   search row at the head of the list, the editor's stacked fields, the
+   reminder block under a hairline, and the quiet danger word for delete. */
+.bsp-seg.bsp-pn-tabs {
+  align-self: flex-start;
+  inline-size: fit-content;
+  margin-block-end: var(--bsp-px-16);
+}
+.bsp-pn-search {
+  display: flex;
+  gap: var(--bsp-px-8);
+  align-items: center;
+  padding: var(--bsp-px-12) var(--bsp-px-16) var(--bsp-px-6);
+}
+.bsp-pn-search .bs-control {
+  flex-grow: 1;
+  min-inline-size: 0;
+}
+.bsp-pn-editor {
+  display: grid;
+  gap: var(--bsp-px-6);
+}
+.bsp-pn-editor textarea.bs-control.bsp-pn-body {
+  /* The page's own font: a textarea otherwise takes the browser's monospace,
+     which spaces Arabic letters apart. */
+  font-family: inherit;
+  min-block-size: var(--bsp-px-70);
+  resize: vertical;
+  font-size: var(--bsp-fs-14);
+  line-height: 1.55;
+}
+.bsp-pn-reminder {
+  display: grid;
+  gap: var(--bsp-px-10);
+  border-top: var(--bs-notes-divider);
+  padding-top: var(--bsp-px-12);
+}
+.bsp-btn.bsp-pn-delete {
+  color: var(--bs-danger);
+}
+
+/* PR D (D-609) — A PICTURE IN A MARK: a person's avatar or a workspace's logo
+   fills the mark the letters sit in (`object-fit: cover` on the square the
+   browser cropped). A person is a circle; a logo keeps the mark's corners. The
+   letters stay the fallback, so nothing moves when there is no picture. */
+.bsp-pic {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+.bsp-auth-wsini[data-pic='true'],
+.bsp-bcard-mark[data-pic='true'],
+.bsp-ucard-mark[data-pic='true'],
+.bsp-tm-av[data-pic='true'] {
+  overflow: hidden;
+  background: var(--bs-surface-muted);
+}
+.bsp-ucard-mark[data-pic='true'],
+.bsp-tm-av[data-pic='true'] {
+  border-radius: 50%;
+}
+/* The picture card (Account → your photo; Business settings → the logo): the
+   security card's 14px / 700 title over its 12px muted line, then the mark at
+   64px beside the file field. */
+.bsp-card.bsp-picard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-10);
+  padding: var(--bsp-px-16) var(--bsp-px-18);
+  margin-block-end: var(--bsp-px-14);
+}
+.bsp-picfield {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bsp-px-10);
+  align-items: center;
+}
+.bsp-picfield-file {
+  flex: 1 1 var(--bsp-px-160);
+  min-inline-size: 0;
+}
+.bsp-picfield-remove {
+  display: flex;
+  gap: var(--bsp-px-6);
+  align-items: center;
+  font-size: var(--bsp-fs-12);
+}
+.bsp-picard-t {
+  font-size: var(--bsp-fs-14);
+  font-weight: 700;
+}
+.bsp-picard-s {
+  font-size: var(--bsp-fs-12);
+  color: var(--bs-text-muted);
+}
+.bsp-picup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bsp-px-14);
+  align-items: center;
+}
+.bsp-picup-mark.bsp-tm-av,
+.bsp-picup-mark.bsp-bcard-mark {
+  inline-size: var(--bsp-px-64);
+  block-size: var(--bsp-px-64);
+  font-size: var(--bsp-fs-18);
+}
+/* A person beside a line of text (approvals "From …", notifications): the
+   avatar at the line's height, before the words. */
+.bsp-tm-av.bsp-person-mini {
+  inline-size: var(--bsp-px-20);
+  block-size: var(--bsp-px-20);
+  font-size: var(--bsp-fs-9);
+  vertical-align: middle;
+  margin-inline-end: var(--bsp-px-6);
+}
+.bsp-picup-form {
+  display: grid;
+  gap: var(--bsp-px-8);
+  flex: 1 1 var(--bsp-px-240);
+  min-inline-size: 0;
+}
+@media (max-width: 767.98px) {
+  .bsp-pn-reminder .bsp-nts-bar {
+    flex-wrap: wrap;
   }
 }
 

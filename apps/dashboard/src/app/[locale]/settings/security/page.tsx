@@ -30,6 +30,10 @@ import { MfaEnrolmentPanel } from '../../../../components/mfa-enrolment';
 import { CheckboxRow } from '../../../../components/checkbox-row';
 import { RECOVERY_CODES_COOKIE } from '../../../../server/mfa-codes';
 import { SubmitButton } from '../../../../components/pending-submit';
+import { PictureUpload } from '../../../../components/picture-upload';
+import { initialsFrom } from '@brandspace/ui';
+import { avatarHref, ownAvatarVersion } from '../../../../server/pictures';
+import { removeAvatarAction, saveAvatarAction } from '../picture-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -157,6 +161,31 @@ export default async function SecuritySettingsPage({
           border-radius: 16px`). Every form, action, permission and test id is
           the product's own, unchanged.
         */}
+        {/*
+          PR D (D-609) — THE PERSON'S PHOTO, on their own account page (the
+          product has no separate profile screen). A design-system extension:
+          the security card's title and line over the shared upload control.
+        */}
+        <section className="bsp-card bsp-picard" data-testid="avatar-card">
+          <span className="bsp-picard-t">{t('picture.avatar.title')}</span>
+          <span className="bsp-picard-s">{t('picture.avatar.body')}</span>
+          <PictureUpload
+            action={saveAvatarAction}
+            removeAction={removeAvatarAction}
+            hiddenFields={{ locale }}
+            currentSrc={avatarHref(locale, customer.userId, await ownAvatarVersion())}
+            fallback={initialsFrom(customer.name ?? customer.email)}
+            shape="circle"
+            labels={{
+              choose: t('picture.choose'),
+              save: t('picture.save'),
+              remove: t('picture.remove'),
+              hint: t('picture.hint'),
+              preview: t('picture.preview'),
+            }}
+            testId="avatar-upload"
+          />
+        </section>
         <section className="bsp-card bsp-secu">
           <div className="bsp-secu-block" data-testid="mfa-card">
             <div className="bsp-row bsp-secu-row">

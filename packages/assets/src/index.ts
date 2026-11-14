@@ -111,3 +111,13 @@ export {
   type BrandFontView,
   type PreviousAssetOutcome,
 } from './brand-fonts';
+export {
+  PICTURE_TYPES,
+  avatarObjectKey,
+  checkPicture,
+  pictureContentType,
+  workspaceLogoObjectKey,
+  type PictureCheck,
+  type PictureRefusal,
+  type PictureType,
+} from './picture';

@@ -30,6 +30,9 @@ import { noteThreadHref } from '../../../server/note-links';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { SubmitButton } from '../../../components/pending-submit';
+import { MyNotes } from './my-notes';
+import { PersonAvatar } from '../../../components/person-avatar';
+import { avatarHref, pictureVersions } from '../../../server/pictures';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +76,49 @@ export default async function NotesPage({
   );
   const brandId =
     brandContext.resolution.kind === 'brand' ? brandContext.resolution.brand.id : null;
+
+  /*
+   * PR D (D-609) — TWO TABS: the team's conversations (this screen as it was,
+   * and still the default, so every link to `/notes` lands where it did) and
+   * "My notes", the person's own private notes (`?tab=mine`; a reminder's link
+   * `?note=` opens it too). The shared `.seg` of links.
+   */
+  const mine = query['tab'] === 'mine' || typeof query['note'] === 'string';
+  const tabs = (
+    <nav className="bsp-seg bsp-pn-tabs" aria-label={t('myNotes.tabs')} data-testid="notes-tabs">
+      <Link
+        href={`/${locale}/notes`}
+        aria-current={mine ? undefined : 'page'}
+        data-testid="notes-tab-team"
+      >
+        {t('myNotes.tab.team')}
+      </Link>
+      <Link
+        href={`/${locale}/notes?tab=mine`}
+        aria-current={mine ? 'page' : undefined}
+        data-testid="notes-tab-mine"
+      >
+        {t('myNotes.tab.mine')}
+      </Link>
+    </nav>
+  );
+  if (mine) {
+    return (
+      <WorkspaceShell
+        brandContext={brandContext}
+        locale={locale}
+        heading={t('notes.title')}
+        description={t('myNotes.private')}
+        workspaceName={workspace.workspaceName}
+        roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
+        customerName={customer.email}
+        permissionKeys={workspace.permissionKeys}
+      >
+        {tabs}
+        <MyNotes locale={locale} t={t} query={query} />
+      </WorkspaceShell>
+    );
+  }
 
   const inbox = await inWorkspace(workspace.workspaceId, async ({ db }) =>
     new NotesService({ db, workspaceId: workspace.workspaceId, clock: systemClock }).inbox(
@@ -173,6 +219,11 @@ export default async function NotesPage({
   );
 
   const thread = pane?.thread ?? null;
+  // PR D (D-609) — each author's photo, when they have one.
+  const authorAvatars = await pictureVersions(
+    workspace.workspaceId,
+    (pane?.notes ?? []).map((note) => note.authorUserId),
+  );
   const replyFormId = thread ? `notes-reply-${thread.id}` : 'notes-reply';
   const hidden = thread ? (
     <>
@@ -193,6 +244,7 @@ export default async function NotesPage({
       customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
+      {tabs}
       {listed.length === 0 ? (
         <section className="bsp-card bsp-nts-empty" data-testid="notes-for-you">
           <span className="bsp-xicon" aria-hidden="true">
@@ -357,13 +409,16 @@ export default async function NotesPage({
                   const who = nameOf(note.authorUserId);
                   return (
                     <li key={note.id} className="bsp-nts-msg" data-testid={`note-${note.id}`}>
-                      <span
-                        aria-hidden="true"
-                        className="bsp-tm-av bsp-nts-av"
-                        data-c={toneOf(note.authorUserId)}
-                      >
-                        {initialsOf(note.authorUserId)}
-                      </span>
+                      <PersonAvatar
+                        className="bsp-nts-av"
+                        index={toneOf(note.authorUserId)}
+                        initials={initialsOf(note.authorUserId)}
+                        src={avatarHref(
+                          locale,
+                          note.authorUserId,
+                          authorAvatars.get(note.authorUserId) ?? null,
+                        )}
+                      />
                       <div className="bsp-nts-msg-b">
                         <span className="bsp-nts-who">
                           <b>{who}</b>{' '}

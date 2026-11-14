@@ -102,6 +102,15 @@ export const NOTIFICATION_TEMPLATES = {
    * so it went back to planned. Goes to the post's author.
    */
   'calendar.unplanned_by_timezone_change': { severity: 'warning' },
+  /**
+   * PR D (D-609) — a reminder the person set on one of their own notes is due.
+   * Goes to that person only. NO NOTE TEXT IN THE ROW (owner condition 1): the
+   * platform role can read notifications and can never read a note, so the row
+   * carries only the link to the note; the dashboard shows the note's title
+   * when the OWNER opens the feed, read in their own workspace-and-person
+   * context.
+   */
+  'note.reminder': { severity: 'info' },
 } as const;
 
 export type NotificationTemplateKey = keyof typeof NOTIFICATION_TEMPLATES;
@@ -122,6 +131,12 @@ export interface NotificationPayload {
   itemTitle?: string;
   brandName?: string;
   actorName?: string;
+  /**
+   * PR D (D-609) — WHO DID IT, as an id, so the reader's feed can show that
+   * person's photo. An id is not content: the feed resolves it to a name and
+   * a picture only for a member of the reader's own workspace.
+   */
+  actorUserId?: string;
   /*
    * Phase 6. The PLATFORM and the ACCOUNT NAME — both public on the platform in
    * question, and both needed for the message to mean anything: "a post

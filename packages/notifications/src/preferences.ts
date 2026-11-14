@@ -60,7 +60,59 @@ const CATEGORY_OF: Readonly<Record<NotificationTemplateKey, NotificationCategory
   'workspace.deletion_cancelled': null,
   /** Critical: a scheduled post will no longer go out unless someone acts (review item 17). */
   'calendar.unplanned_by_timezone_change': null,
+  /** PR D: the person asked for it themselves, so it is never muted. */
+  'note.reminder': null,
 };
+
+/**
+ * PR D (D-609) — "EMAIL ME MY NOTE REMINDERS", one person's own switch, OFF
+ * unless they turn it on. Stored as one `notification_preference` row under
+ * its own category, never one of the in-app categories above (whose absence
+ * means ON); absence here means OFF.
+ */
+export const NOTE_REMINDER_EMAIL_CATEGORY = 'email.note_reminders';
+
+export async function noteReminderEmailOn(
+  db: TenantScopedClient,
+  workspaceId: string,
+  userId: string,
+): Promise<boolean> {
+  const row = await db.notificationPreference.findUnique({
+    where: {
+      workspaceId_userId_category: { workspaceId, userId, category: NOTE_REMINDER_EMAIL_CATEGORY },
+    },
+    select: { enabled: true },
+  });
+  return row?.enabled === true;
+}
+
+/** Switch it on or off for the signed-in person, audited like the other switches. */
+export async function setNoteReminderEmail(
+  db: TenantScopedClient,
+  workspaceId: string,
+  userId: string,
+  enabled: boolean,
+): Promise<void> {
+  const before = await noteReminderEmailOn(db, workspaceId, userId);
+  if (before === enabled) return;
+  await db.notificationPreference.upsert({
+    where: {
+      workspaceId_userId_category: { workspaceId, userId, category: NOTE_REMINDER_EMAIL_CATEGORY },
+    },
+    create: { workspaceId, userId, category: NOTE_REMINDER_EMAIL_CATEGORY, enabled },
+    update: { enabled },
+  });
+  await writeAuditEvent(db, workspaceId, {
+    action: 'notification.preferences.updated',
+    actorType: 'USER',
+    actorId: userId,
+    resourceType: 'user',
+    resourceId: userId,
+    severity: 'INFO',
+    before: { [NOTE_REMINDER_EMAIL_CATEGORY]: before },
+    after: { [NOTE_REMINDER_EMAIL_CATEGORY]: enabled },
+  });
+}
 
 export function categoryOf(templateKey: NotificationTemplateKey): NotificationCategory | null {
   return CATEGORY_OF[templateKey];

@@ -1,4 +1,6 @@
 import { DraftForm } from '@brandspace/ui';
+import { PersonAvatar } from '../../../../components/person-avatar';
+import { avatarHref, pictureVersions } from '../../../../server/pictures';
 import type { ResolvedApprovalPolicy } from '@brandspace/content';
 import Link from 'next/link';
 import { personInitials } from '@brandspace/ui';
@@ -78,6 +80,11 @@ export default async function ApprovalSettingsPage({
   const team = await inWorkspace(workspace.workspaceId, async ({ memberships }) =>
     memberships.list(workspace.workspaceId),
   );
+  // PR D (D-609) — each person's photo, when they have one.
+  const teamAvatars = await pictureVersions(
+    workspace.workspaceId,
+    team.map((member) => member.userId),
+  );
 
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
@@ -152,13 +159,16 @@ export default async function ApprovalSettingsPage({
                     data-testid={`approver-${policy.brandId}-${member.userId}`}
                     data-approves={approves ? 'true' : 'false'}
                   >
-                    <span
-                      aria-hidden="true"
-                      className="bsp-tm-av bsp-sa-who-av"
-                      data-c={team.indexOf(member) % 4}
-                    >
-                      {personInitials(member.name, member.email)}
-                    </span>
+                    <PersonAvatar
+                      className="bsp-sa-who-av"
+                      index={team.indexOf(member)}
+                      initials={personInitials(member.name, member.email)}
+                      src={avatarHref(
+                        locale,
+                        member.userId,
+                        teamAvatars.get(member.userId) ?? null,
+                      )}
+                    />
                     <span className="bsp-sa-who-text">
                       <span className="bsp-sa-who-name">{name}</span>
                       <span className="bsp-sa-who-role">

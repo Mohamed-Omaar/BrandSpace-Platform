@@ -320,6 +320,12 @@ describe('the notification catalogue is closed and fully translated', () => {
          * author has to choose a new time, and nothing else would say so.
          */
         'calendar.unplanned_by_timezone_change',
+        /*
+         * PR D (D-609) — a person's own note reminder is due. To them alone,
+         * and with no note text in the row (the title is read in their own
+         * context when they open the feed).
+         */
+        'note.reminder',
       ].sort(),
     );
   });

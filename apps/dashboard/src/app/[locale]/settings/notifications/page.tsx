@@ -1,5 +1,9 @@
 import { DraftForm } from '@brandspace/ui';
-import { NOTIFICATION_CATEGORIES, NotificationPreferenceService } from '@brandspace/notifications';
+import {
+  NOTIFICATION_CATEGORIES,
+  NotificationPreferenceService,
+  noteReminderEmailOn,
+} from '@brandspace/notifications';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
 import { brandContextFor } from '../../../../server/brand-context';
 import { SettingsFrame } from '../../../../components/settings-frame';
@@ -33,10 +37,16 @@ export default async function NotificationSettingsPage({
   const { customer, workspace, messageLocale } = await requireWorkspace(locale);
   const t = translator(messageLocale);
 
-  const preferences = await inWorkspace(workspace.workspaceId, async ({ db }) =>
-    new NotificationPreferenceService({ db, workspaceId: workspace.workspaceId }).forUser(
-      customer.userId,
-    ),
+  const { preferences, reminderEmail } = await inWorkspace(
+    workspace.workspaceId,
+    async ({ db }) => ({
+      preferences: await new NotificationPreferenceService({
+        db,
+        workspaceId: workspace.workspaceId,
+      }).forUser(customer.userId),
+      // PR D (D-609): "Email me my note reminders", off unless switched on.
+      reminderEmail: await noteReminderEmailOn(db, workspace.workspaceId, customer.userId),
+    }),
   );
 
   const error = typeof query['error'] === 'string' ? query['error'] : null;
@@ -74,7 +84,7 @@ export default async function NotificationSettingsPage({
           the same category checkbox, posted to the same action.
         */}
         <DraftForm
-          key={JSON.stringify(preferences)}
+          key={JSON.stringify({ preferences, reminderEmail })}
           action={saveNotificationPreferencesAction}
           // Gate 2b review (4b): the bar on the frame's bottom edge, as on General.
           className="bsp-nt bsp-sg-form"
@@ -110,6 +120,38 @@ export default async function NotificationSettingsPage({
                 </span>
               </label>
             ))}
+          </section>
+          {/*
+            PR D (D-609) — THE ONE EMAIL SWITCH: the person's own note
+            reminders, by email as well as in the bell. Off unless switched on.
+            The email says only that a note has a reminder and links to it;
+            neither the note's title nor its text is in it. The same row as
+            above, in a card of its own because it is a different channel.
+          */}
+          <section className="bsp-xcard bsp-nt-card" data-testid="notification-email-preferences">
+            <div className="bsp-nt-head" aria-hidden="true">
+              <span>{t('notificationPrefs.colEvent')}</span>
+              <span className="bsp-nt-c">{t('notificationPrefs.colEmail')}</span>
+            </div>
+            <label className="bsp-nt-row">
+              <span className="bsp-nt-l">
+                {t('notificationPrefs.noteReminders')}
+                <span className="bsp-nt-hint" id="notification-pref-note-email-hint">
+                  {t('notificationPrefs.noteReminders.hint')}
+                </span>
+              </span>
+              <span className="bsp-nt-c">
+                <input
+                  type="checkbox"
+                  name="noteReminderEmail"
+                  value="on"
+                  defaultChecked={reminderEmail}
+                  className="bsp-tgl-in"
+                  aria-describedby="notification-pref-note-email-hint"
+                  data-testid="notification-pref-note-reminder-email"
+                />
+              </span>
+            </label>
           </section>
         </DraftForm>
       </SettingsFrame>

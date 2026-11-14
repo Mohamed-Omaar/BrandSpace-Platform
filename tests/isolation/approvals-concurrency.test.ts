@@ -94,13 +94,53 @@ const reviewer = (userId: string): ApprovalActor => ({
   brandScope: [],
 });
 
+/**
+ * PR D — A REAL TEAMMATE. D-122 is the rule for a team; a workspace whose one
+ * ACTIVE member is the author is a solo business, which may self-approve.
+ * Workspace A's only member was the owner, so the self-approval case below ran
+ * as a solo business without saying so. `REVIEWER_A` becomes a real ACTIVE
+ * approver here (removed in `afterAll`); every assertion is unchanged.
+ */
+async function addTeammate(): Promise<void> {
+  await platform.user.upsert({
+    where: { id: REVIEWER_A },
+    create: {
+      id: REVIEWER_A,
+      email: `reviewer-${REVIEWER_A}@example.test`,
+      name: 'Teammate reviewer',
+      status: 'ACTIVE',
+      locale: 'EN',
+      timezone: 'UTC',
+    },
+    update: {},
+  });
+  const role = await platform.role.findFirstOrThrow({
+    where: { key: 'approver', realm: 'WORKSPACE' },
+  });
+  await platform.membership.upsert({
+    where: { workspaceId_userId: { workspaceId: fixtures.a.workspaceId, userId: REVIEWER_A } },
+    create: {
+      workspaceId: fixtures.a.workspaceId,
+      userId: REVIEWER_A,
+      roleId: role.id,
+      status: 'ACTIVE',
+      brandScope: [],
+    },
+    update: { status: 'ACTIVE' },
+  });
+}
+
 beforeAll(async () => {
   app = appRoleClient();
   platform = platformRoleClient();
   fixtures = await createIsolationFixtures(app);
+  await addTeammate();
 }, 60_000);
 
 afterAll(async () => {
+  await platform?.membership.deleteMany({
+    where: { workspaceId: fixtures.a.workspaceId, userId: REVIEWER_A },
+  });
   await app?.$disconnect();
   await platform?.$disconnect();
 });

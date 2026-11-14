@@ -30,3 +30,12 @@ export function noteThreadHref(locale: string, entry: NoteLinkTarget): string {
   }
   return `/${locale}/brand-brain?brand=${entry.brandId}&thread=${thread}${anchor}`;
 }
+
+/**
+ * PR D (D-609) — the note a `note.reminder` notification points at
+ * (`/notes?note=<id>`), or null for any other link.
+ */
+export function noteIdFromLink(linkPath: string | null): string | null {
+  const match = /^\/notes\?note=([0-9a-f-]{36})$/i.exec(linkPath ?? '');
+  return match?.[1] ?? null;
+}

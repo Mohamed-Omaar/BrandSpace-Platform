@@ -6,6 +6,7 @@ import { redirect, unstable_rethrow } from 'next/navigation';
 import {
   NOTIFICATION_CATEGORIES,
   NotificationPreferenceService,
+  setNoteReminderEmail,
   type NotificationCategory,
 } from '@brandspace/notifications';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
@@ -31,12 +32,19 @@ export async function saveNotificationPreferencesAction(formData: FormData): Pro
     const next = Object.fromEntries(
       NOTIFICATION_CATEGORIES.map((category) => [category, on.has(category)]),
     ) as Record<NotificationCategory, boolean>;
-    await inWorkspace(session.workspace.workspaceId, async ({ db }) =>
-      new NotificationPreferenceService({ db, workspaceId: session.workspace.workspaceId }).set(
+    await inWorkspace(session.workspace.workspaceId, async ({ db }) => {
+      await new NotificationPreferenceService({
+        db,
+        workspaceId: session.workspace.workspaceId,
+      }).set(session.customer.userId, next);
+      // PR D (D-609): the person's own email switch for note reminders.
+      await setNoteReminderEmail(
+        db,
+        session.workspace.workspaceId,
         session.customer.userId,
-        next,
-      ),
-    );
+        formData.get('noteReminderEmail') !== null,
+      );
+    });
     destination = `/${locale}/settings/notifications?ok=SETTINGS_SAVED`;
   } catch (error: unknown) {
     // Next.js control flow (a redirect from the session gate, notFound, …) is

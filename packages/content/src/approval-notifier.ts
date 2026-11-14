@@ -36,7 +36,7 @@ export function approvalNotifier(input: {
       await notifications.create({
         userIds: event.recipientUserIds,
         templateKey: 'approval.requested',
-        payload: { itemTitle: event.itemTitle },
+        payload: { itemTitle: event.itemTitle, actorUserId: event.requestedByUserId },
         // The REVIEW context, not the content library: the notification is
         // about one cycle, and the review screen is where a reviewer acts on
         // it. Every recipient holds `content.approve` (D-62), so both routes
@@ -58,7 +58,7 @@ export function approvalNotifier(input: {
       await notifications.create({
         userIds: [event.notifyUserId],
         templateKey: templateForVerdict(event.verdict),
-        payload: { itemTitle: event.itemTitle },
+        payload: { itemTitle: event.itemTitle, actorUserId: event.decidedByUserId },
         // THE POST ITSELF, in the composer, where its conversation is (D-277
         // §28/§29): a "changes requested" verdict is answered by editing there.
         linkPath: `/content/compose?item=${event.itemId}`,

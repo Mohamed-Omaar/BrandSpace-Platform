@@ -81,6 +81,13 @@ export const EMAIL_TEMPLATE_KEYS = [
    * text, no figure, no link: the numbers are in the Control Center's audit.
    */
   'platform.ai_reservation_overrun',
+  /*
+   * PR D (D-609) — a reminder on one of the person's own notes is due, sent
+   * only to that person and only when they switched "Email me my note
+   * reminders" on. NO NOTE TEXT: neither the title nor the body leaves the
+   * product in an email; the link opens the note, behind sign-in.
+   */
+  'note.reminder',
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];

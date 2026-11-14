@@ -275,6 +275,11 @@ model User {
   /// P1 (D-592): the person's own light / dark / device choice; NULL = none,
   /// so the Look & feel default applies. CHECK: light, dark or system.
   colorScheme     String?
+  /// PR D (D-607): the object-store key of the person's avatar — cropped square
+  /// in the browser, checked against the image rules and the malware scan,
+  /// drawn in a circle. NULL = initials. Set with `avatarUpdatedAt` (CHECK).
+  avatarKey       String?
+  avatarUpdatedAt DateTime?  @db.Timestamptz(6)
   status          UserStatus @default(PENDING)
 
   // MFA. `mfaSecretRef` is the PLATFORM Secret Service reference, used where a
@@ -326,6 +331,10 @@ model User {
 
   /// PR 1 (Images) — image generation jobs (D-597).
   creativeGenerationJobs CreativeGenerationJob[]
+
+  // PR D (D-607): the person's private notes and their reminders.
+  personalNotes         PersonalNote[]
+  personalNoteReminders PersonalNoteReminder[]
 
   @@index([status])
   @@map("user")
@@ -399,6 +408,11 @@ model Workspace {
   defaultLocale Locale
   timezone      String
   currency      String          @db.Char(3)
+  /// PR D (D-607): the object-store key of the workspace's logo (the image
+  /// rules and the malware scan, as an avatar). NULL = letters. Set with
+  /// `logoUpdatedAt` (CHECK).
+  logoKey       String?
+  logoUpdatedAt DateTime?       @db.Timestamptz(6)
 
   ownerUserId String @db.Uuid
   owner       User   @relation("WorkspaceOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
@@ -580,6 +594,10 @@ model Workspace {
 
   /// PR 1 (Images) — image generation jobs (D-597).
   creativeGenerationJobs CreativeGenerationJob[]
+
+  // PR D (D-607): each person's private notes here, and their reminders.
+  personalNotes         PersonalNote[]
+  personalNoteReminders PersonalNoteReminder[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -6847,4 +6865,67 @@ model CreativeGenerationJob {
   @@index([workspaceId, brandId, requestedByUserId, createdAt(sort: Desc)], map: "creative_generation_job_brand_requester_createdAt_idx")
   @@index([requestedByUserId], map: "creative_generation_job_requestedByUserId_idx")
   @@map("creative_generation_job")
+}
+
+// ---------------------------------------------------------------------------
+// PR D (D-607) — PERSONAL NOTES AND THEIR REMINDERS.
+//
+// TENANT AND PERSONAL. A note belongs to one person in one workspace and is
+// readable ONLY by that person there: the policy compares both
+// `app.current_workspace_id()` and `app.current_user_id()`, which the
+// dashboard sets together from the signed-in session (`withWorkspacePerson`).
+// The platform role has NO privilege on `personal_note` at all, so the Control
+// Center cannot read a note whatever its code tries. A reminder holds no note
+// text; the platform role may read and update reminders (the API's sweep), and
+// nothing else.
+// ---------------------------------------------------------------------------
+
+model PersonalNote {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  ownerUserId String    @db.Uuid
+  /// CUSTOMER CONTENT, private to the owner. At most 200 characters.
+  title       String    @default("")
+  /// CUSTOMER CONTENT, private to the owner. At most 20,000 characters.
+  body        String    @default("")
+  pinnedAt    DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "personal_note_workspace_fkey")
+  owner     User                   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "personal_note_owner_fkey")
+  /// At most one: `personal_note_reminder_noteId_key` is unique on `noteId`.
+  reminders PersonalNoteReminder[]
+
+  @@unique([workspaceId, id], map: "personal_note_workspaceId_id_key")
+  @@index([workspaceId, ownerUserId, pinnedAt(sort: Desc), updatedAt(sort: Desc)], map: "personal_note_owner_list_idx")
+  @@index([ownerUserId], map: "personal_note_ownerUserId_idx")
+  @@map("personal_note")
+}
+
+model PersonalNoteReminder {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  ownerUserId String    @db.Uuid
+  noteId      String    @db.Uuid
+  /// The instant, from the local date and time chosen in `timeZone`.
+  remindAt    DateTime  @db.Timestamptz(6)
+  timeZone    String
+  /// PENDING, SENT or DONE (CHECK). Snooze moves `remindAt` back to PENDING.
+  state       String    @default("PENDING")
+  sentAt      DateTime? @db.Timestamptz(6)
+  emailSentAt DateTime? @db.Timestamptz(6)
+  doneAt      DateTime? @db.Timestamptz(6)
+  snoozeCount Int       @default(0)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "personal_note_reminder_workspace_fkey")
+  owner     User         @relation(fields: [ownerUserId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "personal_note_reminder_owner_fkey")
+  note      PersonalNote @relation(fields: [workspaceId, noteId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "personal_note_reminder_note_fkey")
+
+  @@unique([noteId], map: "personal_note_reminder_noteId_key")
+  @@unique([workspaceId, id], map: "personal_note_reminder_workspaceId_id_key")
+  @@index([ownerUserId], map: "personal_note_reminder_ownerUserId_idx")
+  @@map("personal_note_reminder")
 }

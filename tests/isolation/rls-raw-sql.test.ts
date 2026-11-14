@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   IDENTITY_MODELS_WITH_POLICY,
+  PERSONAL_OWNER_MODELS,
   MODEL_TABLE_NAMES,
   NULLABLE_TENANT_MODELS,
   STRICT_TENANT_MODELS,
@@ -109,6 +110,9 @@ describe('RLS is enabled AND forced on every protected table', () => {
       ...NULLABLE_TENANT_MODELS,
       ...IDENTITY_MODELS_WITH_POLICY,
     ]
+      // PR D (D-609): these carry the stricter `personal_owner` policy instead,
+      // asserted in the next test.
+      .filter((model) => !(PERSONAL_OWNER_MODELS as readonly string[]).includes(model))
       .map((model) => MODEL_TABLE_NAMES[model])
       .filter((table): table is string => typeof table === 'string')
       .sort();
@@ -121,6 +125,30 @@ describe('RLS is enabled AND forced on every protected table', () => {
 
     expect(expected.length).toBeGreaterThan(6);
     expect(tables).toEqual(expected);
+  });
+
+  it('PR D: each personal table carries personal_owner, for the tenant role, on workspace AND person', async () => {
+    const expected = PERSONAL_OWNER_MODELS.map((model) => MODEL_TABLE_NAMES[model]!).sort();
+    const r = await sql.query<{ tablename: string; roles: string; qual: string; check: string }>(
+      `SELECT tablename, roles::text AS roles, qual, with_check AS check FROM pg_policies
+        WHERE schemaname = 'public' AND policyname = 'personal_owner'
+        ORDER BY tablename`,
+    );
+    expect(r.rows.map((row) => row.tablename)).toEqual(expected);
+    for (const row of r.rows) {
+      expect(row.roles, row.tablename).toBe('{brandspace_app}');
+      for (const clause of [row.qual, row.check]) {
+        expect(clause, row.tablename).toContain('current_workspace_id()');
+        expect(clause, row.tablename).toContain('current_user_id()');
+      }
+    }
+    // And no tenant_isolation policy beside it that would admit a teammate.
+    const loose = await sql.query(
+      `SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND policyname = 'tenant_isolation'
+         AND tablename = ANY($1)`,
+      [expected],
+    );
+    expect(loose.rowCount).toBe(0);
   });
 
   it('the session-scoped policies exist and name only the tenant role', async () => {

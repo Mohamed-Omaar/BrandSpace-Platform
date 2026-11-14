@@ -129,6 +129,10 @@ export const STRICT_TENANT_MODELS = [
   'CopilotMessage',
   // PR 1 (D-597) — an image asked for, as a background job.
   'CreativeGenerationJob',
+  // PR D (D-609) — private notes of one person, and their reminders. Tenant AND
+  // personal: the policy also compares the signed-in person.
+  'PersonalNote',
+  'PersonalNoteReminder',
   'CopilotActionPlan',
   'CopilotToolCall',
   'AutomationRule',
@@ -308,6 +312,15 @@ export type TenantModel =
 
 export type PlatformOwnedModel = (typeof PLATFORM_OWNED_MODELS)[number];
 
+/**
+ * PR D (D-609). Strict tenant models whose policy is STRICTER than the usual
+ * one: a row is visible only to its own writer in its own workspace (both
+ * app.workspace_id and app.user_id must match), so the policy is named
+ * personal_owner rather than tenant_isolation. They stay in the strict list
+ * above for every other check.
+ */
+export const PERSONAL_OWNER_MODELS = ['PersonalNote', 'PersonalNoteReminder'] as const;
+
 /** Every model that must carry an RLS policy. */
 export const MODELS_REQUIRING_RLS = [
   ...STRICT_TENANT_MODELS,
@@ -392,6 +405,8 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   CopilotSession: 'copilot_session',
   CopilotMessage: 'copilot_message',
   CreativeGenerationJob: 'creative_generation_job',
+  PersonalNote: 'personal_note',
+  PersonalNoteReminder: 'personal_note_reminder',
   CopilotActionPlan: 'copilot_action_plan',
   CopilotToolCall: 'copilot_tool_call',
   AutomationRule: 'automation_rule',

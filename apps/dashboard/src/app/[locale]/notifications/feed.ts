@@ -1,12 +1,15 @@
 'use server';
 
+import { inPersonalNotes } from '../../../server/personal-notes-context';
 import { requireWorkspace, inWorkspace } from '../../../server/customer-context';
 import { notificationService } from '../../../server/approvals-context';
 import { inNotes } from '../../../server/notes-context';
-import { noteThreadHref } from '../../../server/note-links';
+import { noteIdFromLink, noteThreadHref } from '../../../server/note-links';
 import { relativeTime } from '../../../server/home';
 import { optionalMessage } from '../../../i18n/messages';
 import { systemClock } from '@brandspace/shared';
+import { initialsFrom } from '@brandspace/ui';
+import { avatarHref, pictureVersions } from '../../../server/pictures';
 
 /**
  * THE BELL'S FEED (Phase 6 final, D-277 §40, D-297).
@@ -39,6 +42,8 @@ export interface FeedItem {
   readonly when: string;
   readonly at: string;
   readonly unread: boolean;
+  /** PR D (D-609) — who did it, as their photo or their initials, when known. */
+  readonly person: { readonly initials: string; readonly src: string | null } | null;
 }
 
 const EXCERPT = 140;
@@ -70,10 +75,19 @@ export async function loadNotificationFeed(
    * themselves is not one (the service already leaves it out).
    */
   const mentionedBy = mentioned.filter((entry) => entry.lastMention !== null);
+  const actorOf = (payload: Record<string, unknown>): string | null =>
+    typeof payload['actorUserId'] === 'string' ? payload['actorUserId'] : null;
   const authorIds = [
-    ...new Set(
-      mentionedBy.flatMap((entry) => (entry.lastMention ? [entry.lastMention.authorUserId] : [])),
-    ),
+    ...new Set([
+      ...mentionedBy.flatMap((entry) =>
+        entry.lastMention ? [entry.lastMention.authorUserId] : [],
+      ),
+      // PR D (D-609): who acted on a notification, to show their photo.
+      ...notifications.flatMap((item) => {
+        const actor = actorOf(item.payload as Record<string, unknown>);
+        return actor ? [actor] : [];
+      }),
+    ]),
   ];
   const names = authorIds.length
     ? await inWorkspace(
@@ -89,11 +103,35 @@ export async function loadNotificationFeed(
           ),
       )
     : new Map<string, string>();
+  const avatars = await pictureVersions(workspace.workspaceId, [...names.keys()]);
+  const personOf = (userId: string | null) => {
+    const name = userId ? names.get(userId) : undefined;
+    return userId && name
+      ? {
+          initials: initialsFrom(name),
+          src: avatarHref(locale, userId, avatars.get(userId) ?? null),
+        }
+      : null;
+  };
   const mentions = mentionedBy.map((entry) => ({
     entry,
     mention: entry.lastMention!,
     author: entry.lastMention ? (names.get(entry.lastMention.authorUserId) ?? null) : null,
   }));
+
+  /*
+   * PR D (D-609) — A NOTE REMINDER NAMES ITS NOTE, FOR ITS OWNER ONLY. The row
+   * holds no note text (owner condition 1); the title is read here, in the
+   * reader's own workspace-and-person context, so it can only ever be theirs.
+   */
+  const reminderNoteIds = notifications
+    .filter((item) => item.templateKey === 'note.reminder')
+    .map((item) => noteIdFromLink(item.linkPath))
+    .filter((id): id is string => id !== null);
+  const noteTitles =
+    reminderNoteIds.length > 0
+      ? await inPersonalNotes(locale, (notes) => notes.titles(reminderNoteIds))
+      : new Map<string, string>();
 
   const kindOf = (templateKey: string): FeedKind =>
     templateKey.startsWith('approval.')
@@ -112,11 +150,17 @@ export async function loadNotificationFeed(
         '',
       who: null,
       excerpt: null,
-      context: typeof item.payload.itemTitle === 'string' ? item.payload.itemTitle : null,
+      context:
+        item.templateKey === 'note.reminder'
+          ? (noteTitles.get(noteIdFromLink(item.linkPath) ?? '') ?? null)
+          : typeof item.payload.itemTitle === 'string'
+            ? item.payload.itemTitle
+            : null,
       href: item.linkPath ? `/${locale}${item.linkPath}` : null,
       when: relativeTime(item.createdAt, now, locale),
       at: item.createdAt.toISOString(),
       unread: item.readAt === null,
+      person: personOf(actorOf(item.payload as Record<string, unknown>)),
     })),
     ...mentions.map(({ entry, mention, author }) => ({
       id: `m:${entry.threadId}`,
@@ -132,6 +176,7 @@ export async function loadNotificationFeed(
       when: relativeTime(mention.createdAt, now, locale),
       at: mention.createdAt.toISOString(),
       unread: entry.unreadMentions > 0,
+      person: personOf(mention.authorUserId),
     })),
   ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 
