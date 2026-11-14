@@ -2264,14 +2264,15 @@ the credits charged, `attachedAt` and a `failureReason` key.
 ## 24. A person's own notes, photos and the workspace logo (D-608)
 
 - **`personal_note`** — `id`, `workspaceId`, `ownerUserId`, `title` (≤ 200), `body` (≤ 20,000),
-  `pinnedAt`, `createdAt`, `updatedAt`. Composite foreign key to the owner's membership-free
-  `user` row (ON DELETE CASCADE) and to `workspace`. **RLS forced; readable and writable only when
+  `pinnedAt`, `createdAt`, `updatedAt`. Foreign keys to `workspace` and to the owner's `user` row
+  (both ON DELETE CASCADE); a title or a body is required. **RLS forced; readable and writable only when
   `app.workspace_id` AND `app.user_id` match the row** (`withWorkspacePerson`). The platform role
   holds **no privilege** on it.
 - **`personal_note_reminder`** — one per note (`noteId` unique): `remindAt`, `timeZone` (IANA),
   `state` (`PENDING` | `SENT` | `DONE`), `sentAt`, `emailSentAt`, `doneAt`, `snoozeCount`. Same
   RLS as the note; the platform role may only read and update (the API's due-reminder sweep). It
-  carries no note text. It goes with its note (ON DELETE CASCADE).
+  carries no note text. It goes with its note (a composite foreign key on `(workspaceId, noteId)`,
+  ON DELETE CASCADE).
 - **`notification_preference`** — the category `email.note_reminders` (one row, the person's own
   opt-in to reminder emails; absence = off) joins the CHECK's list (migration
   `20261114120100_note_reminder_email_preference`).
