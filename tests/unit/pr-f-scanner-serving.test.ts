@@ -133,12 +133,18 @@ describe('a served upload is never inline', () => {
 });
 
 describe('an upload never looks frozen', () => {
-  it('the page refresh slows down after a while instead of stopping', () => {
-    const refresh = source('apps/dashboard/src/components/refresh-while.tsx');
-    expect(refresh).toContain('slowEveryMs');
-    // No branch stops the timer because time passed; only `active` ending does.
-    expect(refresh).not.toMatch(/clearInterval\(timer\);\s*return;/);
-    expect(refresh).toMatch(/Date\.now\(\) - started > forMs \? slowEveryMs : everyMs/);
+  it('the status check slows down, and when it stops it SAYS so (B1, owner 2026-11-14)', () => {
+    // B1 replaced the endless page refresh with a status check that backs off
+    // and, after ten minutes, stops with a visible "Still working — refresh to
+    // check" and a Refresh button: never a silent stop. The timing itself is
+    // proven in tests/unit/b1-pending-poll.test.ts.
+    const poll = source('apps/dashboard/src/components/pending-poll.ts');
+    expect(poll).toContain('PENDING_MAX_DELAY_MS = 15_000');
+    expect(poll).toContain('host.onStopped()');
+    const watch = source('apps/dashboard/src/components/pending-watch.tsx');
+    expect(watch).toContain("t('pending.stillWorking')");
+    expect(watch).toContain('data-testid="pending-refresh"');
+    expect(watch).toContain('role="status"');
   });
 
   it('every upload form says, while files are not scanned, that they are not', () => {

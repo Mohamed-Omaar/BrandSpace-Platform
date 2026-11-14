@@ -47,7 +47,7 @@ import { issuePreviewToken } from '../../../server/media-picker';
 import { assetUploadRules, sourceUploadRules } from '../../../server/upload-rules';
 import { sourceFailureText } from '../../../server/source-failure';
 import { UploadForm, type UploadTexts } from '../../../components/upload-field';
-import { RefreshWhile } from '../../../components/refresh-while';
+import { PendingWatch } from '../../../components/pending-watch';
 import { IndustryField } from '../../../components/industry-field';
 import { SetupBrandLanguages } from '../../../components/setup-brand-languages';
 import { SubmitButton } from '../../../components/pending-submit';
@@ -574,7 +574,9 @@ export default async function OnboardingPage({
                   </span>
                 </div>
               )}
-              <RefreshWhile active={logoNow?.state === 'checking' && logoReady === null} />
+              {logoNow?.state === 'checking' && logoReady === null && pendingLogo ? (
+                <PendingWatch locale={locale} assets={[pendingLogo]} />
+              ) : null}
               {logoReady ? (
                 <LogoAttach
                   action={attachSetupLogoAction}
@@ -924,7 +926,12 @@ export default async function OnboardingPage({
             ))}
           </ul>
         ) : null}
-        <RefreshWhile active={reading > 0} />
+        <PendingWatch
+          locale={locale}
+          sources={sources
+            .filter((source) => source.status === 'PROCESSING' || source.status === 'UPLOADED')
+            .map((source) => source.id)}
+        />
         {reading > 0 ? note(t('setup.learn.processing'), 'setup-processing') : null}
         {candidates.length > 0 && pending.length === 0 && read && reading === 0
           ? note(

@@ -423,7 +423,7 @@ export function ApprovalsView({
               <div className="bsp-apr-prev" data-testid="review-cover">
                 <div className="bsp-apr-cover">
                   {review.cover?.kind === 'image' ? (
-                    <img src={review.cover.src} alt="" />
+                    <img src={review.cover.src} alt="" loading="lazy" decoding="async" />
                   ) : (
                     <AbstractMedia seed={(review.itemId.charCodeAt(0) % 6) as MediaSeed} alt="" />
                   )}

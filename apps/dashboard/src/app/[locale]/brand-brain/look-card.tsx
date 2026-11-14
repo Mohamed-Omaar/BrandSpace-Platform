@@ -26,7 +26,7 @@ import {
 } from './look-actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { MoreDisclosure } from '../../../components/more-disclosure';
-import { RefreshWhile } from '../../../components/refresh-while';
+import { PendingWatch } from '../../../components/pending-watch';
 import { LogoAttach } from '../onboarding/logo-attach';
 import { SubmitButton } from '../../../components/pending-submit';
 
@@ -554,7 +554,9 @@ function Logo({
           data-state={pending.state}
         >
           {pending.message}
-          <RefreshWhile active={pending.state === 'checking'} />
+          {pending.state === 'checking' && pending.assetId ? (
+            <PendingWatch locale={locale} assets={[pending.assetId]} />
+          ) : null}
           {pending.state === 'attach' && pending.assetId && canManage ? (
             <LogoAttach
               action={attachBrandLogoAction}

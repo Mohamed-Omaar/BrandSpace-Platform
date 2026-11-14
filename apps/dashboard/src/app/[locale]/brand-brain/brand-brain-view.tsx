@@ -18,7 +18,7 @@ import {
   readWebsiteAction,
 } from './actions';
 import type { UploadRules } from '../../../components/upload-rules';
-import { RefreshWhile } from '../../../components/refresh-while';
+import { PendingWatch } from '../../../components/pending-watch';
 import {
   UploadFileInput,
   UploadForm,
@@ -978,7 +978,10 @@ export function BrandBrainView({
           /* SOURCES — `Main.dc.html` lines 878–897: the upload card, then the list. */
           <section className="bsp-bb-src" id="bb-sources" data-testid="sources-card">
             {/* Batch 7 (A3): a file being read moves on screen until it is read or refused. */}
-            <RefreshWhile active={sources.some((source) => source.reading)} />
+            <PendingWatch
+              locale={locale}
+              sources={sources.filter((source) => source.reading).map((source) => source.id)}
+            />
             {/*
               The real upload form, and the target of a dropped or chosen file.
               It is rendered only when the caller may upload: a control that

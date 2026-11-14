@@ -308,12 +308,10 @@ export default async function AssetsPage({
       const cards: AssetCardData[] = await Promise.all(
         page.items.map(async (asset) => {
           const selectable = isSelectable(asset);
+          // B1 — from the row already loaded: no second read per tile.
           const grant =
             selectable && canPreviewWithoutDerivative(asset.mimeType, asset.sizeBytes)
-              ? await download
-                  .grantFor({ assetId: asset.id, actor, disposition: 'inline' })
-                  .then((issued) => issued.grant.token)
-                  .catch(() => null)
+              ? (download.inlineGrantForLoaded(asset, actor)?.token ?? null)
               : null;
           return {
             id: asset.id,
