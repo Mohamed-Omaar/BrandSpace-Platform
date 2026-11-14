@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { formatLocalTime, instantForIntent, nextDayKey } from '@brandspace/content';
 import { isReminderTimeZone } from '@brandspace/collaboration';
-import { isAppError } from '@brandspace/shared';
+import { isAppError, systemClock } from '@brandspace/shared';
 import { inPersonalNotes } from '../../../server/personal-notes-context';
 
 /**
@@ -118,7 +118,7 @@ export async function snoozePersonalReminderAction(formData: FormData): Promise<
     inPersonalNotes(locale, async (notes) => {
       const note = await notes.get(noteId);
       const zone = note.reminder?.timeZone ?? 'UTC';
-      const now = new Date();
+      const now = systemClock.now();
       const at =
         until === 'tomorrow'
           ? instantForIntent(`${nextDayKey(formatLocalTime(now, zone).slice(0, 10))}T09:00`, zone)
