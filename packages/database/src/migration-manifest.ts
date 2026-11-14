@@ -114,4 +114,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261103120000_one_assistant',
   '20261104090000_creative_generation_job',
   '20261111090000_copilot_message_activity',
+  '20261114090000_creative_job_composition',
 ];

@@ -408,6 +408,9 @@ export const COPILOT_TOOLS = [
       brief: z.string().min(1).max(1_500),
       formatKey: z.enum(['square', 'portrait', 'story', 'landscape']).default('square'),
       quality: z.enum(['low', 'medium', 'high']).default('medium'),
+      // PR B — the brand's real logo (default yes) and an optional headline.
+      addLogo: z.boolean().optional(),
+      headline: z.string().min(1).max(80).optional(),
     }),
     permission: 'assets.upload',
     brandScope: 'required',

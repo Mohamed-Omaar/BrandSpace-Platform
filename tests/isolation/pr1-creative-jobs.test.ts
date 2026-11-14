@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import sharp from 'sharp';
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
@@ -186,7 +187,14 @@ function host(workspaceId: string, userId: string): CreativeJobRunHost {
   };
 }
 
-const enqueueA = (overrides: { contentVariantId?: string; brandId?: string } = {}) =>
+const enqueueA = (
+  overrides: {
+    contentVariantId?: string;
+    brandId?: string;
+    addLogo?: boolean;
+    headline?: string | null;
+  } = {},
+) =>
   inA((db) =>
     new CreativeGenerationJobs({ db, workspaceId: fixtures.a.workspaceId }).enqueue({
       brandId: overrides.brandId ?? fixtures.a.brandId,
@@ -198,6 +206,8 @@ const enqueueA = (overrides: { contentVariantId?: string; brandId?: string } = {
       brief: `A van at sunrise, warm light (${randomUUID().slice(0, 8)}).`,
       formatKey: 'square',
       ...(overrides.contentVariantId ? { contentVariantId: overrides.contentVariantId } : {}),
+      ...(overrides.addLogo !== undefined ? { addLogo: overrides.addLogo } : {}),
+      ...(overrides.headline !== undefined ? { headline: overrides.headline } : {}),
     }),
   );
 
@@ -601,9 +611,31 @@ describe('PR 1 · tenant isolation for creative_generation_job', () => {
   });
 });
 
+/**
+ * The sweep reads stale jobs across every workspace. Jobs earlier tests here
+ * queued and left (a key reused, a refusal) turn stale once this file has run
+ * past a minute — which composing the image (PR B) makes it do — and the sweep
+ * would then run them too (and so would jobs an earlier, interrupted run
+ * left). Each sweep test first finishes exactly what the sweep would pick up,
+ * so it sees only its own job.
+ */
+async function retireLeftovers(): Promise<void> {
+  // Exactly what the sweep would pick up (its own criteria), in any workspace.
+  await platform.creativeGenerationJob.updateMany({
+    where: {
+      OR: [
+        { status: 'QUEUED', createdAt: { lt: new Date(Date.now() - 60_000) } },
+        { status: 'RUNNING', startedAt: { lt: new Date(Date.now() - 15 * 60_000) } },
+      ],
+    },
+    data: { status: 'FAILED', completedAt: new Date(), failureReason: 'stuck_timeout' },
+  });
+}
+
 describe('PR 1 · the scheduler sweep', () => {
   it('fails a job silent past the limit and claimed the maximum times, as stuck_timeout', async () => {
     const { MaintenanceScheduler } = await import('../../apps/api/src/scheduler');
+    await retireLeftovers();
     const { job } = await enqueueA();
     await platform.creativeGenerationJob.update({
       where: { id: job.id },
@@ -629,6 +661,7 @@ describe('PR 1 · the scheduler sweep', () => {
 describe('PR 1 · carried into PR 2: the scheduler, end to end', () => {
   it('a QUEUED job left over a minute is run by the sweep, charged exactly once; a second sweep does nothing', async () => {
     const { MaintenanceScheduler } = await import('../../apps/api/src/scheduler');
+    await retireLeftovers();
     const scheduler = new MaintenanceScheduler({
       environment: 'DEVELOPMENT',
       creativeJobHost: (workspaceId) => host(workspaceId, fixtures.a.userId),
@@ -887,5 +920,115 @@ describe('PR A · the image is checked before the job succeeds (the #122 race)',
     const row = await jobRow(job.id);
     expect(row.creditsChargedMilli).toBeGreaterThan(0n);
     expect(await variantAssets()).toEqual([row.assetId]);
+  });
+});
+
+/**
+ * PR B (D-601, D-602; owner 2026-11-14) — WHAT IS PUT ON THE MADE IMAGE, as
+ * the person chose it: the brand's real logo (on by default, off when asked)
+ * and an optional headline, stored on the job so any run uses exactly that.
+ * The stored image says in its EXIF description which logo and font were used.
+ */
+describe('PR B · the logo and the headline, through the job', () => {
+  const store = createObjectStore({ appEnv: 'test' });
+  const logoFile = (hex: string) =>
+    sharp(
+      Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120"><rect width="300" height="120" fill="${hex}"/></svg>`,
+      ),
+    )
+      .png()
+      .toBuffer();
+  const withLogos = async (): Promise<CreativeJobRunHost> => {
+    const base = host(fixtures.a.workspaceId, fixtures.a.userId);
+    const logos = {
+      primary: new Uint8Array(await logoFile('#111114')),
+      secondary: new Uint8Array(await logoFile('#ffffff')),
+    };
+    return { ...base, identityFor: async () => ({ ...IDENTITY, logos }) };
+  };
+  /** What the stored image says it carries. */
+  const note = async (jobId: string) => {
+    const row = await jobRow(jobId);
+    const asset = await platform.asset.findUniqueOrThrow({
+      where: { id: String(row.assetId) },
+      select: { storageKey: true, mimeType: true },
+    });
+    const bytes = await store.get(asset.storageKey);
+    const { exif } = await sharp(Buffer.from(bytes ?? [])).metadata();
+    return { mimeType: asset.mimeType, text: Buffer.from(exif ?? []).toString('latin1') };
+  };
+
+  it('by default the brand’s real logo is put on the image', async () => {
+    const { job } = await enqueueA();
+    expect(job).toMatchObject({ addLogo: true, headline: null });
+    expect(await runCreativeGenerationJob(await withLogos(), job.id)).toBe('succeeded');
+    const stored = await note(job.id);
+    expect(stored.mimeType).toBe('image/jpeg');
+    expect(stored.text).toMatch(/logo: (primary|secondary)/);
+    expect(stored.text).toContain('headline font: none');
+  });
+
+  it('asked without the logo: none is put on, even though the brand has one', async () => {
+    const { job } = await enqueueA({ addLogo: false });
+    expect((await jobRow(job.id)).addLogo).toBe(false);
+    expect(await runCreativeGenerationJob(await withLogos(), job.id)).toBe('succeeded');
+    expect((await note(job.id)).text).toContain('logo: none');
+  });
+
+  it('a brand with no logo on file still gets its image, with none placed', async () => {
+    const { job } = await enqueueA();
+    expect(
+      await runCreativeGenerationJob(host(fixtures.a.workspaceId, fixtures.a.userId), job.id),
+    ).toBe('succeeded');
+    expect((await note(job.id)).text).toContain('logo: none');
+  });
+
+  it('a headline is stored with the job and drawn in the licensed default font', async () => {
+    const { job } = await enqueueA({ headline: '  خصم   ٢٠٪ هذا الأسبوع ' });
+    // Stored tidy: trimmed, inner spaces collapsed.
+    expect((await jobRow(job.id)).headline).toBe('خصم ٢٠٪ هذا الأسبوع');
+    expect(await runCreativeGenerationJob(await withLogos(), job.id)).toBe('succeeded');
+    expect((await note(job.id)).text).toContain('headline font: IBM Plex Sans Arabic');
+  });
+
+  it('a headline over 80 characters is refused before anything is queued; an empty one is none', async () => {
+    await expect(enqueueA({ headline: 'x'.repeat(81) })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+    const { job } = await enqueueA({ headline: '   ' });
+    expect((await jobRow(job.id)).headline).toBeNull();
+    // And the database refuses one past the limit written around the service.
+    await expect(
+      platform.creativeGenerationJob.update({
+        where: { id: job.id },
+        data: { headline: 'y'.repeat(81) },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('TENANT ISOLATION: B cannot read or change A’s logo choice or headline', async () => {
+    const { job } = await enqueueA({ headline: 'Private headline', addLogo: false });
+    expect(
+      await inB((db) =>
+        db.creativeGenerationJob.findFirst({
+          where: { id: job.id },
+          select: { headline: true, addLogo: true },
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      await inB((db) =>
+        db.creativeGenerationJob.count({ where: { headline: 'Private headline' } }),
+      ),
+    ).toBe(0);
+    const changed = await inB((db) =>
+      db.creativeGenerationJob.updateMany({
+        where: { id: job.id },
+        data: { headline: 'Changed by B', addLogo: true },
+      }),
+    );
+    expect(changed.count).toBe(0);
+    expect(await jobRow(job.id)).toMatchObject({ headline: 'Private headline', addLogo: false });
   });
 });

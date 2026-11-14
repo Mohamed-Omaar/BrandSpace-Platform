@@ -51,6 +51,11 @@ export interface CreativeStudioLabels {
   /** PR A (item 6, F-106) — the image quality choice. */
   readonly quality: string;
   readonly qualityHint: string;
+  /** PR B — the brand's real logo on the image, and an optional headline. */
+  readonly addLogo: string;
+  readonly addLogoHint: string;
+  readonly headline: string;
+  readonly headlineHint: string;
   readonly qualityLow: string;
   readonly qualityMedium: string;
   readonly qualityHigh: string;
@@ -126,6 +131,9 @@ export function CreativeStudioView({
    * with the quote and the generation, so the price shown is the quality's.
    */
   const [quality, setQuality] = useState<ImageQualityChoice>('medium');
+  // PR B — the brand's real logo (on by default) and an optional headline.
+  const [addLogo, setAddLogo] = useState(true);
+  const [headline, setHeadline] = useState('');
   const [busy, setBusy] = useState(false);
   /*
    * A SYNCHRONOUS GUARD, BECAUSE `busy` IS NOT ONE.
@@ -240,7 +248,8 @@ export function CreativeStudioView({
       setFailure(null);
       let started = false;
 
-      const signature = `${targetFormatKey}::${quality}::${brief.trim()}`;
+      // A different logo choice or headline is a different ask, with its own key.
+      const signature = `${targetFormatKey}::${quality}::${addLogo ? 1 : 0}::${headline.trim()}::${brief.trim()}`;
       if (attempt.current?.signature !== signature) {
         attempt.current = { signature, key: crypto.randomUUID() };
       }
@@ -251,6 +260,8 @@ export function CreativeStudioView({
           brief: brief.trim(),
           formatKey: targetFormatKey,
           quality,
+          addLogo,
+          ...(headline.trim() !== '' ? { headline: headline.trim() } : {}),
           // ONE KEY PER ATTEMPT — see `attempt` above for why it is held in a
           // ref rather than minted here (AC-28.6).
           idempotencyKey,
@@ -274,7 +285,7 @@ export function CreativeStudioView({
         if (!started) setBusy(false);
       }
     },
-    [brandId, brief, busy, labels, post],
+    [brandId, brief, busy, labels, post, quality, addLogo, headline],
   );
 
   /*
@@ -485,6 +496,42 @@ export function CreativeStudioView({
           </div>
           <span id={`${fieldId}-quality-hint`} className="bs-sr-only">
             {labels.qualityHint}
+          </span>
+
+          {/*
+            PR B — THE LOGO AND THE HEADLINE. The toggle row of the TikTok
+            options (`bsp-tg-row`, `bsp-tgl-in`) and the brief's own control
+            class: no new visual language.
+          */}
+          <label className="bsp-tg-row">
+            <span className="bsp-tg-text">
+              <span className="bsp-tg-l">{labels.addLogo}</span>
+              <span className="bsp-tg-s">{labels.addLogoHint}</span>
+            </span>
+            <input
+              type="checkbox"
+              className="bsp-tgl-in"
+              checked={addLogo}
+              onChange={(event) => setAddLogo(event.target.checked)}
+              data-testid="creative-logo"
+            />
+          </label>
+          <label className="bsp-gen-label" htmlFor={`${fieldId}-headline`}>
+            {labels.headline}
+          </label>
+          <input
+            id={`${fieldId}-headline`}
+            className="bs-control"
+            type="text"
+            dir="auto"
+            value={headline}
+            maxLength={80}
+            onChange={(event) => setHeadline(event.target.value)}
+            aria-describedby={`${fieldId}-headline-hint`}
+            data-testid="creative-headline"
+          />
+          <span id={`${fieldId}-headline-hint`} className="bsp-gen-hint">
+            {labels.headlineHint}
           </span>
 
           {/*

@@ -202,13 +202,15 @@ export const AGENT_TOOLS: readonly AgentToolDefinition[] = [
     brandScoped: true,
     spendsCredits: true,
     description:
-      'Make an image for a draft post (by its id) from a short visual brief; it is attached to the draft when ready (about a minute). Quality: low is fastest and cheapest, medium is the default, high is slowest.',
+      "Make an image for a draft post (by its id) from a short visual brief; it is attached to the draft when ready (about a minute). Quality: low is fastest and cheapest, medium is the default, high is slowest. The brand's real logo is put on it unless addLogo is false; a short headline (at most 80 characters) is drawn on it only when the person asked for text on the image.",
     parameters: object(
       {
         contentItemId: { type: 'string', format: 'uuid' },
         brief: { type: 'string', maxLength: 1500 },
         formatKey: { type: 'string', enum: [...IMAGE_FORMAT_KEYS] },
         quality: { type: 'string', enum: ['low', 'medium', 'high'] },
+        addLogo: { type: 'boolean' },
+        headline: { type: 'string', maxLength: 80 },
       },
       ['contentItemId', 'brief'],
     ),
@@ -218,6 +220,8 @@ export const AGENT_TOOLS: readonly AgentToolDefinition[] = [
         brief: z.string().min(1).max(1_500),
         formatKey: z.enum(IMAGE_FORMAT_KEYS).optional(),
         quality: z.enum(['low', 'medium', 'high']).optional(),
+        addLogo: z.boolean().optional(),
+        headline: z.string().min(1).max(80).optional(),
       })
       .strict(),
   },
