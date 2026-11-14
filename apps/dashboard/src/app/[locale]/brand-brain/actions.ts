@@ -17,9 +17,13 @@ import {
   documentNotFound,
   parseValidUntil,
   readAgainUnavailable,
+  readWebsiteIntoSource,
   removeSource,
   rollbackSchema,
   updateKnowledgeItemSchema,
+  WebReadRefusedError,
+  webReaderFromEnvironment,
+  websiteHome,
   type LocalizedText,
 } from '@brandspace/brand-brain';
 import {
@@ -511,6 +515,44 @@ export async function mergeDuplicatesAction(formData: FormData): Promise<void> {
   redirect(destination);
 }
 
+/**
+ * A source that was just received goes to the media-processing worker — the
+ * one place untrusted document bytes are parsed. Shared by a file upload and
+ * the website read (PR C), so both take exactly the same path.
+ */
+async function dispatchIngestion(
+  session: Awaited<ReturnType<typeof requireWorkspaceAction>>,
+  job: { readonly id: string; readonly stage: string } | null | undefined,
+): Promise<void> {
+  if (job && job.stage === 'QUEUED') {
+    /*
+     * WORKER ONLY (Phase 2C-4). Untrusted document bytes are parsed only by
+     * the media-processing worker. The historical non-production fallback
+     * that ran the parser HERE, inside the request, when no queue was
+     * configured is gone: a missing dispatch now waits for the
+     * reconciliation sweep in every environment, and the upload still
+     * succeeded — the row is durable and reads Queued.
+     */
+    const dispatch = await enqueue('media-processing', INGEST_SOURCE_DOCUMENT, {
+      kind: INGEST_SOURCE_DOCUMENT,
+      workspaceId: session.workspace.workspaceId,
+      requestedByUserId: session.customer.userId,
+      // The job row's id and attempt ARE the natural key for this work: a
+      // second dispatch of the same attempt is refused by BullMQ, and a
+      // retry gets its own id (D-413). A new row is on its first attempt.
+      idempotencyKey: ingestionJobKey(job.id, 1),
+      attempt: 1,
+      ingestionJobId: job.id,
+    } satisfies IngestSourceDocumentPayload);
+    if (!dispatch.dispatched) {
+      log.error('could not dispatch ingestion; leaving it for the reconciliation sweep', {
+        workspaceId: session.workspace.workspaceId,
+        jobId: job.id,
+      });
+    }
+  }
+}
+
 export async function uploadSourceAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');
@@ -574,34 +616,7 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
       received = await receive();
     }
 
-    const job = received.job;
-    if (job && job.stage === 'QUEUED') {
-      /*
-       * WORKER ONLY (Phase 2C-4). Untrusted document bytes are parsed only by
-       * the media-processing worker. The historical non-production fallback
-       * that ran the parser HERE, inside the request, when no queue was
-       * configured is gone: a missing dispatch now waits for the
-       * reconciliation sweep in every environment, and the upload still
-       * succeeded — the row is durable and reads Queued.
-       */
-      const dispatch = await enqueue('media-processing', INGEST_SOURCE_DOCUMENT, {
-        kind: INGEST_SOURCE_DOCUMENT,
-        workspaceId: session.workspace.workspaceId,
-        requestedByUserId: session.customer.userId,
-        // The job row's id and attempt ARE the natural key for this work: a
-        // second dispatch of the same attempt is refused by BullMQ, and a
-        // retry gets its own id (D-413). A new row is on its first attempt.
-        idempotencyKey: ingestionJobKey(job.id, 1),
-        attempt: 1,
-        ingestionJobId: job.id,
-      } satisfies IngestSourceDocumentPayload);
-      if (!dispatch.dispatched) {
-        log.error('could not dispatch ingestion; leaving it for the reconciliation sweep', {
-          workspaceId: session.workspace.workspaceId,
-          jobId: job.id,
-        });
-      }
-    }
+    await dispatchIngestion(session, received.job);
 
     const failed = received.document.status === 'FAILED';
     destination = pageUrl(
@@ -624,6 +639,104 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
   }
   revalidatePath(`/${locale}/brand-brain`);
   revalidatePath(`/${locale}/onboarding`);
+  redirect(destination);
+}
+
+/**
+ * PR C (owner, 2026-11-14) — READ THE BRAND'S OWN WEBSITE INTO BRAND BRAIN.
+ *
+ * The address in Settings → Brand; its home page and up to five more pages of
+ * the same site, through the one web reader (https only, public addresses
+ * only, redirects re-checked, robots.txt respected, 10 s and 2 MB a page).
+ * The pages become ONE plain-text source and take exactly the path a file
+ * takes: `receive`, the media-processing worker, then `brand.extract` — so
+ * what it finds waits in Pending for a person to approve. Started from Brand
+ * Brain → Sources, or from the Copilot's card after the person confirms.
+ */
+export async function readWebsiteAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const back = backTo(formData);
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.upload');
+    const brandId = String(formData.get('brandId') ?? '');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brandId)) {
+      throw new AppError('NOT_FOUND', 'That brand no longer exists.');
+    }
+    const brand = await inBrandBrain(session.workspace.workspaceId, ({ db }) =>
+      db.brand.findFirst({
+        where: { id: brandId, deletedAt: null },
+        select: { websiteUrl: true },
+      }),
+    );
+    // A brand outside the member's scope is the same miss as one that is gone.
+    const scope = session.workspace.brandScope;
+    if (!brand || (scope.length > 0 && !scope.includes(brandId))) {
+      throw new AppError('NOT_FOUND', 'That brand no longer exists.');
+    }
+    const home = websiteHome(brand.websiteUrl);
+    if (!home) {
+      destination = pageUrl(locale, { error: 'WEBSITE_MISSING', ...tabParam(formData) }, back);
+    } else {
+      let read: Awaited<ReturnType<typeof readWebsiteIntoSource>> | null = null;
+      let refusal: string | null = null;
+      try {
+        read = await readWebsiteIntoSource({
+          reader: webReaderFromEnvironment(),
+          home,
+          workspaceId: session.workspace.workspaceId,
+          brandId,
+          actorUserId: session.customer.userId,
+          actorBrandScope: session.workspace.brandScope,
+          // A race is answered by the duplicate path, as for a file (below).
+          receive: async (input) => {
+            const receive = () =>
+              inBrandBrain(session.workspace.workspaceId, async ({ ingestion }) =>
+                (await ingestion()).receive(input),
+              );
+            try {
+              return await receive();
+            } catch (error: unknown) {
+              if (!isUniqueViolation(error)) throw error;
+              return receive();
+            }
+          },
+        });
+      } catch (error: unknown) {
+        if (!(error instanceof WebReadRefusedError)) throw error;
+        refusal = error.reason;
+      }
+      if (!read) {
+        destination = pageUrl(
+          locale,
+          { error: `WEBSITE_NOT_READ_${refusal ?? 'unreachable'}`, ...tabParam(formData) },
+          back,
+        );
+      } else {
+        const { received, reading } = read;
+        await dispatchIngestion(session, received.job);
+        destination = pageUrl(
+          locale,
+          received.document.status === 'FAILED'
+            ? {
+                error: received.outcome === 'refused' ? 'SOURCE_REFUSED' : 'SOURCE_ALREADY_FAILED',
+                source: received.document.id,
+                ...tabParam(formData),
+              }
+            : {
+                ok: 'WEBSITE_READ',
+                source: received.document.id,
+                pages: String(reading.pages.length),
+                ...tabParam(formData),
+              },
+          back,
+        );
+      }
+    }
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'read-website', tabParam(formData), back);
+  }
+  revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);
 }
 

@@ -246,6 +246,35 @@ export async function executionContextFor(input: {
     automations,
     // PR A (D-605) — `post.generate_image`, confirmed from a card.
     images: imageJobs(db, workspaceId),
+    /*
+     * PR C — `post.create_draft`, confirmed from a card (a draft proposed after
+     * a web page was read). The same write the tool loop makes: the caption
+     * as written, AI provenance, the workspace's retention.
+     */
+    drafts: {
+      async create(draft) {
+        const created = await new ContentLibraryService({
+          db,
+          workspaceId,
+          policy: contentPolicy,
+        }).createManualItem({
+          brandId: draft.brandId,
+          title: draft.title,
+          locale: draft.locale,
+          variants: draft.platformKeys.map((platformKey) => ({
+            platformKey,
+            body: draft.caption,
+            hashtags: [...draft.hashtags],
+          })),
+          actorUserId: draft.actor.userId,
+          actorBrandScope: draft.actor.brandScope,
+          expiresAt: resolveContentExpiry(contentPolicy, input.retention, systemClock),
+          idempotencyKey: draft.idempotencyKey,
+          provenance: { origin: 'AI_GENERATED', aiRequestId: null, actorType: 'COPILOT' },
+        });
+        return { contentItemId: created.item.id, title: created.item.title };
+      },
+    },
   });
 }
 

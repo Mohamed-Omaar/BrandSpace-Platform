@@ -3289,3 +3289,26 @@ The full contract is `docs/AI-APPS.md` §2. The security-relevant points:
 - **Audit.** `ai_app.client.registered`, `ai_app.connection.granted`, `ai_app.token.issued`,
   `ai_app.tool.called` (every call, including refusals), `ai_app.connection.revoked`,
   `ai_app.client.purged`. No input, caption or token is copied into an audit row.
+
+## 41. Reading the web — the brand's website and links pasted in the Copilot (PR C, D-608)
+
+A web page is a stranger's content on a stranger's server. `packages/brand-brain/src/web-reader.ts` is the
+one way BrandSpace reads one:
+
+- **Where:** https on the standard port only; no IP-literal host, no credentials, no private name (the
+  provider URL rule). Every address the host resolves to must be public, checked inside the socket's own
+  lookup (`pinnedLookup`, D-573), so there is no DNS-rebinding window. Loopback, private, link-local (the
+  cloud metadata service), CGNAT and multicast addresses are refused.
+- **Redirects:** at most 3, and each target passes every rule again: a redirect to a private or metadata
+  address is refused like the address itself.
+- **robots.txt (RFC 9309):** BrandSpaceBot's group, else `*`; missing (4xx) allows; unreachable (5xx,
+  timeout) refuses.
+- **Bounds:** 10 seconds per page, 2 MB (reading stops there), HTML or plain text only. A brand's site is
+  its home page plus at most 5 pages of the same site, within 45 seconds. These are safety bounds of the
+  reader, like the AI egress's response cap, not product limits.
+- **Prompt injection:** the page becomes text; the Copilot receives it fenced as untrusted data, and its
+  instruction says never to follow instructions in a page. Structurally, once a page has been read in a
+  message, every write in that message becomes a proposal the person confirms (`runAgentTurn`): a page can
+  never make the Copilot act. The brand's website becomes a Brand Brain source whose facts wait in Pending.
+- **The end-to-end double:** `WEB_READER_FIXTURE_PORT` points the reader at the suite's stand-in site; it is
+  refused when `APP_ENV=production` (`assertNotProduction`, D-215).

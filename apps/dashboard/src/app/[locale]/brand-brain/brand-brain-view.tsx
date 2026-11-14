@@ -15,6 +15,7 @@ import {
   acceptConfidentCandidatesAction,
   mergeDuplicatesAction,
   uploadSourceAction as uploadFormAction,
+  readWebsiteAction,
 } from './actions';
 import type { UploadRules } from '../../../components/upload-rules';
 import { RefreshWhile } from '../../../components/refresh-while';
@@ -253,7 +254,10 @@ export function BrandBrainView({
   initialFocus = null,
   initialArea = null,
   sourceRules = null,
+  websiteHost = null,
 }: {
+  /** PR C — the brand's website host, for "Read our website"; null when none is set. */
+  websiteHost?: string | null;
   /** Batch 7 (A3): what a source may be, from activated configuration; null when uploads are off. */
   sourceRules?: UploadRules | null;
   locale: string;
@@ -1035,6 +1039,41 @@ export function BrandBrainView({
                 <UploadRulesLine className="bsp-bb-uphint" />
                 <UploadStatus testId="upload-status" />
               </UploadForm>
+            ) : null}
+
+            {/*
+              PR C — READ OUR WEBSITE. The upload card's own classes and the
+              shared pending button: no new visual language. The pages become
+              one source on the list below; what they propose waits for review.
+            */}
+            {permissions.upload ? (
+              <form
+                action={readWebsiteAction}
+                className="bsp-card bsp-bb-upcard"
+                data-testid="website-form"
+              >
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="brandId" value={brandId} />
+                <input type="hidden" name="tab" value="sources" />
+                <span className="bsp-bb-uprow">
+                  <SubmitButton
+                    className="bsp-btn bsp-bb-pick"
+                    pendingLabel={t('bb.website.reading')}
+                    disabled={websiteHost === null}
+                    data-testid="website-read"
+                  >
+                    {t('bb.website.read')}
+                  </SubmitButton>
+                  {websiteHost ? (
+                    <span className="bsp-bb-upname bsp-ltr" data-testid="website-host">
+                      {websiteHost}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="bsp-bb-uphint">
+                  {websiteHost ? t('bb.website.hint') : t('bb.website.missing')}
+                </span>
+              </form>
             ) : null}
 
             <div className="bsp-card bsp-bb-srclist">

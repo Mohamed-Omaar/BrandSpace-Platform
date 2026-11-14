@@ -85,6 +85,26 @@ export interface ExecutorContext {
   readonly automations?: AutomationRulePort | undefined;
   /** PR A (D-605) — the #119 image job, for `post.generate_image`. */
   readonly images?: ImageJobPort | undefined;
+  /** PR C — a draft the Copilot wrote, confirmed from the card. */
+  readonly drafts?: DraftPort | undefined;
+}
+
+/**
+ * PR C — WRITE ONE DRAFT, exactly as the tool loop's `post.create_draft`
+ * does (the caption as written, the AI provenance, the same audit), for a
+ * draft step the person confirmed on the card.
+ */
+export interface DraftPort {
+  create(input: {
+    readonly brandId: string;
+    readonly title: string;
+    readonly caption: string;
+    readonly hashtags: readonly string[];
+    readonly platformKeys: readonly string[];
+    readonly locale: 'AR' | 'EN';
+    readonly idempotencyKey: string;
+    readonly actor: LiveAuthorization;
+  }): Promise<{ readonly contentItemId: string; readonly title: string }>;
 }
 
 /**
@@ -569,6 +589,25 @@ const contentDraft: ToolExecutor = async (context, args) => {
   };
 };
 
+const postCreateDraft: ToolExecutor = async (context, args) => {
+  if (!context.drafts) throw externalActionUnavailable();
+  const created = await context.drafts.create({
+    brandId: String(args['brandId']),
+    title: String(args['title']),
+    caption: String(args['caption']),
+    hashtags: (args['hashtags'] as string[] | undefined) ?? [],
+    platformKeys: (args['platformKeys'] as string[]) ?? [],
+    locale: (args['locale'] as 'AR' | 'EN' | undefined) ?? 'EN',
+    idempotencyKey: context.idempotencyKey,
+    actor: context.authorization,
+  });
+  return {
+    result: { contentItemId: created.contentItemId },
+    resourceType: 'ContentItem',
+    resourceId: created.contentItemId,
+  };
+};
+
 const postGenerateImage: ToolExecutor = async (context, args) => {
   if (!context.images) throw externalActionUnavailable();
   const queued = await context.images.generate({
@@ -1011,6 +1050,7 @@ export const TOOL_EXECUTORS: Readonly<Record<string, ToolExecutor>> = {
   'campaign.update': campaignUpdate,
   'content.draft': contentDraft,
   'post.generate_image': postGenerateImage,
+  'post.create_draft': postCreateDraft,
   'calendar.place': calendarPlace,
   'publishing.publish_now': publishNow,
   'automation.create_rule': automationCreateRule,
@@ -1105,6 +1145,11 @@ export async function buildPreview(
           labelKey: 'copilot.preview.platforms',
           after: ((args['platformKeys'] as string[] | undefined) ?? []).join(', '),
         },
+      ];
+    case 'post.create_draft':
+      return [
+        { labelKey: 'copilot.preview.content', after: String(args['title'] ?? '').slice(0, 120) },
+        { labelKey: 'copilot.preview.brief', after: String(args['caption'] ?? '').slice(0, 200) },
       ];
     case 'post.generate_image': {
       const item = await requireTargetItem(context, args);
