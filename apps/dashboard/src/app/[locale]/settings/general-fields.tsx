@@ -101,7 +101,7 @@ export function GeneralFields({
     readonly websiteUrl: string | null;
   } | null;
   readonly labels: GeneralFieldsLabels;
-  /** PR D (D-608): the business logo field, in the cell beside the time zone. */
+  /** PR D (D-609): the business logo field, in the cell beside the time zone. */
   readonly logoField?: ReactNode;
 }) {
   const [country, setCountry] = useState(saved.country);

@@ -377,6 +377,30 @@ export const COPILOT_TOOLS = [
     entitlementKey: 'ai.copilot',
     messageKey: 'contentDraft',
   },
+  /*
+   * PR C (owner, 2026-11-14) — A DRAFT THE COPILOT WROTE, CONFIRMED HERE. The
+   * tool loop creates `post.create_draft` without a card; once a web page has
+   * been read in the message, the same step is PROPOSED to this card instead
+   * and runs only when the person confirms: a page never makes the Copilot
+   * write. Exactly the draft the loop would have made (`DraftPort`).
+   */
+  {
+    key: 'post.create_draft',
+    input: brandArgument.extend({
+      title: z.string().min(1).max(120),
+      caption: z.string().min(1).max(2_200),
+      hashtags: z.array(z.string().min(1).max(60)).max(30).optional(),
+      platformKeys: z.array(z.string().min(1).max(40)).min(1).max(6),
+      locale: z.enum(['AR', 'EN']).optional(),
+    }),
+    permission: 'content.create',
+    brandScope: 'required',
+    actionClass: 'INTERNAL_REVERSIBLE',
+    spendsCredits: false,
+    undoable: false,
+    entitlementKey: 'ai.copilot',
+    messageKey: 'postCreateDraft',
+  },
   {
     key: 'calendar.place',
     input: brandArgument.extend({

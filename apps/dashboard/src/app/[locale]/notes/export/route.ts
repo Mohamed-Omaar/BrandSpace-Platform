@@ -3,7 +3,7 @@ import { systemClock } from '@brandspace/shared';
 import { inPersonalNotes } from '../../../../server/personal-notes-context';
 
 /**
- * PR D (D-608), owner condition 2 — "DOWNLOAD MY NOTES".
+ * PR D (D-609), owner condition 2 — "DOWNLOAD MY NOTES".
  *
  * The signed-in person's OWN notes in this workspace, with their reminders, as
  * one JSON file. Whose notes is not a question the request can ask: the

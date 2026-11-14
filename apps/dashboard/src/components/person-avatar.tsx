@@ -1,5 +1,5 @@
 /**
- * PR D (D-608) — A PERSON, AS A TILE: their avatar in a circle, or the
+ * PR D (D-609) — A PERSON, AS A TILE: their avatar in a circle, or the
  * prototype's coloured initials (`.bsp-tm-av[data-c]`) when they have none.
  *
  * Two ways to be read. Beside the person's written name the tile is

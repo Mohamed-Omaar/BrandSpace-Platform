@@ -78,7 +78,7 @@ export default async function NotesPage({
     brandContext.resolution.kind === 'brand' ? brandContext.resolution.brand.id : null;
 
   /*
-   * PR D (D-608) — TWO TABS: the team's conversations (this screen as it was,
+   * PR D (D-609) — TWO TABS: the team's conversations (this screen as it was,
    * and still the default, so every link to `/notes` lands where it did) and
    * "My notes", the person's own private notes (`?tab=mine`; a reminder's link
    * `?note=` opens it too). The shared `.seg` of links.
@@ -219,7 +219,7 @@ export default async function NotesPage({
   );
 
   const thread = pane?.thread ?? null;
-  // PR D (D-608) — each author's photo, when they have one.
+  // PR D (D-609) — each author's photo, when they have one.
   const authorAvatars = await pictureVersions(
     workspace.workspaceId,
     (pane?.notes ?? []).map((note) => note.authorUserId),

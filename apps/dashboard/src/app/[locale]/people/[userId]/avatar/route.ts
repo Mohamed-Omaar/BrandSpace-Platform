@@ -4,7 +4,7 @@ import { mayViewAvatar } from '../../../../../server/pictures';
 import { notFound, pictureResponse } from '../../../../../server/picture-response';
 
 /**
- * PR D (D-608) — A PERSON'S AVATAR. Signed in, and the person is a member of
+ * PR D (D-609) — A PERSON'S AVATAR. Signed in, and the person is a member of
  * the viewer's current workspace (or is the viewer). Otherwise the same 404 as
  * a person with no picture: nothing says who exists elsewhere.
  */

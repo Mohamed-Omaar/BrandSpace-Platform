@@ -52,6 +52,7 @@ export type {
   ExecutorContext,
   ExecutorResult,
   ExternalActionPort,
+  DraftPort,
   ImageJobPort,
   AutomationRuleCheck,
   AutomationRulePair,

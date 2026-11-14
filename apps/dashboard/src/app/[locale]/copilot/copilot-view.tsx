@@ -154,6 +154,8 @@ interface PlanResponse {
     readonly itemKey: string;
     readonly question: { readonly en?: string; readonly ar?: string };
   } | null;
+  /** PR C — "read our website": the card that reads it into Brand Brain. */
+  readonly website?: { readonly host: string | null } | null;
   /** D8 — "save this fact": handed to Brand Brain → Add, never saved here. */
   readonly saveFact?: {
     readonly area: string | null;
@@ -1026,6 +1028,21 @@ export function CopilotView({
             card: a link into the Brand Brain area's add form, prefilled. Nothing
             is saved until the person adds it there, with their own permission.
           */}
+          {/*
+            PR C — "READ OUR WEBSITE" IS A CARD. Nothing is read until the
+            person presses Read; then Brand Brain's own action reads it, and
+            what it finds waits in Pending — the file card's own steps.
+          */}
+          {plan.website ? (
+            <SourceCard
+              website={plan.website}
+              locale={locale}
+              brandId={brand.id}
+              canReview={sources?.review ?? false}
+              labels={sourceCardLabels(t, locale)}
+              onDone={() => undefined}
+            />
+          ) : null}
           {plan.saveFact ? (
             <Banner tone="info" testId="copilot-save-handoff">
               <span style={{ display: 'grid', gap: spacingTokens.xs }}>
@@ -1404,7 +1421,7 @@ export function CopilotView({
                   locale={locale}
                   brandId={brand.id}
                   canReview={sources.review}
-                  labels={sourceCardLabels(t)}
+                  labels={sourceCardLabels(t, locale)}
                   onAdded={() => setFileAdded(true)}
                   onDone={() => setAttached(null)}
                 />
@@ -1758,7 +1775,7 @@ function digest(value: string): string {
 }
 
 /** PR B — the Add card's words, in the reader's language. */
-function sourceCardLabels(t: (key: MessageKey) => string): SourceCardLabels {
+function sourceCardLabels(t: (key: MessageKey) => string, locale: string): SourceCardLabels {
   return {
     askTitle: t('copilot.source.askTitle'),
     askBody: t('copilot.source.askBody'),
@@ -1786,6 +1803,10 @@ function sourceCardLabels(t: (key: MessageKey) => string): SourceCardLabels {
     failed: t('copilot.source.failed'),
     refused: t('copilot.source.refused'),
     failureReason: (reason) => sourceFailureText(reason, t),
+    websiteAsk: t('copilot.website.ask'),
+    websiteBody: t('copilot.website.body'),
+    websiteRead: t('copilot.website.read'),
+    websiteFailure: (code) => statusMessage(code, locale) ?? t('copilot.website.failed'),
     rejectAll: t('copilot.source.rejectAll'),
     rejected: t('copilot.source.rejected'),
     alreadyAdded: t('copilot.source.alreadyAdded'),

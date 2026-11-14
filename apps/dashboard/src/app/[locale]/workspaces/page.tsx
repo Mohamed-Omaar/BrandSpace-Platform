@@ -87,7 +87,7 @@ export default async function WorkspacePickerPage({
                   data-testid={`choose-workspace-${w.workspaceSlug}`}
                   className="bs-liftable bsp-auth-ws"
                 >
-                  {/* PR D (D-608): the business's logo, or its letters. */}
+                  {/* PR D (D-609): the business's logo, or its letters. */}
                   <span
                     className="bsp-auth-wsini"
                     aria-hidden="true"

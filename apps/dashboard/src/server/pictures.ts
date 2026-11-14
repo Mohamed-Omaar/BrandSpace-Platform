@@ -22,7 +22,7 @@ import { getCustomer, getCustomerAuth, getSessionToken, inWorkspace } from './cu
 const log = createLogger({ context: { component: 'dashboard.pictures' } });
 
 /**
- * PR D (D-608) — PEOPLE'S AVATARS AND THE WORKSPACE'S LOGO.
+ * PR D (D-609) — PEOPLE'S AVATARS AND THE WORKSPACE'S LOGO.
  *
  * STORED: the bytes in the object store under a key built here from ids
  * (`avatars/<userId>/<uuid>.<ext>`, `workspaces/<id>/logo/<uuid>.<ext>`), the

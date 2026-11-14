@@ -100,7 +100,7 @@ function TeamAvatar({
   readonly initials: string;
   readonly index: number;
   readonly size?: 36 | 48;
-  /** PR D (D-608): the person's own photo, when they have one. */
+  /** PR D (D-609): the person's own photo, when they have one. */
   readonly src?: string | null;
 }) {
   return <PersonAvatar initials={initials} index={index} size={size} src={src} />;
@@ -169,7 +169,7 @@ export default async function MembersPage({
         }),
       }),
     );
-  // PR D (D-608): each member's photo, when they have one.
+  // PR D (D-609): each member's photo, when they have one.
   const avatars = await pictureVersions(
     workspace.workspaceId,
     members.map((m) => m.userId),

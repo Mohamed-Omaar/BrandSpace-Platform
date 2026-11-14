@@ -639,6 +639,15 @@ async function agentTurn(request: TextRequest, ctx: AdapterContext): Promise<Tex
 
   const context = request.untrustedContext ?? [];
   if (last?.role === 'user') {
+    // PR C — "read our website" offers the card; a pasted link is read.
+    if (
+      /read our website|اقرا موقعنا|اقرأ موقعنا/iu.test(asked) &&
+      offered.has('brand_brain__read_website')
+    ) {
+      return call('brand_brain__read_website', {});
+    }
+    const link = /\bhttps?:\/\/[^\s<>"'“”]+/iu.exec(asked)?.[0];
+    if (link && offered.has('web__read_link')) return call('web__read_link', { url: link });
     // A fact the person asked to save, change or remove: the card (or, for
     // someone who cannot edit, the hand-off to Brand Brain → Add).
     if (SAVE_WORDS.test(asked)) {
@@ -693,6 +702,25 @@ async function agentTurn(request: TextRequest, ctx: AdapterContext): Promise<Tex
     }
   }
   if (last?.role === 'tool') {
+    /*
+     * PR C — AN OBEDIENT MODEL. A page that says "ignore previous
+     * instructions" gets this double to try a write, as a real model might;
+     * the loop must turn it into a proposal the person confirms.
+     */
+    if (
+      last.text.includes('WEB PAGE') &&
+      /ignore (all )?previous instructions/iu.test(last.text) &&
+      offered.has('post__create_draft') &&
+      !callsSoFar.includes('post__create_draft')
+    ) {
+      return call('post__create_draft', {
+        title: 'Written because a page said so',
+        caption: 'This draft was asked for by a web page, not by the person.',
+        hashtags: [],
+        platformKeys: ['instagram'],
+        locale: 'EN',
+      });
+    }
     const draftId = /Draft created: id ([0-9a-f-]{36})/.exec(last.text)?.[1];
     const wantsImage = /\b(image|picture|photo)\b|صورة/iu.test(asked);
     if (
@@ -724,34 +752,47 @@ async function agentTurn(request: TextRequest, ctx: AdapterContext): Promise<Tex
     .slice(0, 400);
   const greeting =
     /^\W*(hi|hello|hey|مرحب|أهل|السلام)\b/iu.test(asked) || /\bslowly\b|ببطء/iu.test(asked);
-  const text = toolSaid.startsWith('PROPOSED')
+  const pageTitle = /Title: ([^\n]+)/.exec(
+    turns.find((turn) => turn.role === 'tool' && turn.text.includes('WEB PAGE'))?.text ?? '',
+  )?.[1];
+  const text = toolSaid.startsWith('CARD SHOWN')
     ? arabic
-      ? 'جهّزت ذلك، وهو بانتظار تأكيدك أدناه.'
-      : 'I prepared that; it waits for your confirmation below.'
-    : toolSaid.startsWith('HANDED OFF')
-      ? arabic
-        ? 'لا أستطيع حفظها بنفسي؛ أضفها من عقل العلامة.'
-        : 'I cannot save it myself; add it from Brand Brain.'
-      : sentImages && !done
+      ? 'أستطيع قراءة موقعك وإضافته إلى عقل العلامة: اضغط «اقرأ الموقع» في البطاقة أدناه.'
+      : 'I can read your website into Brand Brain: press Read the website on the card below.'
+    : toolSaid.startsWith('ERROR: the link could not be read')
+      ? `${arabic ? 'تعذّرت قراءة الرابط' : "I couldn't read that link"}: ${toolSaid.replace(/^ERROR: the link could not be read:?\s*/u, '')}`
+      : pageTitle && !toolSaid.startsWith('PROPOSED')
         ? arabic
-          ? 'أرى الصورة التي أرسلتها.'
-          : 'I can see the image you sent.'
-        : !done && !greeting && material
-          ? // The reply language is the question's, as the instruction asks.
-            arabic
-            ? `بحسب عقل العلامة: ${material}`
-            : material
-          : arabic
-            ? done
-              ? callsSoFar.includes('post__create_draft')
-                ? 'أنشأت مسودة منشور لك. لم تُجدول ولم تُنشر؛ راجعها من المنشورات.'
-                : 'راجعت ما طلبته، وهذه خلاصته في سطر واحد.'
-              : 'أهلًا! كيف أساعدك في علامتك اليوم؟'
-            : done
-              ? callsSoFar.includes('post__create_draft')
-                ? 'I made a draft post for you. It is not scheduled or published; review it in Posts.'
-                : 'I checked what you asked about; here it is in one line.'
-              : 'Hello! How can I help with your brand today?';
+          ? `قرأت الصفحة «${pageTitle}».`
+          : `I read the page “${pageTitle}”.`
+        : toolSaid.startsWith('PROPOSED')
+          ? arabic
+            ? 'جهّزت ذلك، وهو بانتظار تأكيدك أدناه.'
+            : 'I prepared that; it waits for your confirmation below.'
+          : toolSaid.startsWith('HANDED OFF')
+            ? arabic
+              ? 'لا أستطيع حفظها بنفسي؛ أضفها من عقل العلامة.'
+              : 'I cannot save it myself; add it from Brand Brain.'
+            : sentImages && !done
+              ? arabic
+                ? 'أرى الصورة التي أرسلتها.'
+                : 'I can see the image you sent.'
+              : !done && !greeting && material
+                ? // The reply language is the question's, as the instruction asks.
+                  arabic
+                  ? `بحسب عقل العلامة: ${material}`
+                  : material
+                : arabic
+                  ? done
+                    ? callsSoFar.includes('post__create_draft')
+                      ? 'أنشأت مسودة منشور لك. لم تُجدول ولم تُنشر؛ راجعها من المنشورات.'
+                      : 'راجعت ما طلبته، وهذه خلاصته في سطر واحد.'
+                    : 'أهلًا! كيف أساعدك في علامتك اليوم؟'
+                  : done
+                    ? callsSoFar.includes('post__create_draft')
+                      ? 'I made a draft post for you. It is not scheduled or published; review it in Posts.'
+                      : 'I checked what you asked about; here it is in one line.'
+                    : 'Hello! How can I help with your brand today?';
   const slow = /\bslowly\b|ببطء/iu.test(asked);
   const words = slow
     ? Array.from({ length: 40 }, (_, i) => `${text.split(' ')[i % text.split(' ').length]}`)

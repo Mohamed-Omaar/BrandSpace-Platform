@@ -4,7 +4,7 @@ import { maxBytesForKind, type AssetPolicy } from './policy';
 import type { VirusScanner } from './scanning';
 
 /**
- * PR D (D-608) — A PERSON'S AVATAR OR A WORKSPACE'S LOGO.
+ * PR D (D-609) — A PERSON'S AVATAR OR A WORKSPACE'S LOGO.
  *
  * THE SAME RULES AS AN IMAGE IN THE ASSET LIBRARY, AND THE SAME SCAN:
  *

@@ -162,7 +162,7 @@ export default async function SecuritySettingsPage({
           the product's own, unchanged.
         */}
         {/*
-          PR D (D-608) — THE PERSON'S PHOTO, on their own account page (the
+          PR D (D-609) — THE PERSON'S PHOTO, on their own account page (the
           product has no separate profile screen). A design-system extension:
           the security card's title and line over the shared upload control.
         */}

@@ -2261,7 +2261,7 @@ the credits charged, `attachedAt` and a `failureReason` key.
 - Retention: a finished row is deleted on the workspace's AI-content schedule, counted from
   `completedAt` (`purgeCreativeJobs`). Credits live in the ledger, never here.
 
-## 24. A person's own notes, photos and the workspace logo (D-608)
+## 24. A person's own notes, photos and the workspace logo (D-609)
 
 - **`personal_note`** — `id`, `workspaceId`, `ownerUserId`, `title` (≤ 200), `body` (≤ 20,000),
   `pinnedAt`, `createdAt`, `updatedAt`. Foreign keys to `workspace` and to the owner's `user` row

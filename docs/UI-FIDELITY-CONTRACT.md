@@ -2433,6 +2433,15 @@ APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2); the prototype draws none of these scr
 No new colour, font, shadow or interaction model; en and ar. Measured by `tests/e2e/ai-apps.spec.ts`
 (axe in both languages, RTL) and covered in the reviewer screenshots.
 
+### 6.x Reading the web (PR C, D-608)
+
+Additions inside screens that are already extensions. **Brand Brain → Sources:** "Read our website", a card
+built from the upload card's own classes (`bsp-card bsp-bb-upcard`, `bsp-bb-uprow`, the shared pending
+button), with the site's host and a hint. **The Copilot:** the "read our website" card is the existing
+source card (`copilot-source-card`) in a website mode, with the same steps after Read; a link read shows as
+a "Worked on" line. **Brand Brain → Look:** "Suggest colours from the logo" uses the look card's own buttons
+and swatches. No new component, colour, font or motion.
+
 ### 6.x `/[locale]/content/compose` (media drawer) and `/[locale]/creative` — the logo and the headline (PR B, D-607)
 
 Additions inside screens that are already extensions. Under the image's size (and quality): "Add our logo"
@@ -2686,7 +2695,7 @@ D-582's generated palette), and light mode is unchanged token for token.
   contrast on every main page in dark, en and ar, desktop and phone) and
   `tests/unit/pr-e-dark-palette.test.ts`.
 
-### 6.3.83 PR D — My notes, photos and the workspace logo (D-608)
+### 6.3.83 PR D — My notes, photos and the workspace logo (D-609)
 
 APPROVED DESIGN-SYSTEM EXTENSIONS (CLAUDE.md §4.2): the prototype draws no personal notes, no
 photo upload and no logo upload.

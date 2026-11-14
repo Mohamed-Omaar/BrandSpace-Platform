@@ -58,6 +58,13 @@ const PORTS = { web: 3100, dashboard: 3101, admin: 3102, api: 3103, worker: 3104
 const FAKE_RESEND_PORT = 3105;
 
 /**
+ * PR C — the stand-in for the web, `tests/e2e/fake-web.ts`. The dashboard and
+ * the API read every https link from it (`WEB_READER_FIXTURE_PORT`, a
+ * development double refused in production).
+ */
+const FAKE_WEB_PORT = 3106;
+
+/**
  * The service token the dashboard presents to the API's internal email route.
  *
  * NOT A SECRET IN ANY MEANINGFUL SENSE — it authorises one capability against a
@@ -124,6 +131,10 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
   // The design showcase is opt-in and refused in production. The suite enables
   // it for the dashboard only, which is also the assertion that the gate works:
   // the admin app never sets it, so a showcase route there stays a 404.
+  // PR C — every https link the suite reads comes from the stand-in web site.
+  if (app === 'dashboard' || app === 'api') {
+    env['WEB_READER_FIXTURE_PORT'] = String(FAKE_WEB_PORT);
+  }
   if (app === 'dashboard') {
     env['BRANDSPACE_DESIGN_SHOWCASE'] = '1';
     // So the upload DISPATCHES to the worker — since Phase 2C-4 the only
@@ -854,6 +865,13 @@ export default defineConfig({
       reuseExistingServer: !process.env['CI'],
       timeout: 60_000,
       env: { FAKE_RESEND_PORT: String(FAKE_RESEND_PORT) },
+    },
+    {
+      command: 'pnpm exec tsx tests/e2e/fake-web.ts',
+      url: `http://127.0.0.1:${FAKE_WEB_PORT}/__health`,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 60_000,
+      env: { FAKE_WEB_PORT: String(FAKE_WEB_PORT) },
     },
     server('web'),
     server('dashboard'),

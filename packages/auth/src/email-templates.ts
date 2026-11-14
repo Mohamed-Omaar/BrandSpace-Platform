@@ -193,7 +193,7 @@ const TEMPLATES: Readonly<Record<EmailTemplateKey, LocalisedTemplate>> = {
     },
   },
   /*
-   * PR D (D-608) — the person's own note reminder. Generic on purpose: the
+   * PR D (D-609) — the person's own note reminder. Generic on purpose: the
    * note's title and body never leave the product in an email (owner
    * condition 1). The link opens the person's notes, behind sign-in.
    */

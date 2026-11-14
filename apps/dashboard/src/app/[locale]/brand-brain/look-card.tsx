@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
+import { logoColours } from '@brandspace/shared';
 import type { UploadRules } from '../../../components/upload-rules';
 import {
   UploadFileInput,
@@ -176,7 +177,13 @@ export function LookCard({
         canManage={canManage}
         canUpload={canManage && canUpload}
       />
-      <Colours locale={locale} brandId={brandId} palette={look.palette} canManage={canManage} />
+      <Colours
+        locale={locale}
+        brandId={brandId}
+        palette={look.palette}
+        canManage={canManage}
+        logoUrl={look.logo?.url ?? null}
+      />
       {children}
       <Fonts
         locale={locale}
@@ -251,14 +258,41 @@ function Colours({
   brandId,
   palette,
   canManage,
+  logoUrl = null,
 }: {
   locale: string;
   brandId: string;
   palette: readonly string[];
   canManage: boolean;
+  /** PR C — the logo the page shows, read for suggested colours. */
+  logoUrl?: string | null;
 }) {
   const t = translator(useMessageLocale(locale));
   const [colours, setColours] = useState<string[]>([...palette]);
+  // PR C — colours read from the logo's pixels, in this browser; offered only.
+  const [suggested, setSuggested] = useState<string[] | null>(null);
+  const suggestFromLogo = () => {
+    if (!logoUrl) return;
+    const image = new Image();
+    image.onload = () => {
+      const edge = 96;
+      const canvas = document.createElement('canvas');
+      canvas.width = edge;
+      canvas.height = edge;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) return setSuggested([]);
+      const scale = Math.min(edge / image.naturalWidth, edge / image.naturalHeight) || 1;
+      context.drawImage(image, 0, 0, image.naturalWidth * scale, image.naturalHeight * scale);
+      try {
+        const found = logoColours(context.getImageData(0, 0, edge, edge).data);
+        setSuggested(found.filter((colour) => !colours.includes(colour)));
+      } catch {
+        setSuggested([]);
+      }
+    };
+    image.onerror = () => setSuggested([]);
+    image.src = logoUrl;
+  };
   const headingId = useId();
 
   if (!canManage) {
@@ -277,11 +311,7 @@ function Colours({
           <ul className="bsp-lk-swatches">
             {palette.map((colour) => (
               <li key={colour} className="bsp-lk-sw" data-testid={`look-swatch-${colour}`}>
-                <span
-                  aria-hidden="true"
-                  className="bsp-lk-sw-tile"
-                  style={{ background: colour }}
-                />
+                <SwatchTile colour={colour} />
                 <span className="bsp-ltr bsp-lk-hex-t">{colour}</span>
               </li>
             ))}
@@ -360,6 +390,57 @@ function Colours({
             </li>
           ) : null}
         </ul>
+        {/*
+          PR C — COLOURS FROM THE LOGO. Read from its pixels in this browser and
+          offered; they join the swatches above when added, and are saved only
+          with Save. The look card's own buttons and swatches: nothing new.
+        */}
+        {logoUrl ? (
+          <div className="bsp-lk-form" data-testid="look-from-logo">
+            {suggested === null ? (
+              <button
+                type="button"
+                className="bsp-btn bsp-sm bsp-lk-start"
+                onClick={suggestFromLogo}
+                data-testid="look-from-logo-suggest"
+              >
+                {t('bb.look.fromLogo')}
+              </button>
+            ) : suggested.length === 0 ? (
+              <p className="bsp-lk-muted" data-testid="look-from-logo-none">
+                {t('bb.look.fromLogoNone')}
+              </p>
+            ) : (
+              <>
+                <p className="bsp-lk-muted">{t('bb.look.fromLogoHint')}</p>
+                <ul className="bsp-lk-swatches" data-testid="look-from-logo-colours">
+                  {suggested.map((colour) => (
+                    <li key={colour} className="bsp-lk-sw">
+                      <SwatchTile colour={colour} />
+                      <span className="bsp-ltr bsp-lk-hex-t">{colour}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  className="bsp-btn bsp-sm bsp-lk-start"
+                  onClick={() => {
+                    setColours((current) =>
+                      [...current, ...suggested.filter((c) => !current.includes(c))].slice(
+                        0,
+                        MAX_COLOURS,
+                      ),
+                    );
+                    setSuggested(null);
+                  }}
+                  data-testid="look-from-logo-add"
+                >
+                  {t('bb.look.fromLogoAdd')}
+                </button>
+              </>
+            )}
+          </div>
+        ) : null}
         <SubmitButton
           className="bsp-btn bsp-sm bsp-pur bsp-lk-start"
           data-testid="look-colours-save"
@@ -369,6 +450,11 @@ function Colours({
       </form>
     </section>
   );
+}
+
+/** A swatch shown, not edited: the saved palette, or a colour suggested from the logo. */
+function SwatchTile({ colour }: { readonly colour: string }) {
+  return <span aria-hidden="true" className="bsp-lk-sw-tile" style={{ background: colour }} />;
 }
 
 /* ------------------------------------------------------------------ logo */

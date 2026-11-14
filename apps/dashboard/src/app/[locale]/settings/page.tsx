@@ -93,7 +93,7 @@ export default async function SettingsPage({
       };
     },
   );
-  // PR D (D-608): the business logo, a field of this form.
+  // PR D (D-609): the business logo, a field of this form.
   const logoSrc = workspaceLogoHref(
     locale,
     workspace.workspaceId,
@@ -227,7 +227,7 @@ export default async function SettingsPage({
                   timezoneUnplanned: t('settings.timezoneUnplanned'),
                 }}
                 /*
-                  PR D (D-608) — THE BUSINESS LOGO, a field of this form in
+                  PR D (D-609) — THE BUSINESS LOGO, a field of this form in
                   the cell beside the time zone: the one "Save changes" saves
                   it, and the bar stays the column's last row.
                 */

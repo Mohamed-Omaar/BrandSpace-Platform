@@ -32,7 +32,7 @@ export function noteThreadHref(locale: string, entry: NoteLinkTarget): string {
 }
 
 /**
- * PR D (D-608) — the note a `note.reminder` notification points at
+ * PR D (D-609) — the note a `note.reminder` notification points at
  * (`/notes?note=<id>`), or null for any other link.
  */
 export function noteIdFromLink(linkPath: string | null): string | null {

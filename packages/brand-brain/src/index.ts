@@ -275,3 +275,24 @@ export type {
   VariantUsageEntry,
 } from './usage';
 export * from './profile';
+
+/* PR C (owner, 2026-11-14) — the one way a web page is read. */
+export {
+  WEBSITE_EXTRA_PAGES,
+  WEB_READER_USER_AGENT,
+  WEB_READ_MAX_BYTES,
+  WEB_READ_MAX_REDIRECTS,
+  WEB_READ_TIMEOUT_MS,
+  WebReadRefusedError,
+  WebReader,
+  decodeEntities,
+  htmlToText,
+  parseRobots,
+  readWebsite,
+  robotsAllows,
+  unsafeAddressReason,
+  webReaderFromEnvironment,
+  websiteDocument,
+} from './web-reader';
+export type { WebPage, WebReadRefusal, WebReaderOptions, WebsiteReading } from './web-reader';
+export { readWebsiteIntoSource, websiteHome, websiteHostOf } from './website-source';

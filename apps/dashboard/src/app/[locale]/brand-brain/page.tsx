@@ -116,6 +116,21 @@ export default async function BrandBrainPage({
     typeof query['brand'] === 'string' ? query['brand'] : null,
   );
   const brand = requiredBrand(brandContext);
+  // PR C — the brand's website, for "Read our website" (its host only).
+  const websiteHost = await inBrandBrain(workspace.workspaceId, async ({ db }) => {
+    if (!brand) return null;
+    const row = await db.brand.findFirst({
+      where: { id: brand.id, deletedAt: null },
+      select: { websiteUrl: true },
+    });
+    const raw = (row?.websiteUrl ?? '').trim();
+    if (raw === '') return null;
+    try {
+      return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`).hostname;
+    } catch {
+      return null;
+    }
+  }).catch(() => null);
 
   const status = typeof query['ok'] === 'string' ? (query['ok'] as string) : null;
   const error = typeof query['error'] === 'string' ? (query['error'] as string) : null;
@@ -912,6 +927,7 @@ export default async function BrandBrainPage({
       />
       <BrandBrainView
         sourceRules={sourceRules}
+        websiteHost={websiteHost}
         notes={typeof query['thread'] === 'string' ? null : brandNotes}
         locale={locale}
         brandId={brand.id}

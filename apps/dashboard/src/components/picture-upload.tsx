@@ -5,7 +5,7 @@ import { Field } from '@brandspace/ui';
 import { SubmitButton } from './pending-submit';
 
 /**
- * PR D (D-608) — CHOOSE A PICTURE, CROPPED SQUARE IN THE BROWSER.
+ * PR D (D-609) — CHOOSE A PICTURE, CROPPED SQUARE IN THE BROWSER.
  *
  * The chosen file is drawn onto a canvas, centred and cut to its largest
  * square (at most 512 px a side), and put back in the same file field, so the
@@ -154,7 +154,7 @@ export function PictureUpload({
 }
 
 /**
- * PR D (D-608) — A PICTURE AS ONE FIELD OF A LARGER FORM (the business logo on
+ * PR D (D-609) — A PICTURE AS ONE FIELD OF A LARGER FORM (the business logo on
  * General settings, saved by that form's own "Save changes"). The shared
  * `Field` (the same label and hint as its neighbours), the mark at its own
  * size beside the file input, and the same browser crop. Choosing a file is a

@@ -14,7 +14,7 @@ import {
 } from '@brandspace/assets';
 
 /**
- * PR D (D-608) — AVATARS AND THE WORKSPACE LOGO: the image rules of the asset
+ * PR D (D-609) — AVATARS AND THE WORKSPACE LOGO: the image rules of the asset
  * library and its scanner, and object keys the database's CHECK accepts.
  */
 

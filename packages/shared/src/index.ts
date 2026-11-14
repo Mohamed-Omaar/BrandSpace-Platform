@@ -24,3 +24,4 @@ export * from './untrusted-text';
 export * from './prompt-language';
 export * from './theme';
 export * from './ttl-cache';
+export * from './logo-colours';

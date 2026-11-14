@@ -239,7 +239,7 @@ export default async function ContentPage({
     },
   );
 
-  // PR D (D-608) — each author's photo, for "created by".
+  // PR D (D-609) — each author's photo, for "created by".
   const ownerAvatars = await pictureVersions(workspace.workspaceId, [...owners.keys()]);
 
   /*

@@ -2588,7 +2588,7 @@ export class MaintenanceScheduler {
   }
 
   /**
-   * PR D (D-608) — the note reminders that are due: an in-app notification to
+   * PR D (D-609) — the note reminders that are due: an in-app notification to
    * the owner (no note text in it) and, when they asked for it, a generic email.
    * See `note-reminders.ts`.
    */
@@ -2740,7 +2740,7 @@ export class MaintenanceScheduler {
       const recovered = await this.recoverStuckIngestion(cadence.ingestionReconcileBatch);
       return recovered + (await this.reconcileIngestion(cadence.ingestionReconcileBatch));
     });
-    // PR D (D-608): due note reminders, on the reconciliation cadence (30 s by default).
+    // PR D (D-609): due note reminders, on the reconciliation cadence (30 s by default).
     every(cadence.ingestionReconcileSeconds, 'note-reminders', () =>
       this.sendNoteReminders(cadence.ingestionReconcileBatch),
     );

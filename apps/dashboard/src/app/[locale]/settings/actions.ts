@@ -68,7 +68,7 @@ export async function saveSettingsAction(formData: FormData): Promise<void> {
       ),
     );
 
-    // PR D (D-608): the business logo, posted with the rest of General.
+    // PR D (D-609): the business logo, posted with the rest of General.
     const logo = formData.get('logo');
     const logoOutcome =
       logo instanceof File && logo.size > 0

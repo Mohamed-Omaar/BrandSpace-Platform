@@ -64,11 +64,11 @@ export interface ApprovalRow {
   readonly cover?: ApprovalCover | null | undefined;
   /** Round 3 — the row's second line: "From Omar · 2 hours ago". */
   readonly fromLabel?: string | undefined;
-  /** PR D (D-608) — who sent it, as a small avatar before that line. */
+  /** PR D (D-609) — who sent it, as a small avatar before that line. */
   readonly requestedBy?: ApprovalPerson | undefined;
 }
 
-/** PR D (D-608) — a person in this screen: their photo, or their initials. */
+/** PR D (D-609) — a person in this screen: their photo, or their initials. */
 export interface ApprovalPerson {
   readonly initials: string;
   readonly src: string | null;
@@ -105,7 +105,7 @@ export interface ReviewSubjectView {
   readonly coverHeadline?: string | undefined;
   /** "From Omar · 2 hours ago" under the title. */
   readonly fromLabel?: string | undefined;
-  /** PR D (D-608) — who sent it, as a small avatar before that line. */
+  /** PR D (D-609) — who sent it, as a small avatar before that line. */
   readonly requestedBy?: ApprovalPerson | undefined;
   /** The planned time ("Oct 16 · 10:00"), or the words for none. */
   readonly requestedTimeLabel?: string | undefined;

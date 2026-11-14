@@ -103,7 +103,7 @@ export const NOTIFICATION_TEMPLATES = {
    */
   'calendar.unplanned_by_timezone_change': { severity: 'warning' },
   /**
-   * PR D (D-608) — a reminder the person set on one of their own notes is due.
+   * PR D (D-609) — a reminder the person set on one of their own notes is due.
    * Goes to that person only. NO NOTE TEXT IN THE ROW (owner condition 1): the
    * platform role can read notifications and can never read a note, so the row
    * carries only the link to the note; the dashboard shows the note's title
@@ -132,7 +132,7 @@ export interface NotificationPayload {
   brandName?: string;
   actorName?: string;
   /**
-   * PR D (D-608) — WHO DID IT, as an id, so the reader's feed can show that
+   * PR D (D-609) — WHO DID IT, as an id, so the reader's feed can show that
    * person's photo. An id is not content: the feed resolves it to a name and
    * a picture only for a member of the reader's own workspace.
    */

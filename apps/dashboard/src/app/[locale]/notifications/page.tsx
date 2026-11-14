@@ -83,7 +83,7 @@ export default async function NotificationsPage({
       ? allItems.filter((item) => item.templateKey.startsWith('approval.'))
       : allItems;
 
-  // PR D (D-608): a note reminder's title, read in the reader's own context.
+  // PR D (D-609): a note reminder's title, read in the reader's own context.
   const reminderNoteIds = items
     .filter((item) => item.templateKey === 'note.reminder')
     .map((item) => noteIdFromLink(item.linkPath))
@@ -100,7 +100,7 @@ export default async function NotificationsPage({
         : null;
 
   /*
-   * PR D (D-608) — WHO ACTED, as their photo or initials: the actor id the
+   * PR D (D-609) — WHO ACTED, as their photo or initials: the actor id the
    * notification carries, resolved only for a member of this workspace.
    */
   const actorOf = (item: (typeof items)[number]): string | null =>

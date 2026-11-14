@@ -5,7 +5,7 @@ import { requireWorkspace } from '../../../server/customer-context';
 import { setOwnAvatar } from '../../../server/pictures';
 
 /**
- * PR D (D-608) — saving and removing a person's own photo. The person and the
+ * PR D (D-609) — saving and removing a person's own photo. The person and the
  * workspace come from the session; the form supplies only the file. Audited
  * (`user.avatar.*`) without the bytes. The business logo is a field of the
  * General settings form (`saveSettingsAction`).

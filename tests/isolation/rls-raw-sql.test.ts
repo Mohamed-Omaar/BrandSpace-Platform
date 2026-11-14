@@ -110,7 +110,7 @@ describe('RLS is enabled AND forced on every protected table', () => {
       ...NULLABLE_TENANT_MODELS,
       ...IDENTITY_MODELS_WITH_POLICY,
     ]
-      // PR D (D-608): these carry the stricter `personal_owner` policy instead,
+      // PR D (D-609): these carry the stricter `personal_owner` policy instead,
       // asserted in the next test.
       .filter((model) => !(PERSONAL_OWNER_MODELS as readonly string[]).includes(model))
       .map((model) => MODEL_TABLE_NAMES[model])

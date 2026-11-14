@@ -80,7 +80,7 @@ export default async function ApprovalSettingsPage({
   const team = await inWorkspace(workspace.workspaceId, async ({ memberships }) =>
     memberships.list(workspace.workspaceId),
   );
-  // PR D (D-608) — each person's photo, when they have one.
+  // PR D (D-609) — each person's photo, when they have one.
   const teamAvatars = await pictureVersions(
     workspace.workspaceId,
     team.map((member) => member.userId),

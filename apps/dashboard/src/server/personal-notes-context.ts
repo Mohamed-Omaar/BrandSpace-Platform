@@ -4,7 +4,7 @@ import { PersonalNotesService } from '@brandspace/collaboration';
 import { requireWorkspace, type WorkspaceSession } from './customer-context';
 
 /**
- * PR D (D-608) — THE ONLY DOOR TO A PERSON'S PRIVATE NOTES IN THE DASHBOARD.
+ * PR D (D-609) — THE ONLY DOOR TO A PERSON'S PRIVATE NOTES IN THE DASHBOARD.
  *
  * Owner condition 4: `app.user_id` is set ONLY here, and only from the
  * SIGNED-IN SESSION — `requireWorkspace` resolves the customer from the

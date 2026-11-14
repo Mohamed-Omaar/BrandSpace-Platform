@@ -1814,7 +1814,7 @@ export const cssRootTokens: readonly CssRootEntry[] = [
    */
   { name: '--bs-fab-surface', value: 'var(--bs-lit-ffffff-a62)' },
   /*
-   * PR D (D-608) — the line between My notes' editor and its reminder: the
+   * PR D (D-609) — the line between My notes' editor and its reminder: the
    * same 1px #f0f0f2 rule the team notes composer draws (`.bsp-nts-compose`),
    * as one value, so dark mode reaches it through `--bs-lit-f0f0f2`.
    */

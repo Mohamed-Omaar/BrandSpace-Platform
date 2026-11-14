@@ -75,7 +75,7 @@ export interface LibraryCard {
   readonly updatedAt: string;
   readonly openNotes: number;
   readonly ownerName: string | null;
-  /** PR D (D-608) — the author's photo (or initials), shown instead of the name. */
+  /** PR D (D-609) — the author's photo (or initials), shown instead of the name. */
   readonly owner?: {
     readonly initials: string;
     readonly src: string | null;
@@ -388,7 +388,7 @@ export function ContentLibrary({
       <time dateTime={card.updatedAt}>{card.updatedLabel}</time>
       {card.ownerName ? (
         /*
-         * PR D (D-608) — "created by" as the author's avatar: the name is its
+         * PR D (D-609) — "created by" as the author's avatar: the name is its
          * tooltip and what a screen reader hears ("Created by Sara").
          */
         card.owner ? (

@@ -99,7 +99,7 @@ export default async function DataControlsPage({
       ? [{ key: 'brandSources', available: true, href: '/brand-brain' }]
       : []),
     { key: 'workspaceExport', available: false },
-    // PR D (D-608, owner condition 2): every member's own notes, theirs alone.
+    // PR D (D-609, owner condition 2): every member's own notes, theirs alone.
     { key: 'myNotes', available: true, href: '/notes/export', download: true },
   ];
 
