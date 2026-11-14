@@ -110,6 +110,7 @@ export default async function ApprovalsPage({
   const {
     policies,
     queue,
+    soloRows,
     mine,
     memberNames,
     review,
@@ -247,9 +248,30 @@ export default async function ApprovalsPage({
         })
       : null;
 
+    /*
+     * PR D — THE SOLO EXCEPTION, asked the way `decide()` asks it: for each
+     * review this person opened or wrote, whether anybody else could decide it.
+     * Where nobody can (a solo business), the row offers the decision.
+     */
+    const soloRows = new Set<string>();
+    for (const row of pending) {
+      const self =
+        row.requestedByUserId === customer.userId || row.item?.createdByUserId === customer.userId;
+      if (
+        self &&
+        (await service.isSoloForBrand({
+          brandId: row.brandId,
+          barredUserIds: [row.requestedByUserId, row.item?.createdByUserId ?? null],
+        }))
+      ) {
+        soloRows.add(row.id);
+      }
+    }
+
     return {
       policies: resolved,
       queue: pending,
+      soloRows,
       mine: own,
       review: subject,
       firstAsset,
@@ -319,7 +341,9 @@ export default async function ApprovalsPage({
     // D-122, mirrored from the service: the requester AND the author are barred.
     const isSelf =
       row.requestedByUserId === customer.userId || row.item?.createdByUserId === customer.userId;
-    const blocked = mayApprove && isSelf && policy?.allowSelfApproval === false;
+    // PR D: unless nobody else could decide it (a solo business).
+    const blocked =
+      mayApprove && isSelf && policy?.allowSelfApproval === false && !soloRows.has(row.id);
     /*
      * Q10 (D-325) — WHO IT IS ASSIGNED TO, SAID; not who alone may decide it.
      * Anyone who may approve for the brand is offered the decision.

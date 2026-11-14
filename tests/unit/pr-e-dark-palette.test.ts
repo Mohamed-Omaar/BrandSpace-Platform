@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   contrastOf,
+  formatColour,
   luminance,
   parseColour,
   presetLook,
@@ -176,6 +177,25 @@ describe('PR E · the dark palette', () => {
 
   it('the words on the abstract artwork keep their ink: the artwork does not change', () => {
     expect(darkOf({}).get('--bs-media-ink-soft')).toBe('#2a1a5e');
+  });
+
+  it('PR D: the floating Copilot button is nearly opaque in dark, so a picture under it cannot wash out its label', () => {
+    const dark = darkOf({});
+    const fab = parseColour(dark.get('--bs-fab-surface')!)!;
+    expect(fab.a).toBeGreaterThanOrEqual(0.9);
+    const surface = parseColour(dark.get('--bs-surface')!)!;
+    expect(Math.abs(luminance(fab) - luminance(surface))).toBeLessThan(0.002);
+    // The label over the worst case — a white picture under the 6% that shows through.
+    const over = (a: number) => fab.r * fab.a + 1 * (1 - fab.a) * a;
+    const painted = {
+      r: over(1),
+      g: fab.g * fab.a + (1 - fab.a),
+      b: fab.b * fab.a + (1 - fab.a),
+      a: 1,
+    };
+    expect(
+      contrastOf(dark.get('--bs-text-primary')!, formatColour(painted)),
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   it('the ambient light and the hero blobs are softened in dark only', () => {

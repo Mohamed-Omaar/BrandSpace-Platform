@@ -687,6 +687,7 @@
   --bs-lit-ffffff-a1: rgba(255, 255, 255, 0.1);
   --bs-lit-ffffff-a35: rgba(255, 255, 255, 0.35);
   --bs-lit-ffffff-a62: rgba(255, 255, 255, 0.62);
+  --bs-fab-surface: var(--bs-lit-ffffff-a62);
   --bs-lit-5223b8: #5223b8;
   --bs-nav-pill-quiet: #8a8a92;
   --bs-ambient-strength: 1;

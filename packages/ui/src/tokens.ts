@@ -1807,6 +1807,12 @@ export const cssRootTokens: readonly CssRootEntry[] = [
   { name: '--bs-lit-ffffff-a1', value: 'rgba(255, 255, 255, 0.1)' },
   { name: '--bs-lit-ffffff-a35', value: 'rgba(255, 255, 255, 0.35)' },
   { name: '--bs-lit-ffffff-a62', value: 'rgba(255, 255, 255, 0.62)' },
+  /*
+   * PR D — the floating Copilot button's glass (`.fab`, white at .62 in light,
+   * unchanged). The dark palette makes it nearly opaque: at .62 a pale picture
+   * under the button showed through and its label fell to 4.07:1.
+   */
+  { name: '--bs-fab-surface', value: 'var(--bs-lit-ffffff-a62)' },
   // PR E: the profile card's avatar gradient ends here (`#5223b8`), so dark mode reaches it.
   { name: '--bs-lit-5223b8', value: '#5223b8' },
   // PR E: the quiet count on the current rail item, which is an ink pill in
