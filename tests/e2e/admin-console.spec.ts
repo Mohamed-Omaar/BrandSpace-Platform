@@ -298,6 +298,52 @@ test.describe('the configuration lifecycle works end to end', () => {
     await expect(page.getByTestId('config-error')).toContainText(params.get('ref')!);
   });
 
+  test('PR F: validation lists every issue with its field, on the row and in the editor, en and ar', async ({
+    page,
+  }) => {
+    await signIn(page, 'en');
+    await page.goto(`${ADMIN_BASE_URL}/en/console/configuration?domain=usage-limits`);
+    await page.getByTestId('draft-reason').fill('PR F: every validation issue is shown');
+    await page.getByTestId('create-draft').click();
+    await expect(page.getByTestId('config-ok')).toContainText('Draft created');
+    const label = (await page.locator('label[for="payload"]').textContent())!;
+    const versionNumber = /v(\d+)/.exec(label)![1]!;
+
+    // A payload the schema refuses: the field is named, and so is the reason.
+    await page.getByTestId('draft-payload').fill(JSON.stringify({ limits: 'not-an-object' }));
+    await page.getByTestId('save-draft').click();
+    await expect(page.getByTestId('config-ok')).toContainText('Draft saved');
+    await page.getByTestId(`validate-${versionNumber}`).click();
+
+    // On the Versions row: the count, then each issue when opened.
+    const row = page.getByTestId(`validation-${versionNumber}`);
+    await expect(row.locator('summary')).toContainText(/\d+ errors?/);
+    await row.locator('summary').click();
+    const issues = row.getByTestId(`validation-${versionNumber}-issue`);
+    await expect(issues.first()).toBeVisible();
+    await expect(issues.first()).toHaveAttribute('data-severity', 'error');
+    await expect(issues.first()).toContainText('Error');
+    await expect(issues.first().locator('code')).toContainText('limits');
+    // The validator's own message, not just a count.
+    const message = (await issues.first().textContent())!.split('—')[1]?.trim() ?? '';
+    expect(message.length).toBeGreaterThan(3);
+
+    // In the editor: the same report, already open, above the JSON.
+    const editor = page.getByTestId('draft-validation');
+    await expect(editor).toHaveAttribute('open', '');
+    await expect(editor.getByTestId('draft-validation-issue').first()).toContainText(message);
+
+    // In Arabic: the words around it are Arabic; the path and the message read
+    // left to right, as the JSON does.
+    await page.goto(`${ADMIN_BASE_URL}/ar/console/configuration?domain=usage-limits`);
+    const arRow = page.getByTestId(`validation-${versionNumber}`);
+    await expect(arRow.locator('summary')).toContainText(/خطأ|أخطاء/);
+    await arRow.locator('summary').click();
+    const arIssue = arRow.getByTestId(`validation-${versionNumber}-issue`).first();
+    await expect(arIssue).toContainText('خطأ');
+    await expect(arIssue.locator('[dir="ltr"]')).toContainText(message);
+  });
+
   test('a failed action puts no internal detail in the address bar', async ({ page }) => {
     await signIn(page, 'en');
     // Its own domain and its own draft: this assertion is about the error

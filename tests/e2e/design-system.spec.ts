@@ -51,6 +51,22 @@ async function signInAndEnterWorkspace(page: Page, locale = 'en'): Promise<void>
   await page.waitForURL(new RegExp(`/${locale}/overview$`));
 }
 
+/** PR F — the phone drawer is open and its entrance animations have ended. */
+async function drawerOpened(page: Page): Promise<void> {
+  const drawer = page.getByTestId('navigation-drawer');
+  await expect(drawer).toBeVisible();
+  await expect
+    .poll(() =>
+      drawer.evaluate(
+        (element) =>
+          element
+            .getAnimations({ subtree: true })
+            .filter((animation) => animation.playState === 'running').length,
+      ),
+    )
+    .toBe(0);
+}
+
 /** Fail on serious and critical axe violations only (F-04a). */
 async function expectNoBlockingA11yViolations(page: Page, label: string): Promise<void> {
   const results = await new AxeBuilder({ page })
@@ -765,12 +781,32 @@ test.describe('accessibility', () => {
     await expectNoBlockingA11yViolations(page, 'overview (collapsed sidebar)');
   });
 
-  test('the open mobile drawer has no serious or critical violations', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await signInAndEnterWorkspace(page);
-    await page.click('[data-testid="open-navigation"]');
-    await expectNoBlockingA11yViolations(page, 'mobile drawer');
-  });
+  /*
+   * PR F — THE DRAWER IS MEASURED ONCE IT HAS OPENED. Its sections fade in on
+   * open (`.bsp-sb-top`, `.bsp-sbnav`, `.bsp-sb-foot`), and axe run in that
+   * first moment read the account mark's initials half faded over its purple
+   * (#eadffe on #9159fc, 3.27:1): the one colour-contrast finding that failed
+   * this test once on #126 and passed on the retry. Reproduced locally on 3 of
+   * 12 runs measured at the click; none once the entrance has ended, light or
+   * dark. A picture in motion is not what a reader reads, so the test waits
+   * for the drawer's own animations to finish — and the same open drawer is
+   * now also checked in dark.
+   */
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`the open mobile drawer has no serious or critical violations${scheme === 'dark' ? ' (dark)' : ''}`, async ({
+      page,
+      context,
+    }) => {
+      await context.addCookies([
+        { name: 'bs_color_scheme', value: scheme, url: DASHBOARD_BASE_URL },
+      ]);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await signInAndEnterWorkspace(page);
+      await page.click('[data-testid="open-navigation"]');
+      await drawerOpened(page);
+      await expectNoBlockingA11yViolations(page, `mobile drawer (${scheme})`);
+    });
+  }
 
   test('every focused element keeps a visible indicator', async ({ page }) => {
     await signInAndEnterWorkspace(page);
