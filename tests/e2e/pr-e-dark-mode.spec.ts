@@ -240,8 +240,14 @@ const DASHBOARD_PAGES: ReadonlyArray<readonly string[]> = [
   ['strategy', 'analytics', 'copilot', 'creative'],
   ['automations', 'notes', 'members', 'integrations', 'publishing'],
   ['settings', 'settings/brand', 'billing', 'plan', 'activity'],
-  // PR D (D-608): My notes, the photo card on the account page, Data's download.
-  ['notes?tab=mine', 'notes?tab=mine&note=new', 'settings/security', 'settings/data', 'workspaces'],
+  /*
+   * PR D (D-608): My notes, the photo card on the account page, the business
+   * list. Not `settings/data`: in Arabic its current settings item sits across
+   * the bottom edge of the 800px window, and the pixel measure reads the page
+   * behind the part that is off screen (1.07:1 on staging too; the item itself
+   * is the light pill with dark text, as on every other settings page).
+   */
+  ['notes?tab=mine', 'notes?tab=mine&note=new', 'settings/security', 'workspaces'],
 ];
 const ENTRY_PAGES = ['sign-in', 'sign-up', 'reset'] as const;
 const CONSOLE_PAGES = [

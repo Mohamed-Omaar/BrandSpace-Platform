@@ -10054,6 +10054,9 @@ img.bsp-pf-art {
   gap: var(--bsp-px-6);
 }
 .bsp-pn-editor textarea.bs-control.bsp-pn-body {
+  /* The page's own font: a textarea otherwise takes the browser's monospace,
+     which spaces Arabic letters apart. */
+  font-family: inherit;
   min-block-size: var(--bsp-px-70);
   resize: vertical;
   font-size: var(--bsp-fs-14);
