@@ -7,7 +7,7 @@ import { withPlatformPrisma } from './platform-prisma';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
 
 /**
- * PR D (D-607) — MY NOTES, AVATARS AND THE WORKSPACE LOGO, in a browser.
+ * PR D (D-608) — MY NOTES, AVATARS AND THE WORKSPACE LOGO, in a browser.
  *
  *   1. My notes: write, search, pin, a reminder in the person's own zone,
  *      snooze, done, delete — in English and Arabic — and a teammate never

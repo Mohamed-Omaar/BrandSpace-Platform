@@ -7,7 +7,7 @@ import { isAppError, systemClock } from '@brandspace/shared';
 import { inPersonalNotes } from '../../../server/personal-notes-context';
 
 /**
- * PR D (D-607) — THE "MY NOTES" ACTIONS.
+ * PR D (D-608) — THE "MY NOTES" ACTIONS.
  *
  * Every one goes through `inPersonalNotes`, which takes the workspace AND the
  * person from the signed-in session (owner condition 4). The form supplies

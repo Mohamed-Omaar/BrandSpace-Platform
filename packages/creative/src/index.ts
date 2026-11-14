@@ -13,9 +13,13 @@
  * different feature could live there.
  */
 export {
+  CREATIVE_BRAND_BRAIN_AREAS,
+  CREATIVE_DO_DONT_AREAS,
   CREATIVE_KNOWLEDGE_AREAS,
+  CREATIVE_VOICE_AREAS,
   CREATIVE_KNOWLEDGE_LINES,
   CreativeStudioService,
+  brandImagePrompt,
   brandTypography,
   creativeBriefRequired,
   creativeGenerationFailed,
@@ -24,6 +28,7 @@ export {
 } from './studio';
 export type {
   BrandIdentityInput,
+  CreativeComposition,
   CreativeRun,
   CreativeStudioOptions,
   GenerateCreativeInput,
@@ -37,7 +42,9 @@ export {
   CREATIVE_JOB_MAX_ATTEMPTS,
   CREATIVE_JOB_QUEUED_STALE_MS,
   CREATIVE_JOB_RUNNING_STALE_MS,
+  CREATIVE_HEADLINE_MAX,
   CreativeGenerationJobs,
+  creativeHeadline,
   failureReasonOf,
   findStaleCreativeJobs,
   runCreativeGenerationJob,
@@ -54,3 +61,11 @@ export type {
   EnqueueCreativeJobInput,
   StaleCreativeJob,
 } from './generation-jobs';
+export {
+  DEFAULT_HEADLINE_FONT_KEY,
+  LOGO_MIN_CONTRAST,
+  composeImage,
+  headlineFontFor,
+  headlineLanguage,
+} from './composite';
+export type { ComposeInput, ComposeResult } from './composite';

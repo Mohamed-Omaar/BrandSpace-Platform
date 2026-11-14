@@ -6834,6 +6834,10 @@ model CreativeGenerationJob {
   brief               String
   formatKey           String
   quality             String?
+  /// PR B — the brand's real logo is put on the image (owner default: on).
+  addLogo             Boolean   @default(true)
+  /// PR B — an optional headline drawn on the image (1–80 characters, CHECK).
+  headline            String?
   contentVariantId    String?   @db.Uuid
   /// `QUEUED` | `RUNNING` | `SUCCEEDED` | `FAILED` (CHECK-constrained).
   status              String    @default("QUEUED")

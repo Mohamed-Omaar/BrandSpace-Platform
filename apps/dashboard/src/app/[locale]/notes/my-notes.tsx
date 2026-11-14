@@ -17,7 +17,7 @@ import {
 } from './personal-actions';
 
 /**
- * PR D (D-607) — MY NOTES: the person's own notes in this workspace.
+ * PR D (D-608) — MY NOTES: the person's own notes in this workspace.
  *
  * PRIVATE TO THEM. Everything is read through `inPersonalNotes`, which takes
  * the workspace and the person from the session; the database refuses every

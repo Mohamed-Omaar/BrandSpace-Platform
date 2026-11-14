@@ -63,7 +63,7 @@ export async function withWorkspace<T>(
 }
 
 /**
- * PR D (D-607) — THE WORKSPACE AND THE PERSON, for a person's private rows.
+ * PR D (D-608) — THE WORKSPACE AND THE PERSON, for a person's private rows.
  *
  * `personal_note` and `personal_note_reminder` are readable only when BOTH
  * `app.workspace_id` and `app.user_id` match the row. This sets the two, in

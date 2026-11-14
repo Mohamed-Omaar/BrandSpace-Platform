@@ -1,4 +1,4 @@
--- PR D (D-607) — "Email me my note reminders": one person's own switch.
+-- PR D (D-608) — "Email me my note reminders": one person's own switch.
 -- AMENDMENT TO THE PR D SQL, SENT FOR APPROVAL SEPARATELY; not applied anywhere.
 --
 -- The switch is one `notification_preference` row under its own category,

@@ -2247,6 +2247,9 @@ the credits charged, `attachedAt` and a `failureReason` key.
 - Partial index on `(status, createdAt)` for unfinished jobs, for the recovery sweep; it is in the
   migration and not in the Prisma schema, which cannot express it.
 - CHECKs: a finished job has `completedAt`; only FAILED has a reason; only SUCCEEDED is attached.
+- PR B (D-607): `addLogo` (boolean, default true: the brand's real logo is put on the image) and
+  `headline` (text, CHECK 1–80 characters, nullable): what the person chose to put on the made image, so
+  any run uses exactly that. The headline is customer content and is purged with the row.
 - THE IMAGE IS CHECKED BEFORE THE JOB SUCCEEDS (PR A, the #122 race, owner 2026-11-11). A RUNNING
   job records its `assetId` (and the AI request and charge) as soon as the image is stored, and stays
   RUNNING until the asset is READY + CLEAN; only then is it SUCCEEDED and attached, the attach

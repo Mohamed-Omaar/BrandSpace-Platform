@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./catalogue": "./src/catalogue.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -16,7 +17,9 @@
     "@brandspace/ai-gateway": "workspace:*",
     "@brandspace/assets": "workspace:*",
     "@brandspace/database": "workspace:*",
-    "@brandspace/shared": "workspace:*"
+    "@brandspace/shared": "workspace:*",
+    "@napi-rs/canvas": "1.0.13",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "typescript": "5.9.3"

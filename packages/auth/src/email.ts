@@ -82,7 +82,7 @@ export const EMAIL_TEMPLATE_KEYS = [
    */
   'platform.ai_reservation_overrun',
   /*
-   * PR D (D-607) — a reminder on one of the person's own notes is due, sent
+   * PR D (D-608) — a reminder on one of the person's own notes is due, sent
    * only to that person and only when they switched "Email me my note
    * reminders" on. NO NOTE TEXT: neither the title nor the body leaves the
    * product in an email; the link opens the note, behind sign-in.

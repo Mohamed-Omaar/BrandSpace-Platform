@@ -90,9 +90,10 @@ describe('M4 — the asks-first expiry index', () => {
       '20261104090000_creative_generation_job',
       // PR A (D-605): the Copilot's "worked on" and images on a message.
       '20261111090000_copilot_message_activity',
-      // PR D: personal notes and reminders, avatars, the workspace logo.
-      '20261111120000_personal_notes_avatars_workspace_logo',
-      '20261111120100_note_reminder_email_preference',
+      '20261114090000_creative_job_composition',
+      // PR D (D-608): personal notes and reminders, avatars, the workspace logo.
+      '20261114120000_personal_notes_avatars_workspace_logo',
+      '20261114120100_note_reminder_email_preference',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261013090000_brand_scope_not_null');
   });

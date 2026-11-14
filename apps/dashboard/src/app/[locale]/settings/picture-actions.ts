@@ -5,7 +5,7 @@ import { requireWorkspace, requireWorkspaceAction } from '../../../server/custom
 import { setOwnAvatar, setWorkspaceLogo } from '../../../server/pictures';
 
 /**
- * PR D (D-607) — saving and removing a picture. The person and the workspace
+ * PR D (D-608) — saving and removing a picture. The person and the workspace
  * come from the session; the form supplies only the file. The workspace logo
  * needs `workspace.update`, as the rest of the business settings do. Each
  * change is audited (`user.avatar.*`, `workspace.logo.*`) without the bytes.

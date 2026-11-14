@@ -10029,7 +10029,7 @@ img.bsp-pf-art {
   }
 }
 
-/* PR D (D-607) — MY NOTES, a design-system extension of the panes above
+/* PR D (D-608) — MY NOTES, a design-system extension of the panes above
    (CLAUDE.md §4.2; contract §6). The tabs are the shared `.seg` of links; the
    list and pane are `.bsp-nts`. Only what the team pane has no slot for: the
    search row at the head of the list, the editor's stacked fields, the
@@ -10069,7 +10069,7 @@ img.bsp-pf-art {
   color: var(--bs-danger);
 }
 
-/* PR D (D-607) — A PICTURE IN A MARK: a person's avatar or a workspace's logo
+/* PR D (D-608) — A PICTURE IN A MARK: a person's avatar or a workspace's logo
    fills the mark the letters sit in (`object-fit: cover` on the square the
    browser cropped). A person is a circle; a logo keeps the mark's corners. The
    letters stay the fallback, so nothing moves when there is no picture. */

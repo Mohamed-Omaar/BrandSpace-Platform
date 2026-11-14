@@ -20,7 +20,7 @@ import { PrototypeIcon, type PrototypeGlyph } from './prototype-icons';
 
 /** The card's face: `.bcard` — the initial tile, the name, the caption, the chevron. */
 /**
- * The card's face. PR D (D-607): with `pictureSrc` (the workspace's logo) the
+ * The card's face. PR D (D-608): with `pictureSrc` (the workspace's logo) the
  * mark shows the picture instead of the letter; without it, the letter, as
  * the prototype draws it.
  */
@@ -203,7 +203,7 @@ export interface PrototypeBusinessOption {
   /** "Role · Plan". */
   readonly caption: string;
   readonly current?: boolean | undefined;
-  /** PR D (D-607): the business's logo, when it has one. */
+  /** PR D (D-608): the business's logo, when it has one. */
   readonly logoSrc?: string | null | undefined;
 }
 
@@ -403,7 +403,7 @@ export function PrototypeUserCard({
   readonly email?: string | undefined;
   readonly role: string;
   readonly initials: string;
-  /** PR D (D-607): the person's own avatar, in a circle, in place of the initials. */
+  /** PR D (D-608): the person's own avatar, in a circle, in place of the initials. */
   readonly avatarSrc?: string | null | undefined;
   readonly nameTestId?: string;
   readonly children: ReactNode;

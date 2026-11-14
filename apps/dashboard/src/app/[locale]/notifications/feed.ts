@@ -42,7 +42,7 @@ export interface FeedItem {
   readonly when: string;
   readonly at: string;
   readonly unread: boolean;
-  /** PR D (D-607) — who did it, as their photo or their initials, when known. */
+  /** PR D (D-608) — who did it, as their photo or their initials, when known. */
   readonly person: { readonly initials: string; readonly src: string | null } | null;
 }
 
@@ -82,7 +82,7 @@ export async function loadNotificationFeed(
       ...mentionedBy.flatMap((entry) =>
         entry.lastMention ? [entry.lastMention.authorUserId] : [],
       ),
-      // PR D (D-607): who acted on a notification, to show their photo.
+      // PR D (D-608): who acted on a notification, to show their photo.
       ...notifications.flatMap((item) => {
         const actor = actorOf(item.payload as Record<string, unknown>);
         return actor ? [actor] : [];
@@ -120,7 +120,7 @@ export async function loadNotificationFeed(
   }));
 
   /*
-   * PR D (D-607) — A NOTE REMINDER NAMES ITS NOTE, FOR ITS OWNER ONLY. The row
+   * PR D (D-608) — A NOTE REMINDER NAMES ITS NOTE, FOR ITS OWNER ONLY. The row
    * holds no note text (owner condition 1); the title is read here, in the
    * reader's own workspace-and-person context, so it can only ever be theirs.
    */

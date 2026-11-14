@@ -29,6 +29,8 @@ export function imageJobs(db: TenantScopedClient, workspaceId: string): ImageJob
         brief: input.brief,
         formatKey: input.formatKey,
         quality: input.quality,
+        ...(input.addLogo !== undefined ? { addLogo: input.addLogo } : {}),
+        ...(input.headline ? { headline: input.headline } : {}),
         contentVariantId: variant.id,
       });
       return { jobId: queued.job.id, contentVariantId: variant.id };

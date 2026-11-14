@@ -30,7 +30,7 @@ export type {
   NoteThreadStatus,
   NoteThreadSummary,
 } from './notes';
-// PR D (D-607) — a person's own notes and reminders, private to them.
+// PR D (D-608) — a person's own notes and reminders, private to them.
 export {
   PersonalNotesService,
   PERSONAL_NOTE_BODY_MAX,

@@ -100,6 +100,9 @@ export interface ImageJobPort {
     readonly brief: string;
     readonly formatKey: string;
     readonly quality: 'low' | 'medium' | 'high';
+    /** PR B — the brand's logo on the image (default yes) and an optional headline. */
+    readonly addLogo?: boolean;
+    readonly headline?: string | null;
     readonly idempotencyKey: string;
     readonly actor: LiveAuthorization;
   }): Promise<{ readonly jobId: string; readonly contentVariantId: string }>;
@@ -574,6 +577,8 @@ const postGenerateImage: ToolExecutor = async (context, args) => {
     brief: String(args['brief']),
     formatKey: String(args['formatKey'] ?? 'square'),
     quality: (args['quality'] as 'low' | 'medium' | 'high' | undefined) ?? 'medium',
+    ...(typeof args['addLogo'] === 'boolean' ? { addLogo: args['addLogo'] } : {}),
+    ...(typeof args['headline'] === 'string' ? { headline: args['headline'] } : {}),
     idempotencyKey: context.idempotencyKey,
     actor: context.authorization,
   });

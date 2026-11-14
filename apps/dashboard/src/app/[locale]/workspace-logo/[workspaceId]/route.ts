@@ -3,7 +3,7 @@ import { isMemberOf } from '../../../../server/pictures';
 import { notFound, pictureResponse } from '../../../../server/picture-response';
 
 /**
- * PR D (D-607) — A WORKSPACE'S LOGO, to its members only (the session's own
+ * PR D (D-608) — A WORKSPACE'S LOGO, to its members only (the session's own
  * memberships, as the switcher lists them). Anyone else: the 404 a workspace
  * with no logo gets.
  */

@@ -3,7 +3,7 @@ import { pictureContentType } from '@brandspace/assets';
 import { objectStore } from './assets-context';
 
 /**
- * PR D (D-607) — one stored picture as a response, or the 404 a missing one
+ * PR D (D-608) — one stored picture as a response, or the 404 a missing one
  * gets. The bytes were checked and scanned when they were stored; the type is
  * the key's own (png, jpeg or webp — never anything a browser would run).
  * Private to the browser that asked: the link changes with every new picture

@@ -14,7 +14,7 @@ import {
 } from '@brandspace/assets';
 
 /**
- * PR D (D-607) — AVATARS AND THE WORKSPACE LOGO: the image rules of the asset
+ * PR D (D-608) — AVATARS AND THE WORKSPACE LOGO: the image rules of the asset
  * library and its scanner, and object keys the database's CHECK accepts.
  */
 
@@ -99,7 +99,7 @@ describe('PR D · a picture', () => {
 
   it('builds keys the migration’s CHECK constraints accept, and reads their type back', () => {
     const sql = readFileSync(
-      'packages/database/prisma/migrations/20261111120000_personal_notes_avatars_workspace_logo/migration.sql',
+      'packages/database/prisma/migrations/20261114120000_personal_notes_avatars_workspace_logo/migration.sql',
       'utf8',
     );
     const pattern = (name: string) =>

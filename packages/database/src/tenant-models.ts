@@ -129,7 +129,7 @@ export const STRICT_TENANT_MODELS = [
   'CopilotMessage',
   // PR 1 (D-597) — an image asked for, as a background job.
   'CreativeGenerationJob',
-  // PR D (D-607) — private notes of one person, and their reminders. Tenant AND
+  // PR D (D-608) — private notes of one person, and their reminders. Tenant AND
   // personal: the policy also compares the signed-in person.
   'PersonalNote',
   'PersonalNoteReminder',

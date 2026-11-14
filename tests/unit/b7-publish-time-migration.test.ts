@@ -60,7 +60,7 @@ describe('B1.0 + Option B — when a post goes out', () => {
   });
 
   it('comes directly after PR 6, and directly before PR E (then connectors A and B, then the AI apps migrations)', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-21)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-22)).toEqual([
       '20261015092000_automation_run_execution_due_index',
       NAME,
       '20261020090000_group_b_fields',
@@ -91,9 +91,10 @@ describe('B1.0 + Option B — when a post goes out', () => {
       '20261104090000_creative_generation_job',
       // PR A (D-605): the Copilot's "worked on" and images on a message.
       '20261111090000_copilot_message_activity',
-      // PR D: personal notes and reminders, avatars, the workspace logo.
-      '20261111120000_personal_notes_avatars_workspace_logo',
-      '20261111120100_note_reminder_email_preference',
+      '20261114090000_creative_job_composition',
+      // PR D (D-608): personal notes and reminders, avatars, the workspace logo.
+      '20261114120000_personal_notes_avatars_workspace_logo',
+      '20261114120100_note_reminder_email_preference',
     ]);
   });
 });

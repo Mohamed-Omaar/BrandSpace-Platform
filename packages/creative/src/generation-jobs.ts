@@ -98,6 +98,9 @@ export interface CreativeJobView {
   readonly status: CreativeJobStatus;
   readonly formatKey: string;
   readonly contentVariantId: string | null;
+  /** PR B — whether the brand's logo is put on the image, and the headline. */
+  readonly addLogo: boolean;
+  readonly headline: string | null;
   readonly assetId: string | null;
   readonly attached: boolean;
   readonly failureReason: string | null;
@@ -115,6 +118,26 @@ export interface EnqueueCreativeJobInput {
   readonly formatKey: string;
   readonly quality?: ImageQuality | undefined;
   readonly contentVariantId?: string | undefined;
+  /** PR B — put the brand's real logo on the image. Absent: true (owner default). */
+  readonly addLogo?: boolean | undefined;
+  /** PR B — an optional headline drawn on the image, 1–80 characters. */
+  readonly headline?: string | null | undefined;
+}
+
+/** PR B — the longest headline drawn on an image (a CHECK holds the same). */
+export const CREATIVE_HEADLINE_MAX = 80;
+
+/** PR B — a headline as stored: trimmed, null when empty, refused when too long. */
+export function creativeHeadline(raw: string | null | undefined): string | null {
+  const headline = (raw ?? '').replace(/\s+/g, ' ').trim();
+  if (headline === '') return null;
+  if ([...headline].length > CREATIVE_HEADLINE_MAX) {
+    throw new AppError(
+      'VALIDATION_FAILED',
+      `A headline holds at most ${CREATIVE_HEADLINE_MAX} characters.`,
+    );
+  }
+  return headline;
 }
 
 interface JobRow {
@@ -127,6 +150,8 @@ interface JobRow {
   readonly formatKey: string;
   readonly quality: string | null;
   readonly contentVariantId: string | null;
+  readonly addLogo: boolean;
+  readonly headline: string | null;
   readonly status: string;
   readonly attempts: number;
   readonly assetId: string | null;
@@ -149,6 +174,8 @@ export function viewOf(row: JobRow): CreativeJobView {
     status: row.status as CreativeJobStatus,
     formatKey: row.formatKey,
     contentVariantId: row.contentVariantId,
+    addLogo: row.addLogo,
+    headline: row.headline,
     // The image is the person's only once the job has SUCCEEDED: a RUNNING job
     // waiting for the check, or a FAILED one the check refused, names none.
     assetId: row.status === 'SUCCEEDED' ? row.assetId : null,
@@ -206,6 +233,7 @@ export class CreativeGenerationJobs {
     const brief = input.brief.trim();
     if (brief === '') throw creativeBriefRequired();
     if (!findCreativeFormat(input.formatKey)) throw unknownCreativeFormat();
+    const headline = creativeHeadline(input.headline);
 
     const existing = await this.#db.creativeGenerationJob.findFirst({
       where: { workspaceId: this.#workspaceId, idempotencyKey: input.idempotencyKey },
@@ -251,6 +279,8 @@ export class CreativeGenerationJobs {
         formatKey: input.formatKey,
         quality: input.quality ?? null,
         contentVariantId: input.contentVariantId ?? null,
+        addLogo: input.addLogo ?? true,
+        headline,
         status: 'QUEUED',
       },
     });
@@ -620,6 +650,8 @@ export async function runCreativeGenerationJob(
       formatKey: claimed.formatKey,
       ...(claimed.quality ? { quality: claimed.quality as ImageQuality } : {}),
       identity,
+      // PR B — exactly what the person chose when they asked.
+      composition: { addLogo: claimed.addLogo, headline: claimed.headline },
       // THE JOB'S KEY IS THE STUDIO'S: a second run never charges twice.
       idempotencyKey: claimed.idempotencyKey,
       actorUserId: userId,

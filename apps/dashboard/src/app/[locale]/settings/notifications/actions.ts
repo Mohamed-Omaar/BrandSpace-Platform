@@ -37,7 +37,7 @@ export async function saveNotificationPreferencesAction(formData: FormData): Pro
         db,
         workspaceId: session.workspace.workspaceId,
       }).set(session.customer.userId, next);
-      // PR D (D-607): the person's own email switch for note reminders.
+      // PR D (D-608): the person's own email switch for note reminders.
       await setNoteReminderEmail(
         db,
         session.workspace.workspaceId,

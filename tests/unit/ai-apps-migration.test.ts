@@ -196,7 +196,7 @@ describe('D-566 · the AI apps migration', () => {
   });
 
   it('comes directly after connectors B; only its D-112 fix (D-568) and the D-573 ceiling follow', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-15)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-16)).toEqual([
       '20261022092000_publish_job_handle_lookup_index',
       NAME,
       '20261023091000_ai_app_token_replaced_scoped',
@@ -218,9 +218,10 @@ describe('D-566 · the AI apps migration', () => {
       '20261104090000_creative_generation_job',
       // PR A (D-605): the Copilot's "worked on" and images on a message.
       '20261111090000_copilot_message_activity',
-      // PR D: personal notes and reminders, avatars, the workspace logo.
-      '20261111120000_personal_notes_avatars_workspace_logo',
-      '20261111120100_note_reminder_email_preference',
+      '20261114090000_creative_job_composition',
+      // PR D (D-608): personal notes and reminders, avatars, the workspace logo.
+      '20261114120000_personal_notes_avatars_workspace_logo',
+      '20261114120100_note_reminder_email_preference',
     ]);
   });
 });

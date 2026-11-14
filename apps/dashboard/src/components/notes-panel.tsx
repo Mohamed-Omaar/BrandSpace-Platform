@@ -231,7 +231,7 @@ async function NoteThread({
   );
   const notes = await inNotes(locale, ({ service, actor }) => service.notesIn(threadId, actor));
   const names = new Map(members.map((member) => [member.userId, member.name]));
-  // PR D (D-607) — each author's photo, when they have one.
+  // PR D (D-608) — each author's photo, when they have one.
   const avatars = await memberAvatarVersions(members.map((member) => member.userId));
   const assignee = thread.assignedToUserId ? names.get(thread.assignedToUserId) : null;
   const overdue = thread.dueAt !== null && status === 'OPEN' && thread.dueAt < now;

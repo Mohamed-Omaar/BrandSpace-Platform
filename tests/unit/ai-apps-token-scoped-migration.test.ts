@@ -65,7 +65,7 @@ describe('D-568 · the AI apps token key, scoped to the workspace', () => {
   });
 
   it('comes directly after the AI apps migration, and only the D-573 platform ceiling follows', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-14)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-15)).toEqual([
       '20261023090000_ai_app_connections',
       NAME,
       '20261027100000_ai_platform_spend_ceiling',
@@ -85,9 +85,10 @@ describe('D-568 · the AI apps token key, scoped to the workspace', () => {
       '20261104090000_creative_generation_job',
       // PR A (D-605): the Copilot's "worked on" and images on a message.
       '20261111090000_copilot_message_activity',
-      // PR D: personal notes and reminders, avatars, the workspace logo.
-      '20261111120000_personal_notes_avatars_workspace_logo',
-      '20261111120100_note_reminder_email_preference',
+      '20261114090000_creative_job_composition',
+      // PR D (D-608): personal notes and reminders, avatars, the workspace logo.
+      '20261114120000_personal_notes_avatars_workspace_logo',
+      '20261114120100_note_reminder_email_preference',
     ]);
   });
 });

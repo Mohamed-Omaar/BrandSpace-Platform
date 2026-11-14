@@ -841,7 +841,7 @@ export const messages = {
     'notificationPrefs.colEvent': 'الحدث',
     'notificationPrefs.colInApp': 'داخل التطبيق',
     'notificationPrefs.colEmail': 'البريد',
-    // PR D (D-607): the person's own note reminders, by email (off unless switched on).
+    // PR D (D-608): the person's own note reminders, by email (off unless switched on).
     'notificationPrefs.noteReminders': 'تذكيرات ملاحظاتي',
     'notificationPrefs.noteReminders.hint':
       'رسالة تخبرك بأن لإحدى ملاحظاتك تذكيرًا، مع رابط إليها. لا يُرسَل عنوان الملاحظة ولا نصها بالبريد.',
@@ -1905,6 +1905,10 @@ export const messages = {
     'editor.media.addThis': 'أضف',
     'editor.media.prompt': 'صِف الصورة',
     'editor.media.format': 'المقاس',
+    'editor.media.addLogo': 'أضف شعارنا',
+    'editor.media.addLogoHint': 'يُوضع شعار العلامة الحقيقي في زاوية الصورة.',
+    'editor.media.headline': 'عنوان على الصورة (اختياري)',
+    'editor.media.headlineHint': 'حتى 80 حرفًا، بخط العلامة إن كان متاحًا.',
     'editor.media.estimate': 'التقدير: {credits} رصيد.',
     'editor.media.generate': 'أنشئ الصورة',
     'editor.media.generateHint': 'تُحفظ الصورة في مكتبة الوسائط وتُضاف إلى هذا المنشور بعد فحصها.',
@@ -2904,7 +2908,7 @@ export const messages = {
       'سنخبرك هنا عندما يحتاج محتوى إلى مراجعتك أو يصدر قرار بشأن ما أرسلته.',
     'notifications.view': 'عرض',
     'notifications.template.approval.requested': 'منشور بانتظار مراجعتك',
-    // PR D (D-607): the person's own note reminder; the note's title shows beside it.
+    // PR D (D-608): the person's own note reminder; the note's title shows beside it.
     'notifications.template.note.reminder': 'تذكير بملاحظة',
     'notifications.template.approval.approved': 'تمت الموافقة على منشورك',
     'notifications.template.approval.changes_requested': 'طُلبت تعديلات على منشورك',
@@ -6455,6 +6459,10 @@ export const messages = {
     'editor.media.addThis': 'Add',
     'editor.media.prompt': 'Describe the image',
     'editor.media.format': 'Size',
+    'editor.media.addLogo': 'Add our logo',
+    'editor.media.addLogoHint': "The brand's real logo goes in a corner of the image.",
+    'editor.media.headline': 'Headline on the image (optional)',
+    'editor.media.headlineHint': "Up to 80 characters, in the brand's font when it is available.",
     'editor.media.estimate': 'Estimated: {credits} credits.',
     'editor.media.generate': 'Generate image',
     'editor.media.generateHint':
@@ -9278,7 +9286,7 @@ export function optionalMessage(locale: string, key: string): string | null {
  * reach the address bar, the browser history or an access log.
  */
 const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
-  // PR D (D-607) — avatars and the workspace logo.
+  // PR D (D-608) — avatars and the workspace logo.
   'picture-saved': { en: 'Picture saved.', ar: 'حُفظت الصورة.' },
   'picture-removed': { en: 'Picture removed.', ar: 'أُزيلت الصورة.' },
   'picture-missing': { en: 'Choose a picture first.', ar: 'اختر صورة أولًا.' },

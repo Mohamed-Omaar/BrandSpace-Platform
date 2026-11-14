@@ -157,7 +157,7 @@ export default async function SettingsPage({
           The note has no field, so nothing new is posted.
         */}
         {/*
-          PR D (D-607) — THE BUSINESS LOGO, shown in the business switcher in
+          PR D (D-608) — THE BUSINESS LOGO, shown in the business switcher in
           place of the first letter. Its own form, above the general fields, so
           the save bar stays the column's last row.
         */}

@@ -7,7 +7,7 @@ import { createLogger, internalErrorFields, type Clock } from '@brandspace/share
 const log = createLogger({ context: { component: 'api.note-reminders' } });
 
 /**
- * PR D (D-607) — A NOTE'S REMINDER IS DUE: TELL ITS OWNER, AND ONLY THEM.
+ * PR D (D-608) — A NOTE'S REMINDER IS DUE: TELL ITS OWNER, AND ONLY THEM.
  *
  * WHAT EACH CHANNEL CARRIES (owner condition 1):
  *

@@ -11,7 +11,7 @@ import {
 } from './fixtures';
 
 /**
- * PR D (D-607), owner condition 3 — A PERSON'S NOTES ARE THEIRS ALONE.
+ * PR D (D-608), owner condition 3 — A PERSON'S NOTES ARE THEIRS ALONE.
  *
  * `PersonalNote` (`personal_note`) and `PersonalNoteReminder`
  * (`personal_note_reminder`) are readable only when the workspace AND the

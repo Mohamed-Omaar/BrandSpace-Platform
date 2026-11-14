@@ -4,7 +4,7 @@ import { useRef, useState, type ChangeEvent } from 'react';
 import { SubmitButton } from './pending-submit';
 
 /**
- * PR D (D-607) — CHOOSE A PICTURE, CROPPED SQUARE IN THE BROWSER.
+ * PR D (D-608) — CHOOSE A PICTURE, CROPPED SQUARE IN THE BROWSER.
  *
  * The chosen file is drawn onto a canvas, centred and cut to its largest
  * square (at most 512 px a side), and put back in the same file field, so the

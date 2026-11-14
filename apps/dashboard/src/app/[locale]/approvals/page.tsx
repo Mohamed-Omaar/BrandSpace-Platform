@@ -310,7 +310,7 @@ export default async function ApprovalsPage({
     t('approvals.fromWhen')
       .replace('{name}', nameOf(userId))
       .replace('{when}', relativeTime(at, now, locale));
-  // PR D (D-607) — who sent each one, as their photo or their initials.
+  // PR D (D-608) — who sent each one, as their photo or their initials.
   const requesters = [...memberNames.keys()];
   const requesterAvatars = await pictureVersions(workspace.workspaceId, requesters);
   const personOf = (userId: string) => ({

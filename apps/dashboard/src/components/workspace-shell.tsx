@@ -620,7 +620,7 @@ export async function WorkspaceShell({
         }
       : null;
   /*
-   * PR D (D-607) — the workspace logo in the card and on each business in the
+   * PR D (D-608) — the workspace logo in the card and on each business in the
    * menu, the letter where there is none. Each read in that workspace's own
    * context; the list is the session's own memberships.
    */

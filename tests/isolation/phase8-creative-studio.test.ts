@@ -264,8 +264,10 @@ describe('AC-28.3: a generated image is an ordinary asset in the one library', (
     expect(asset).not.toBeNull();
     expect(asset?.brandId).toBe(brandOne);
     expect(asset?.kind).toBe('IMAGE');
-    expect(asset?.mimeType).toBe('image/png');
-    // REAL BYTES: a PNG of a 1080-square composition is not a placeholder.
+    // PR B: the made image is composed (the brand's logo, a headline) and
+    // stored as JPEG — smaller, and accepted by every network.
+    expect(asset?.mimeType).toBe('image/jpeg');
+    // REAL BYTES: a JPEG of a 1080-square composition is not a placeholder.
     expect(asset?.sizeBytes ?? 0).toBeGreaterThan(100);
     expect(asset?.source).toBe('AI_GENERATED');
     expect(asset?.aiRequestId).toBe(result.aiRequestId);

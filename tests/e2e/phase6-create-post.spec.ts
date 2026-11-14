@@ -636,4 +636,47 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     );
     expect(generated.source).toBe('AI_GENERATED');
   });
+
+  test('PR B: the logo switch and a headline reach the image, which joins the post as JPEG', async ({
+    page,
+  }) => {
+    test.slow();
+    const { itemId, variantId } = await formatDraft('POST', []);
+    await signIn(page);
+    await page.goto(compose('en', `?item=${itemId}`));
+    await page.getByTestId('studio-tab-visual').click();
+
+    await page.getByTestId('content-media-instagram-add').click();
+    await page.getByTestId('media-tab-generate').click();
+    // The brand's logo goes on by default; this person switches it off.
+    const logo = page.getByTestId('media-generate-logo');
+    await expect(logo).toBeChecked();
+    await logo.uncheck();
+    await page.getByTestId('media-generate-headline').fill('خصم هذا الأسبوع');
+    await page.getByTestId('media-generate-prompt').fill(`A calm autumn window, ${randomUUID()}`);
+    await page.getByTestId('media-generate-submit').click();
+
+    const slide = page.getByTestId('content-media-instagram-slide-0');
+    await expect(slide).toBeVisible({ timeout: 120_000 });
+    const assetId = (await slide.getAttribute('data-asset-id')) ?? '';
+    // The job carries exactly what was chosen, and the image is a JPEG.
+    const job = await withPlatformPrisma((prisma) =>
+      prisma.creativeGenerationJob.findFirstOrThrow({
+        where: { contentVariantId: variantId },
+        orderBy: { createdAt: 'desc' },
+        select: { addLogo: true, headline: true, assetId: true, status: true },
+      }),
+    );
+    expect(job).toEqual({
+      addLogo: false,
+      headline: 'خصم هذا الأسبوع',
+      assetId,
+      status: 'SUCCEEDED',
+    });
+    const asset = await withPlatformPrisma((prisma) =>
+      prisma.asset.findUniqueOrThrow({ where: { id: assetId }, select: { mimeType: true } }),
+    );
+    expect(asset.mimeType).toBe('image/jpeg');
+    expect((await storedVariant(variantId)).assetIds).toEqual([assetId]);
+  });
 });

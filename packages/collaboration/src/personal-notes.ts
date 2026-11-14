@@ -2,7 +2,7 @@ import type { TenantScopedClient } from '@brandspace/database';
 import { AppError, systemClock, type Clock } from '@brandspace/shared';
 
 /**
- * PR D (D-607) — A PERSON'S OWN NOTES, AND THEIR REMINDERS.
+ * PR D (D-608) — A PERSON'S OWN NOTES, AND THEIR REMINDERS.
  *
  * PRIVATE TO THE PERSON WHO WROTE THEM, in one workspace. Two layers, as every
  * tenant read in this product has:

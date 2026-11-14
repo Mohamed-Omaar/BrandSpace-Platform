@@ -65,7 +65,7 @@ const CATEGORY_OF: Readonly<Record<NotificationTemplateKey, NotificationCategory
 };
 
 /**
- * PR D (D-607) — "EMAIL ME MY NOTE REMINDERS", one person's own switch, OFF
+ * PR D (D-608) — "EMAIL ME MY NOTE REMINDERS", one person's own switch, OFF
  * unless they turn it on. Stored as one `notification_preference` row under
  * its own category, never one of the in-app categories above (whose absence
  * means ON); absence here means OFF.

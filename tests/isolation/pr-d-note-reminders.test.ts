@@ -14,7 +14,7 @@ import {
 } from './fixtures';
 
 /**
- * PR D (D-607), owner condition 1 — WHAT A DUE REMINDER SENDS, AND TO WHOM.
+ * PR D (D-608), owner condition 1 — WHAT A DUE REMINDER SENDS, AND TO WHOM.
  *
  * The sweep (`sendDueNoteReminders`, run by the API's scheduler) finds due
  * `PersonalNoteReminder` rows with the platform role and:

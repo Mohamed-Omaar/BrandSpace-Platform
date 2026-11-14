@@ -44,7 +44,7 @@ export default async function NotificationSettingsPage({
         db,
         workspaceId: workspace.workspaceId,
       }).forUser(customer.userId),
-      // PR D (D-607): "Email me my note reminders", off unless switched on.
+      // PR D (D-608): "Email me my note reminders", off unless switched on.
       reminderEmail: await noteReminderEmailOn(db, workspace.workspaceId, customer.userId),
     }),
   );
@@ -122,7 +122,7 @@ export default async function NotificationSettingsPage({
             ))}
           </section>
           {/*
-            PR D (D-607) — THE ONE EMAIL SWITCH: the person's own note
+            PR D (D-608) — THE ONE EMAIL SWITCH: the person's own note
             reminders, by email as well as in the bell. Off unless switched on.
             The email says only that a note has a reminder and links to it;
             neither the note's title nor its text is in it. The same row as
