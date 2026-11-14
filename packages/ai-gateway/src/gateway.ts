@@ -52,6 +52,7 @@ import {
 } from './pricing';
 import {
   NO_CAPABILITY_ROUTING,
+  reasonsWith,
   resolveRoute,
   type CapabilityRouting,
   type RegisteredModel,
@@ -1271,7 +1272,16 @@ export class AiGateway {
             modelKey: model.key,
             prompt: input.prompt,
             maxOutputTokens: route.parameters.maxOutputTokens,
-            temperature: route.parameters.temperature,
+            // NO TEMPERATURE FOR A REQUEST THAT REASONS (owner, 2026-11-12):
+            // the provider refuses it (HTTP 400, never retried or fallen back
+            // from), which failed every strategy and monthly plan on a
+            // reasoning model.
+            ...(reasonsWith(model, route.parameters)
+              ? {}
+              : { temperature: route.parameters.temperature }),
+            ...(route.parameters.reasoningEffort
+              ? { reasoningEffort: route.parameters.reasoningEffort }
+              : {}),
             ...(input.untrustedContext ? { untrustedContext: input.untrustedContext } : {}),
             // The task the ROUTE resolved, so an adapter can vary by it — a
             // response-format hint, a system prompt, a JSON mode. It comes from

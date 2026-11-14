@@ -167,6 +167,20 @@ const aiCapabilityKey = z.enum([
   'MODERATION',
 ]);
 
+/**
+ * A reasoning effort, as the provider names it (owner, 2026-11-12). `none`
+ * means the model does not reason, and only then does it take a temperature.
+ */
+export const aiReasoningEffort = z.enum([
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]);
+
 const aiModelsSchema = z.object({
   models: z
     .array(
@@ -249,6 +263,14 @@ const aiModelsSchema = z.object({
         supportsAudioOutput: z.boolean().default(false),
         supportsEmbeddings: z.boolean().default(false),
         supportsStreaming: z.boolean().default(false),
+        /**
+         * The reasoning effort the model uses when a request names none, as
+         * the provider documents it (owner, 2026-11-12). Null: the model does
+         * not reason, or the operator has not said. A model whose default is
+         * set and not `none` is never sent a temperature unless a route asks
+         * it for `none`.
+         */
+        defaultReasoningEffort: aiReasoningEffort.nullable().default(null),
 
         /** Descriptive limits. `null` means the operator has not entered one. */
         contextWindowTokens: z.number().int().positive().nullable().default(null),
@@ -360,8 +382,19 @@ const aiModelsSchema = z.object({
  * for `caption.generate`; how long the answer may be and how adventurous it is
  * are operator decisions that must be tunable without a deploy.
  */
+
 const aiRoutingParametersSchema = z.object({
+  /*
+   * Sent ONLY when the request does not reason: a model that reasons (its
+   * effort, below or in the model catalogue, is set and not `none`) refuses a
+   * temperature, so the gateway leaves it out (owner, 2026-11-12).
+   */
   temperature: z.number().min(0).max(2).default(0.7),
+  /*
+   * The reasoning effort this task asks for. Null: the model's own default
+   * (`defaultReasoningEffort` in the catalogue), and nothing is sent.
+   */
+  reasoningEffort: aiReasoningEffort.nullable().default(null),
   maxOutputTokens: z.number().int().positive().max(200_000).default(800),
   /*
    * PR 1 (Images, owner 2026-11-04) — how long ONE provider attempt may take

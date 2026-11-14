@@ -1,7 +1,9 @@
 # PR A — activating the smart Copilot's model and price on staging (D-605)
 
 The tool loop works on staging's current configuration as soon as PR A is deployed: `copilot.chat`
-keeps its route (gpt-5.4-mini → gpt-5.4-nano) and its price. These three edits switch it to the
+keeps its route (gpt-5.4-mini → gpt-5.4-nano) and its price. The ACTIVE routing these steps start
+from is v2 as the owner read it on 2026-11-12 (`staging-active-ai-routing-v2.json`): `copilot.chat`
+has `timeoutMs` 60000 and `temperature` 1 with `maxOutputTokens` 1500. These three edits switch it to the
 STRONGER model with vision and set ONE price per message. Each is an edit to a draft of the ACTIVE
 version — **never paste a whole document**.
 
@@ -76,8 +78,8 @@ gpt-5.4 $2.50 / $15.00 per million input / output tokens, $0.25 cached input.
    `gpt-5.4-nano`): change `"baseMilliCredits": 1000` to `"baseMilliCredits": 4000`, and change
    `"marginInputTokens": 25000` to `"marginInputTokens": 38400`.
 4. **Save draft** → **Validate & preview** must show: 0 errors; exactly ONE margin warning, on
-   `copilot.chat on gpt-5.4` ("earns 53.4% gross margin at its worst case" — the current route still
-   allows 800 output tokens; it reads 50.9% after step 3); impact lines only for
+   `copilot.chat on gpt-5.4` ("earns 48.9% gross margin at its worst case" — the active route still
+   allows 1,500 output tokens; it reads 50.9% after step 3); impact lines only for
    `credit cost "copilot.chat"`. Then **Activate**.
 
 **What 4 credits ($0.232) earns** — one message is at most **3 model calls**
@@ -98,10 +100,13 @@ other two calls' 2,400 output tokens at the input-rate equivalent of 14,400) wit
 output tokens — $0.114 — and warns at 50.9%, below the 65% target. On gpt-5.4-mini (the fallback)
 the same ceiling costs $0.034: 85%.
 
-## Step 3 — `ai.routing`: the Copilot on gpt-5.4, longer replies
+## Step 3 — `ai.routing`: the Copilot on gpt-5.4, 1,200 tokens per call
 
 1. Configuration → `ai.routing` → Change reason: `PR A: Copilot on gpt-5.4, 1,200 tokens per call` → **Create draft**.
-2. Find the rule whose `"taskKey"` is `"copilot.chat"` and make it read exactly:
+2. Find the rule whose `"taskKey"` is `"copilot.chat"` and make it read exactly. It keeps the active
+   `temperature` of 1 (gpt-5.4 does not reason by default, so it is sent; D-606) and lowers
+   `maxOutputTokens` from 1,500 to 1,200: at 1,500 the enforced worst case is $0.1275, a 45% margin,
+   below the owner's 50%.
 
 <!-- pr-a-route-copilot -->
 
@@ -112,6 +117,7 @@ the same ceiling costs $0.034: 85%.
       "fallbackModelKeys": ["gpt-5.4-mini"],
       "timeoutMs": 120000,
       "parameters": {
+        "temperature": 1,
         "maxOutputTokens": 1200,
         "attemptTimeoutMs": 90000
       }

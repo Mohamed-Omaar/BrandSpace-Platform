@@ -326,6 +326,41 @@ describe('PR A · the adapter speaks conversation, tools and images', () => {
   });
 });
 
+describe('reasoning · what the provider is sent (owner, 2026-11-12)', () => {
+  const answer = {
+    status: 200,
+    chunks: [
+      JSON.stringify({
+        model: 'm',
+        choices: [{ finish_reason: 'stop', message: { content: 'Plan.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2 },
+      }),
+    ],
+  };
+
+  it('a request that reasons: reasoning_effort when the route names one, and no temperature', async () => {
+    script = [answer];
+    await adapter.generateText(
+      { modelKey: 'm', prompt: 'Plan.', maxOutputTokens: 100, reasoningEffort: 'high' },
+      ctx(),
+    );
+    const body = received[0]?.body as Record<string, unknown>;
+    expect(body['reasoning_effort']).toBe('high');
+    expect('temperature' in body).toBe(false);
+  });
+
+  it('a request that does not reason: its temperature, and no reasoning_effort', async () => {
+    script = [answer];
+    await adapter.generateText(
+      { modelKey: 'm', prompt: 'Plan.', maxOutputTokens: 100, temperature: 0.7 },
+      ctx(),
+    );
+    const body = received[0]?.body as Record<string, unknown>;
+    expect(body['temperature']).toBe(0.7);
+    expect('reasoning_effort' in body).toBe(false);
+  });
+});
+
 describe('PR A · ChatStreamReader', () => {
   it('a line split across pushes is read once it is complete', () => {
     const pieces: string[] = [];

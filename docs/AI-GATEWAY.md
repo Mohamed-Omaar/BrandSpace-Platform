@@ -1067,3 +1067,20 @@ A text request may carry, all optional:
 
 The reservation is unchanged: every step reserves the route's price, so a wallet that cannot cover the
 message is refused before any provider is called.
+
+## 20. No temperature for a request that reasons (D-606)
+
+A provider refuses `temperature` when the model reasons: OpenAI answers HTTP 400 when the reasoning
+effort is not `none`, and gpt-6.1-sol reasons at `medium` by default and cannot be set to `none`. That
+refusal is `INVALID_REQUEST`, so it is neither retried nor sent to the fallback model.
+
+Whether a request reasons is declared, never inferred from a model's name:
+
+- `ai.models[].defaultReasoningEffort` is the effort the model uses when a request names none, as the
+  provider documents it. Empty means the model does not reason, or the operator has not said.
+- `ai.routing[].parameters.reasoningEffort` is the effort the task asks for. Empty means the model's
+  default, and nothing is sent.
+
+The route's effort wins (`reasonsWith`). A request that reasons is sent no temperature. A route that
+names an effort sends it as `reasoning_effort`. A request that does not reason is sent its route's
+temperature as before.

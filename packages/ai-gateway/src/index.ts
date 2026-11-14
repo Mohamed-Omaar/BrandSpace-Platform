@@ -85,6 +85,7 @@ export {
   assessCapability,
   NO_CAPABILITY_ROUTING,
   resolveCapabilityRoute,
+  reasonsWith,
   resolveRoute,
   RoutingError,
 } from './routing';
@@ -96,6 +97,7 @@ export type {
   RegisteredModel,
   ResolvedRoute,
   RoutingQuery,
+  ReasoningEffort,
   RoutingRule,
 } from './routing';
 

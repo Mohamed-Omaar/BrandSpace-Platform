@@ -64,7 +64,10 @@ export interface TextRequest {
   readonly modelKey: string;
   readonly prompt: string;
   readonly maxOutputTokens: number;
+  /** Absent when the request reasons: a reasoning model refuses one. */
   readonly temperature?: number;
+  /** Sent as the provider's reasoning effort only when the route names one. */
+  readonly reasoningEffort?: string;
   /** Untrusted context, inserted as clearly delimited data (§10.3). */
   readonly untrustedContext?: readonly string[];
   /**

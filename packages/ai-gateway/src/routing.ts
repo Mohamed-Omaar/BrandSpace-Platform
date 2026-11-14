@@ -27,6 +27,22 @@ import { findAiTask } from './tasks';
  */
 
 /** The shape this module needs from the active `ai.routing` payload. */
+/** A reasoning effort as the provider names it; `none` does not reason. */
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/**
+ * WHETHER THIS REQUEST REASONS (owner, 2026-11-12): the route's effort when
+ * it names one, else the model's declared default. A request that reasons is
+ * never sent a temperature — the provider refuses it.
+ */
+export function reasonsWith(
+  model: { readonly defaultReasoningEffort?: ReasoningEffort | null },
+  parameters: { readonly reasoningEffort?: ReasoningEffort | null },
+): boolean {
+  const effort = parameters.reasoningEffort ?? model.defaultReasoningEffort ?? null;
+  return effort !== null && effort !== 'none';
+}
+
 export interface RoutingRule {
   readonly taskKey: string;
   readonly scope: 'global' | 'plan' | 'workspace';
@@ -52,6 +68,8 @@ export interface RoutingRule {
      * (`attemptTimeoutMsFor`).
      */
     readonly attemptTimeoutMs?: number | null;
+    /** The task's reasoning effort; null or absent: the model's own default. */
+    readonly reasoningEffort?: ReasoningEffort | null;
   };
   readonly retryPolicy: {
     readonly maxAttempts: number;
@@ -91,6 +109,8 @@ export interface RegisteredModel {
   readonly imageCostPerImageMicroMinor?: number | null;
   /** PR A (item 6) — the sizes an image model accepts. Absent: the standard GPT sizes. */
   readonly imageSizing?: ImageSizing;
+  /** The effort the model reasons at when a request names none. Null or absent: none. */
+  readonly defaultReasoningEffort?: ReasoningEffort | null;
 }
 
 /**
