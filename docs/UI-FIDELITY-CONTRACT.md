@@ -2694,3 +2694,13 @@ D-582's generated palette), and light mode is unchanged token for token.
 - **Proof:** `tests/e2e/pr-e-dark-mode.spec.ts` (switching without a reload; axe and painted
   contrast on every main page in dark, en and ar, desktop and phone) and
   `tests/unit/pr-e-dark-palette.test.ts`.
+
+### 6.3.83 Copilot answers as Markdown (owner, 2026-11-14)
+
+The prototype draws an answer as one bubble of text and never shows Markdown, so how a heading, a
+list or a link looks inside the bubble is an extension. It composes only what the bubble already
+has: the bubble's own colour and type (everything inherits, so light and dark both hold), the brand
+purple for list markers and the link underline, the mono token for code, logical padding for list
+indents (markers on the right in Arabic) and an `--bsp-px-8` gap between blocks. "Worked on: …"
+moved out of the bubble's text to a caption line above it in `--bs-text-secondary`. No new colour,
+font, shadow or interaction.

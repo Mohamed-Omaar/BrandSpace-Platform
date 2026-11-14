@@ -526,10 +526,16 @@ export function CopilotView({
         ? `${body}\n${t('copilot.imagesAttached').replace('{n}', String(images))}`
         : body;
     }
+    return body;
+  };
+
+  /** "Worked on: …" — its own line above the answer, never inside its text. */
+  const workedNote = (row: HistoryRow): string | undefined => {
+    if (row.role === 'USER') return undefined;
     const worked = (row.activity?.worked ?? []).filter((entry) => entry.state === 'done');
-    if (worked.length === 0) return body;
+    if (worked.length === 0) return undefined;
     const list = [...new Set(worked.map((entry) => tOr(`copilot.worked.${entry.key}`, entry.key)))];
-    return `${t('copilot.workedOn').replace('{list}', list.join(' · '))}\n\n${body}`;
+    return t('copilot.workedOn').replace('{list}', list.join(' · '));
   };
 
   const shown: CopilotMessage[] = [];
@@ -547,6 +553,7 @@ export function CopilotView({
             id: row.id,
             author: row.role === 'USER' ? 'user' : 'assistant',
             text: row.purged ? t('copilot.purged') : historyText(row),
+            ...(row.purged ? {} : { note: workedNote(row) }),
           },
     );
   }
@@ -557,7 +564,7 @@ export function CopilotView({
         ...messages,
         // PR A (D-605) — the answer, word by word, while it arrives.
         ...(busy && streamText !== ''
-          ? [{ id: 'a-streaming', author: 'assistant' as const, text: streamText }]
+          ? [{ id: 'a-streaming', author: 'assistant' as const, text: streamText, streaming: true }]
           : []),
       ];
 

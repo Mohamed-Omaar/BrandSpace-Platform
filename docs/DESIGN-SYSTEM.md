@@ -433,6 +433,14 @@ It renders:
 
 - a conversation with the **author distinguished by side, fill and avatar together**, so the
   distinction survives greyscale (1.4.1);
+- **an answer as safe Markdown** (owner, 2026-11-14; `packages/ui/src/markdown.tsx`): paragraphs,
+  line breaks, headings, bold, italics, code, bullet and numbered lists, and http(s) links that open
+  in a new tab with `rel="noopener noreferrer nofollow"`. It builds React elements only — no
+  `dangerouslySetInnerHTML` — so raw HTML or `<script>` in an answer is shown as text; an image from
+  the model is never loaded (its alt text stands in). Every block is `dir="auto"`, so Arabic lists
+  put their markers on the right. While an answer streams, an unclosed marker is drawn already
+  styled, so symbols never flash. What the person typed is shown exactly as typed. "Worked on: …" is
+  its own line above the answer (`CopilotMessage.note`), never part of its text;
 - **tool cards** — what a run did or would do, as an operation with a status, rather than prose in a
   chat bubble;
 - **suggestion chips** drawn from the surface's action set;
