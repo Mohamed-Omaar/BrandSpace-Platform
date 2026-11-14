@@ -10103,6 +10103,22 @@ img.bsp-pf-art {
   padding: var(--bsp-px-16) var(--bsp-px-18);
   margin-block-end: var(--bsp-px-14);
 }
+.bsp-picfield {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bsp-px-10);
+  align-items: center;
+}
+.bsp-picfield-file {
+  flex: 1 1 var(--bsp-px-160);
+  min-inline-size: 0;
+}
+.bsp-picfield-remove {
+  display: flex;
+  gap: var(--bsp-px-6);
+  align-items: center;
+  font-size: var(--bsp-fs-12);
+}
 .bsp-picard-t {
   font-size: var(--bsp-fs-14);
   font-weight: 700;

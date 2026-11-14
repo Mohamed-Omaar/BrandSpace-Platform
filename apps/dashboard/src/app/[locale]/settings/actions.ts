@@ -13,6 +13,7 @@ import {
 } from '../../../server/customer-context';
 import { generalSettingsFrom, saveGeneralSettings } from '../../../server/general-settings';
 import { actionErrorCode } from '../../../server/denial';
+import { setWorkspaceLogo } from '../../../server/pictures';
 
 const log = createLogger({ context: { component: 'dashboard.settings' } });
 
@@ -67,7 +68,22 @@ export async function saveSettingsAction(formData: FormData): Promise<void> {
       ),
     );
 
-    destination = `/${locale}/settings?ok=SETTINGS_SAVED`;
+    // PR D (D-608): the business logo, posted with the rest of General.
+    const logo = formData.get('logo');
+    const logoOutcome =
+      logo instanceof File && logo.size > 0
+        ? await setWorkspaceLogo({ actorUserId: session.customer.userId, workspaceId, file: logo })
+        : formData.get('removeLogo') !== null
+          ? await setWorkspaceLogo({
+              actorUserId: session.customer.userId,
+              workspaceId,
+              file: null,
+            })
+          : null;
+
+    destination = logoOutcome
+      ? `/${locale}/settings?error=${logoOutcome}`
+      : `/${locale}/settings?ok=SETTINGS_SAVED`;
   } catch (error: unknown) {
     // Next.js control flow (a redirect from the session gate, notFound, …) is
     // re-thrown, never turned into an error redirect (review item 10).

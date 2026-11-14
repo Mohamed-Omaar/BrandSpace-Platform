@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, type ChangeEvent } from 'react';
+import { Field } from '@brandspace/ui';
 import { SubmitButton } from './pending-submit';
 
 /**
@@ -19,7 +20,7 @@ import { SubmitButton } from './pending-submit';
 const SIDE = 512;
 const ACCEPT = 'image/png,image/jpeg,image/webp';
 
-async function croppedSquare(file: File): Promise<File | null> {
+export async function croppedSquare(file: File): Promise<File | null> {
   const url = URL.createObjectURL(file);
   try {
     const image = new Image();
@@ -149,5 +150,90 @@ export function PictureUpload({
         </form>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * PR D (D-608) — A PICTURE AS ONE FIELD OF A LARGER FORM (the business logo on
+ * General settings, saved by that form's own "Save changes"). The shared
+ * `Field` (the same label and hint as its neighbours), the mark at its own
+ * size beside the file input, and the same browser crop. Choosing a file is a
+ * change the save bar sees; "Remove" is a checkbox posted with the rest.
+ */
+export function PictureField({
+  name,
+  removeName,
+  currentSrc,
+  fallback,
+  shape,
+  labels,
+  testId,
+}: {
+  readonly name: string;
+  readonly removeName: string;
+  readonly currentSrc: string | null;
+  readonly fallback: string;
+  readonly shape: 'circle' | 'square';
+  readonly labels: {
+    readonly label: string;
+    readonly choose: string;
+    readonly remove: string;
+    readonly hint: string;
+    readonly preview: string;
+  };
+  readonly testId: string;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const onChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const cropped = await croppedSquare(file);
+    if (cropped && input.current && typeof DataTransfer !== 'undefined') {
+      const transfer = new DataTransfer();
+      transfer.items.add(cropped);
+      input.current.files = transfer.files;
+      // Tell the form the field changed again, now holding the cropped file.
+      input.current.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return URL.createObjectURL(cropped ?? file);
+    });
+  };
+
+  const shown = preview ?? currentSrc;
+  return (
+    <Field label={labels.label} htmlFor={`${testId}-input`} hint={labels.hint}>
+      <span className="bsp-picfield" data-testid={testId}>
+        <span
+          className={shape === 'circle' ? 'bsp-tm-av' : 'bsp-bcard-mark'}
+          data-c="0"
+          data-pic={shown ? 'true' : undefined}
+          role={shown ? 'img' : undefined}
+          aria-label={shown ? labels.preview : undefined}
+          aria-hidden={shown ? undefined : true}
+        >
+          {shown ? <img className="bsp-pic" src={shown} alt="" /> : fallback}
+        </span>
+        <input
+          ref={input}
+          id={`${testId}-input`}
+          type="file"
+          name={name}
+          accept={ACCEPT}
+          onChange={onChange}
+          className="bs-control bsp-picfield-file"
+          data-testid={`${testId}-file`}
+        />
+        {currentSrc ? (
+          <label className="bsp-picfield-remove">
+            <input type="checkbox" name={removeName} data-testid={`${testId}-remove`} />
+            <span>{labels.remove}</span>
+          </label>
+        ) : null}
+      </span>
+    </Field>
   );
 }

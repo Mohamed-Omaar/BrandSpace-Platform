@@ -259,15 +259,16 @@ test('A photo and a logo: uploaded, shown, and only to members', async ({
     viewer.getByTestId(`member-${loaded.customer.email}`).locator('img.bsp-pic'),
   ).toBeVisible();
 
-  // The logo, in Business settings, then on the business card.
+  // The logo, a field of General settings, saved by its "Save changes".
   await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
   await page.getByTestId('workspace-logo-upload-file').setInputFiles({
     name: 'logo.png',
     mimeType: 'image/png',
     buffer: PNG,
   });
-  await page.getByTestId('workspace-logo-upload-save').click();
-  await expect(page).toHaveURL(/ok=picture-saved/);
+  await expect(page.getByTestId('workspace-logo-upload').locator('img')).toBeVisible();
+  await page.getByTestId('settings-save').click();
+  await expect(page).toHaveURL(/ok=SETTINGS_SAVED/);
   // On the business list (and, where the rail card is the business, on the card).
   await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
   await expect(page.getByTestId(`workspace-logo-${loaded.customer.workspaceSlug}`)).toBeVisible();
@@ -281,8 +282,14 @@ test('A photo and a logo: uploaded, shown, and only to members', async ({
     mimeType: 'image/png',
     buffer: Buffer.from('this is not a picture'),
   });
-  await page.getByTestId('workspace-logo-upload-save').click();
+  await page.getByTestId('settings-save').click();
   await expect(page).toHaveURL(/error=picture-type/);
+  // Removed by the box beside it, with the same Save.
+  await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+  await page.getByTestId('workspace-logo-upload-remove').check();
+  await page.getByTestId('settings-save').click();
+  await expect(page).toHaveURL(/ok=SETTINGS_SAVED/);
+  await expect(page.getByTestId('workspace-logo-upload').locator('img')).toHaveCount(0);
 
   // Nobody outside a workspace reaches its logo, or a stranger's photo.
   const second = await withPlatformPrisma((prisma) =>

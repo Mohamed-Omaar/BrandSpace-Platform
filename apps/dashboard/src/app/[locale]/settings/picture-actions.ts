@@ -1,14 +1,14 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { requireWorkspace, requireWorkspaceAction } from '../../../server/customer-context';
-import { setOwnAvatar, setWorkspaceLogo } from '../../../server/pictures';
+import { requireWorkspace } from '../../../server/customer-context';
+import { setOwnAvatar } from '../../../server/pictures';
 
 /**
- * PR D (D-608) — saving and removing a picture. The person and the workspace
- * come from the session; the form supplies only the file. The workspace logo
- * needs `workspace.update`, as the rest of the business settings do. Each
- * change is audited (`user.avatar.*`, `workspace.logo.*`) without the bytes.
+ * PR D (D-608) — saving and removing a person's own photo. The person and the
+ * workspace come from the session; the form supplies only the file. Audited
+ * (`user.avatar.*`) without the bytes. The business logo is a field of the
+ * General settings form (`saveSettingsAction`).
  */
 
 const localeOf = (formData: FormData) => (formData.get('locale') === 'ar' ? 'ar' : 'en');
@@ -40,29 +40,4 @@ export async function removeAvatarAction(formData: FormData): Promise<void> {
     file: null,
   });
   back(`/${locale}/settings/security`, outcome, 'picture-removed');
-}
-
-export async function saveWorkspaceLogoAction(formData: FormData): Promise<void> {
-  const locale = localeOf(formData);
-  const { customer, workspace } = await requireWorkspaceAction(locale, 'workspace.update');
-  const file = fileOf(formData);
-  const outcome = file
-    ? await setWorkspaceLogo({
-        actorUserId: customer.userId,
-        workspaceId: workspace.workspaceId,
-        file,
-      })
-    : 'picture-missing';
-  back(`/${locale}/settings`, outcome, 'picture-saved');
-}
-
-export async function removeWorkspaceLogoAction(formData: FormData): Promise<void> {
-  const locale = localeOf(formData);
-  const { customer, workspace } = await requireWorkspaceAction(locale, 'workspace.update');
-  const outcome = await setWorkspaceLogo({
-    actorUserId: customer.userId,
-    workspaceId: workspace.workspaceId,
-    file: null,
-  });
-  back(`/${locale}/settings`, outcome, 'picture-removed');
 }

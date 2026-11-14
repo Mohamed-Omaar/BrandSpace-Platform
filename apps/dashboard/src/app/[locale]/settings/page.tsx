@@ -24,9 +24,8 @@ import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { saveSettingsAction } from './actions';
-import { PictureUpload } from '../../../components/picture-upload';
+import { PictureField } from '../../../components/picture-upload';
 import { logoVersions, workspaceLogoHref } from '../../../server/pictures';
-import { removeWorkspaceLogoAction, saveWorkspaceLogoAction } from './picture-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,7 +93,14 @@ export default async function SettingsPage({
       };
     },
   );
+  // PR D (D-608): the business logo, a field of this form.
+  const logoSrc = workspaceLogoHref(
+    locale,
+    workspace.workspaceId,
+    (await logoVersions([workspace.workspaceId])).get(workspace.workspaceId) ?? null,
+  );
   const saved = {
+    logo: logoSrc,
     name: row.name,
     defaultLocale: row.defaultLocale,
     country: row.country,
@@ -156,35 +162,6 @@ export default async function SettingsPage({
           whole grid, it comes to rest only on the page's own bottom padding.
           The note has no field, so nothing new is posted.
         */}
-        {/*
-          PR D (D-608) — THE BUSINESS LOGO, shown in the business switcher in
-          place of the first letter. Its own form, above the general fields, so
-          the save bar stays the column's last row.
-        */}
-        <section className="bsp-card bsp-picard" data-testid="workspace-logo-card">
-          <span className="bsp-picard-t">{t('picture.logo.title')}</span>
-          <span className="bsp-picard-s">{t('picture.logo.body')}</span>
-          <PictureUpload
-            action={saveWorkspaceLogoAction}
-            removeAction={removeWorkspaceLogoAction}
-            hiddenFields={{ locale }}
-            currentSrc={workspaceLogoHref(
-              locale,
-              workspace.workspaceId,
-              (await logoVersions([workspace.workspaceId])).get(workspace.workspaceId) ?? null,
-            )}
-            fallback={Array.from(row.name.trim())[0]?.toUpperCase() ?? ''}
-            shape="square"
-            labels={{
-              choose: t('picture.choose'),
-              save: t('picture.save'),
-              remove: t('picture.remove'),
-              hint: t('picture.hint'),
-              preview: t('picture.preview'),
-            }}
-            testId="workspace-logo-upload"
-          />
-        </section>
         <DraftForm
           key={JSON.stringify(saved)}
           action={saveSettingsAction}
@@ -249,6 +226,28 @@ export default async function SettingsPage({
                   timezoneKept: t('settings.timezoneKept'),
                   timezoneUnplanned: t('settings.timezoneUnplanned'),
                 }}
+                /*
+                  PR D (D-608) — THE BUSINESS LOGO, a field of this form in
+                  the cell beside the time zone: the one "Save changes" saves
+                  it, and the bar stays the column's last row.
+                */
+                logoField={
+                  <PictureField
+                    name="logo"
+                    removeName="removeLogo"
+                    currentSrc={logoSrc}
+                    fallback={Array.from(row.name.trim())[0]?.toUpperCase() ?? ''}
+                    shape="square"
+                    labels={{
+                      label: t('picture.logo.title'),
+                      choose: t('picture.choose'),
+                      remove: t('picture.removeLogo'),
+                      hint: t('picture.logo.hint'),
+                      preview: t('picture.preview'),
+                    }}
+                    testId="workspace-logo-upload"
+                  />
+                }
               />
             </div>
           </Card>

@@ -2703,6 +2703,9 @@ photo upload and no logo upload.
   a post's "created by").
 - **The picture card** (`.bsp-picard`, `.bsp-picup`): the security card's title and line over the
   mark at 64px and the file field.
+- **The business logo field** (`.bsp-picfield`): a field of the General settings form, in the cell
+  beside the time zone, with the shared `Field` label and hint, the mark at its own size and the
+  file input; saved by the form's own "Save changes", so the bar stays the column's last row.
 - **Owner decision (D-468 (a))**: a post card's "created by" is the author's photo, not the
   written name; the name is its tooltip and accessible name.
 - **Proof**: `tests/e2e/pr-d-personal-notes-pictures.spec.ts`; screenshots in the PR.

@@ -737,6 +737,8 @@ export const messages = {
     'picture.choose': 'اختيار صورة',
     'picture.save': 'حفظ الصورة',
     'picture.remove': 'إزالة',
+    'picture.removeLogo': 'إزالة الشعار عند الحفظ',
+    'picture.logo.hint': 'PNG أو JPEG أو WebP. يظهر في مبدّل الأنشطة التجارية بدل الحرف الأول.',
     'picture.hint': 'PNG أو JPEG أو WebP. تُقص الصورة مربعًا قبل الرفع.',
     'picture.preview': 'معاينة الصورة',
     'person.createdBy': 'أنشأه {name}',
@@ -5268,6 +5270,9 @@ export const messages = {
     'picture.choose': 'Choose a picture',
     'picture.save': 'Save picture',
     'picture.remove': 'Remove',
+    'picture.removeLogo': 'Remove the logo when I save',
+    'picture.logo.hint':
+      'PNG, JPEG or WebP. Shown in the business switcher instead of the first letter.',
     'picture.hint': 'PNG, JPEG or WebP. The picture is cropped square before it is uploaded.',
     'picture.preview': 'Picture preview',
     'person.createdBy': 'Created by {name}',
