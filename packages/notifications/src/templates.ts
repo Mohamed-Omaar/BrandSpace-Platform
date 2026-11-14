@@ -131,6 +131,12 @@ export interface NotificationPayload {
   itemTitle?: string;
   brandName?: string;
   actorName?: string;
+  /**
+   * PR D (D-607) — WHO DID IT, as an id, so the reader's feed can show that
+   * person's photo. An id is not content: the feed resolves it to a name and
+   * a picture only for a member of the reader's own workspace.
+   */
+  actorUserId?: string;
   /*
    * Phase 6. The PLATFORM and the ACCOUNT NAME — both public on the platform in
    * question, and both needed for the message to mean anything: "a post

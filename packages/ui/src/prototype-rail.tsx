@@ -19,12 +19,29 @@ import { PrototypeIcon, type PrototypeGlyph } from './prototype-icons';
  */
 
 /** The card's face: `.bcard` — the initial tile, the name, the caption, the chevron. */
-function brandFace(current: { readonly name: string; readonly caption: string }) {
+/**
+ * The card's face. PR D (D-607): with `pictureSrc` (the workspace's logo) the
+ * mark shows the picture instead of the letter; without it, the letter, as
+ * the prototype draws it.
+ */
+function brandFace(current: {
+  readonly name: string;
+  readonly caption: string;
+  readonly pictureSrc?: string | null | undefined;
+}) {
   const initial = Array.from(current.name.trim())[0]?.toUpperCase() ?? '';
   return (
     <>
-      <span className="bsp-bcard-mark" aria-hidden="true">
-        {initial}
+      <span
+        className="bsp-bcard-mark"
+        aria-hidden="true"
+        data-pic={current.pictureSrc ? 'true' : undefined}
+      >
+        {current.pictureSrc ? (
+          <img className="bsp-pic" src={current.pictureSrc} alt="" data-testid="workspace-logo" />
+        ) : (
+          initial
+        )}
       </span>
       <span className="bsp-bcard-copy bsp-nl bs-rail-copy">
         <span className="bsp-bcard-name" data-testid="active-brand">
@@ -59,7 +76,11 @@ export function PrototypeBrandCard({
   href,
 }: {
   readonly label: string;
-  readonly current: { readonly name: string; readonly caption: string };
+  readonly current: {
+    readonly name: string;
+    readonly caption: string;
+    readonly pictureSrc?: string | null | undefined;
+  };
   readonly href?: string | undefined;
 }) {
   return href ? (
@@ -93,7 +114,14 @@ function formRow({
   readonly current: boolean;
   readonly name: string;
   readonly caption?: string | undefined;
-  readonly tile?: { readonly initial: string; readonly color: string } | undefined;
+  readonly tile?:
+    | {
+        readonly initial: string;
+        readonly color: string;
+        /** PR D: the workspace's logo in place of the letter. */
+        readonly src?: string | null | undefined;
+      }
+    | undefined;
 }) {
   return (
     <form action={action} key={value} style={{ margin: 0 }}>
@@ -129,9 +157,10 @@ function formRow({
               fontWeight: 800,
               fontSize: 'var(--bsp-fs-12)',
               flexShrink: 0,
+              overflow: 'hidden',
             }}
           >
-            {tile.initial}
+            {tile.src ? <img className="bsp-pic" src={tile.src} alt="" /> : tile.initial}
           </span>
         ) : null}
         <span style={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
@@ -174,6 +203,8 @@ export interface PrototypeBusinessOption {
   /** "Role · Plan". */
   readonly caption: string;
   readonly current?: boolean | undefined;
+  /** PR D (D-607): the business's logo, when it has one. */
+  readonly logoSrc?: string | null | undefined;
 }
 
 /** `.bcard` opening `.bmenu`: "Workspaces · used/allowed", one row per business. */
@@ -189,7 +220,11 @@ export function PrototypeBusinessSwitcher({
   readonly label: string;
   /** `Workspaces · 1/2` — the menu's first line. */
   readonly heading?: ReactNode;
-  readonly current: { readonly name: string; readonly caption: string };
+  readonly current: {
+    readonly name: string;
+    readonly caption: string;
+    readonly pictureSrc?: string | null | undefined;
+  };
   readonly options: readonly PrototypeBusinessOption[];
   readonly action: (formData: FormData) => void | Promise<void>;
   readonly hiddenFields: Readonly<Record<string, string>>;
@@ -229,6 +264,7 @@ export function PrototypeBusinessSwitcher({
             initial: Array.from(option.name.trim())[0]?.toUpperCase() ?? '',
             color:
               PROTOTYPE_WORKSPACE_COLOURS[index % PROTOTYPE_WORKSPACE_COLOURS.length] ?? '#7935fe',
+            src: option.logoSrc,
           },
         }),
       )}
@@ -358,6 +394,7 @@ export function PrototypeUserCard({
   email,
   role,
   initials,
+  avatarSrc,
   nameTestId = 'profile-name',
   children,
 }: {
@@ -366,6 +403,8 @@ export function PrototypeUserCard({
   readonly email?: string | undefined;
   readonly role: string;
   readonly initials: string;
+  /** PR D (D-607): the person's own avatar, in a circle, in place of the initials. */
+  readonly avatarSrc?: string | null | undefined;
   readonly nameTestId?: string;
   readonly children: ReactNode;
 }) {
@@ -379,8 +418,16 @@ export function PrototypeUserCard({
       triggerClassName="bsp-ucard"
       triggerContent={
         <>
-          <span className="bsp-ucard-mark" aria-hidden="true">
-            {initials}
+          <span
+            className="bsp-ucard-mark"
+            aria-hidden="true"
+            data-pic={avatarSrc ? 'true' : undefined}
+          >
+            {avatarSrc ? (
+              <img className="bsp-pic" src={avatarSrc} alt="" data-testid="profile-avatar" />
+            ) : (
+              initials
+            )}
           </span>
           <span className="bsp-ucard-copy bsp-nl bs-rail-copy">
             <span className="bsp-ucard-name" data-testid={nameTestId}>

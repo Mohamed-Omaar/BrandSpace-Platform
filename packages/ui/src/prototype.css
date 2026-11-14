@@ -10068,6 +10068,72 @@ img.bsp-pf-art {
 .bsp-btn.bsp-pn-delete {
   color: var(--bs-danger);
 }
+
+/* PR D (D-607) — A PICTURE IN A MARK: a person's avatar or a workspace's logo
+   fills the mark the letters sit in (`object-fit: cover` on the square the
+   browser cropped). A person is a circle; a logo keeps the mark's corners. The
+   letters stay the fallback, so nothing moves when there is no picture. */
+.bsp-pic {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+.bsp-bcard-mark[data-pic='true'],
+.bsp-ucard-mark[data-pic='true'],
+.bsp-tm-av[data-pic='true'] {
+  overflow: hidden;
+  background: var(--bs-surface-muted);
+}
+.bsp-ucard-mark[data-pic='true'],
+.bsp-tm-av[data-pic='true'] {
+  border-radius: 50%;
+}
+/* The picture card (Account → your photo; Business settings → the logo): the
+   security card's 14px / 700 title over its 12px muted line, then the mark at
+   64px beside the file field. */
+.bsp-card.bsp-picard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-10);
+  padding: var(--bsp-px-16) var(--bsp-px-18);
+  margin-block-end: var(--bsp-px-14);
+}
+.bsp-picard-t {
+  font-size: var(--bsp-fs-14);
+  font-weight: 700;
+}
+.bsp-picard-s {
+  font-size: var(--bsp-fs-12);
+  color: var(--bs-text-muted);
+}
+.bsp-picup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bsp-px-14);
+  align-items: center;
+}
+.bsp-picup-mark.bsp-tm-av,
+.bsp-picup-mark.bsp-bcard-mark {
+  inline-size: var(--bsp-px-64);
+  block-size: var(--bsp-px-64);
+  font-size: var(--bsp-fs-18);
+}
+/* A person beside a line of text (approvals "From …", notifications): the
+   avatar at the line's height, before the words. */
+.bsp-tm-av.bsp-person-mini {
+  inline-size: var(--bsp-px-20);
+  block-size: var(--bsp-px-20);
+  font-size: var(--bsp-fs-9);
+  vertical-align: middle;
+  margin-inline-end: var(--bsp-px-6);
+}
+.bsp-picup-form {
+  display: grid;
+  gap: var(--bsp-px-8);
+  flex: 1 1 var(--bsp-px-240);
+  min-inline-size: 0;
+}
 @media (max-width: 767.98px) {
   .bsp-pn-reminder .bsp-nts-bar {
     flex-wrap: wrap;

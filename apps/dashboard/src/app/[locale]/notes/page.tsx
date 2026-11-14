@@ -31,6 +31,8 @@ import { translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { SubmitButton } from '../../../components/pending-submit';
 import { MyNotes } from './my-notes';
+import { PersonAvatar } from '../../../components/person-avatar';
+import { avatarHref, pictureVersions } from '../../../server/pictures';
 
 export const dynamic = 'force-dynamic';
 
@@ -217,6 +219,11 @@ export default async function NotesPage({
   );
 
   const thread = pane?.thread ?? null;
+  // PR D (D-607) — each author's photo, when they have one.
+  const authorAvatars = await pictureVersions(
+    workspace.workspaceId,
+    (pane?.notes ?? []).map((note) => note.authorUserId),
+  );
   const replyFormId = thread ? `notes-reply-${thread.id}` : 'notes-reply';
   const hidden = thread ? (
     <>
@@ -402,13 +409,16 @@ export default async function NotesPage({
                   const who = nameOf(note.authorUserId);
                   return (
                     <li key={note.id} className="bsp-nts-msg" data-testid={`note-${note.id}`}>
-                      <span
-                        aria-hidden="true"
-                        className="bsp-tm-av bsp-nts-av"
-                        data-c={toneOf(note.authorUserId)}
-                      >
-                        {initialsOf(note.authorUserId)}
-                      </span>
+                      <PersonAvatar
+                        className="bsp-nts-av"
+                        index={toneOf(note.authorUserId)}
+                        initials={initialsOf(note.authorUserId)}
+                        src={avatarHref(
+                          locale,
+                          note.authorUserId,
+                          authorAvatars.get(note.authorUserId) ?? null,
+                        )}
+                      />
                       <div className="bsp-nts-msg-b">
                         <span className="bsp-nts-who">
                           <b>{who}</b>{' '}

@@ -8,6 +8,8 @@ import { noteIdFromLink, noteThreadHref } from '../../../server/note-links';
 import { relativeTime } from '../../../server/home';
 import { optionalMessage } from '../../../i18n/messages';
 import { systemClock } from '@brandspace/shared';
+import { initialsFrom } from '@brandspace/ui';
+import { avatarHref, pictureVersions } from '../../../server/pictures';
 
 /**
  * THE BELL'S FEED (Phase 6 final, D-277 §40, D-297).
@@ -40,6 +42,8 @@ export interface FeedItem {
   readonly when: string;
   readonly at: string;
   readonly unread: boolean;
+  /** PR D (D-607) — who did it, as their photo or their initials, when known. */
+  readonly person: { readonly initials: string; readonly src: string | null } | null;
 }
 
 const EXCERPT = 140;
@@ -71,10 +75,19 @@ export async function loadNotificationFeed(
    * themselves is not one (the service already leaves it out).
    */
   const mentionedBy = mentioned.filter((entry) => entry.lastMention !== null);
+  const actorOf = (payload: Record<string, unknown>): string | null =>
+    typeof payload['actorUserId'] === 'string' ? payload['actorUserId'] : null;
   const authorIds = [
-    ...new Set(
-      mentionedBy.flatMap((entry) => (entry.lastMention ? [entry.lastMention.authorUserId] : [])),
-    ),
+    ...new Set([
+      ...mentionedBy.flatMap((entry) =>
+        entry.lastMention ? [entry.lastMention.authorUserId] : [],
+      ),
+      // PR D (D-607): who acted on a notification, to show their photo.
+      ...notifications.flatMap((item) => {
+        const actor = actorOf(item.payload as Record<string, unknown>);
+        return actor ? [actor] : [];
+      }),
+    ]),
   ];
   const names = authorIds.length
     ? await inWorkspace(
@@ -90,6 +103,16 @@ export async function loadNotificationFeed(
           ),
       )
     : new Map<string, string>();
+  const avatars = await pictureVersions(workspace.workspaceId, [...names.keys()]);
+  const personOf = (userId: string | null) => {
+    const name = userId ? names.get(userId) : undefined;
+    return userId && name
+      ? {
+          initials: initialsFrom(name),
+          src: avatarHref(locale, userId, avatars.get(userId) ?? null),
+        }
+      : null;
+  };
   const mentions = mentionedBy.map((entry) => ({
     entry,
     mention: entry.lastMention!,
@@ -137,6 +160,7 @@ export async function loadNotificationFeed(
       when: relativeTime(item.createdAt, now, locale),
       at: item.createdAt.toISOString(),
       unread: item.readAt === null,
+      person: personOf(actorOf(item.payload as Record<string, unknown>)),
     })),
     ...mentions.map(({ entry, mention, author }) => ({
       id: `m:${entry.threadId}`,
@@ -152,6 +176,7 @@ export async function loadNotificationFeed(
       when: relativeTime(mention.createdAt, now, locale),
       at: mention.createdAt.toISOString(),
       unread: entry.unreadMentions > 0,
+      person: personOf(mention.authorUserId),
     })),
   ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 

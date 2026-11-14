@@ -45,6 +45,8 @@ import { dayLabel } from '../../../server/prototype-dates';
 import { permissionGroups } from '../../../server/permission-groups';
 import { PermissionGroupsList } from '../../../components/permission-groups-view';
 import { SubmitButton } from '../../../components/pending-submit';
+import { PersonAvatar } from '../../../components/person-avatar';
+import { avatarHref, pictureVersions } from '../../../server/pictures';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,16 +95,15 @@ function TeamAvatar({
   initials,
   index,
   size = 36,
+  src,
 }: {
   readonly initials: string;
   readonly index: number;
   readonly size?: 36 | 48;
+  /** PR D (D-607): the person's own photo, when they have one. */
+  readonly src?: string | null;
 }) {
-  return (
-    <span aria-hidden="true" className="bsp-tm-av" data-c={index % 4} data-size={size}>
-      {initials}
-    </span>
-  );
+  return <PersonAvatar initials={initials} index={index} size={size} src={src} />;
 }
 
 export default async function MembersPage({
@@ -168,6 +169,12 @@ export default async function MembersPage({
         }),
       }),
     );
+  // PR D (D-607): each member's photo, when they have one.
+  const avatars = await pictureVersions(
+    workspace.workspaceId,
+    members.map((m) => m.userId),
+  );
+  const avatarOf = (userId: string) => avatarHref(locale, userId, avatars.get(userId) ?? null);
   const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
   // The owner is always a member, so their name comes from the list already read.
   const owner = members.find((m) => m.isWorkspaceOwner);
@@ -496,6 +503,7 @@ export default async function MembersPage({
                 initials={personInitials(opened.name, opened.email)}
                 index={Math.max(0, members.indexOf(opened))}
                 size={48}
+                src={avatarOf(opened.userId)}
               />
               <span className="bsp-tm-main">
                 <span className="bsp-tm-hname">{opened.name?.trim() || opened.email}</span>
@@ -671,7 +679,11 @@ export default async function MembersPage({
                       className="bsp-row bsp-tm-row"
                       data-testid={`member-${m.email}`}
                     >
-                      <TeamAvatar initials={personInitials(m.name, m.email)} index={index} />
+                      <TeamAvatar
+                        initials={personInitials(m.name, m.email)}
+                        index={index}
+                        src={avatarOf(m.userId)}
+                      />
                       <span className="bsp-tm-main">
                         <span className="bsp-tm-name" data-testid={`member-name-${m.email}`}>
                           {m.name?.trim() || m.email}

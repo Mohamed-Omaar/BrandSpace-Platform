@@ -728,6 +728,18 @@ export const messages = {
     'data.myNotes.title': 'ملاحظاتي',
     'data.myNotes.body': 'نزّل ملاحظاتك الخاصة في مساحة العمل هذه وتذكيراتها. لا يراها أحد غيرك.',
     'data.download': 'تنزيل',
+    'picture.avatar.title': 'صورتك',
+    'picture.avatar.body':
+      'تظهر بجانب اسمك في المنشورات والموافقات والملاحظات والفريق والإشعارات. يراها أعضاء مساحات عملك فقط.',
+    'picture.logo.title': 'شعار النشاط التجاري',
+    'picture.logo.body':
+      'يظهر في مبدّل الأنشطة التجارية بدل الحرف الأول. يراه أعضاء مساحة العمل فقط.',
+    'picture.choose': 'اختيار صورة',
+    'picture.save': 'حفظ الصورة',
+    'picture.remove': 'إزالة',
+    'picture.hint': 'PNG أو JPEG أو WebP. تُقص الصورة مربعًا قبل الرفع.',
+    'picture.preview': 'معاينة الصورة',
+    'person.createdBy': 'أنشأه {name}',
     'myNotes.tab.team': 'ملاحظات الفريق',
     'myNotes.tab.mine': 'ملاحظاتي',
     'myNotes.tabs': 'نوع الملاحظات',
@@ -5243,6 +5255,18 @@ export const messages = {
     'data.myNotes.body':
       'Download your own notes in this workspace and their reminders. Nobody else can see them.',
     'data.download': 'Download',
+    'picture.avatar.title': 'Your photo',
+    'picture.avatar.body':
+      'Shown beside your name on posts, approvals, notes, the team page and notifications. Only members of your workspaces see it.',
+    'picture.logo.title': 'Business logo',
+    'picture.logo.body':
+      'Shown in the business switcher instead of the first letter. Only members of this workspace see it.',
+    'picture.choose': 'Choose a picture',
+    'picture.save': 'Save picture',
+    'picture.remove': 'Remove',
+    'picture.hint': 'PNG, JPEG or WebP. The picture is cropped square before it is uploaded.',
+    'picture.preview': 'Picture preview',
+    'person.createdBy': 'Created by {name}',
     'myNotes.tab.team': 'Team notes',
     'myNotes.tab.mine': 'My notes',
     'myNotes.tabs': 'Which notes',
@@ -9254,6 +9278,30 @@ export function optionalMessage(locale: string, key: string): string | null {
  * reach the address bar, the browser history or an access log.
  */
 const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
+  // PR D (D-607) — avatars and the workspace logo.
+  'picture-saved': { en: 'Picture saved.', ar: 'حُفظت الصورة.' },
+  'picture-removed': { en: 'Picture removed.', ar: 'أُزيلت الصورة.' },
+  'picture-missing': { en: 'Choose a picture first.', ar: 'اختر صورة أولًا.' },
+  'picture-type': {
+    en: 'Use a PNG, JPEG or WebP picture.',
+    ar: 'استخدم صورة بصيغة PNG أو JPEG أو WebP.',
+  },
+  'picture-too-large': {
+    en: 'That picture is larger than the upload limit. Choose a smaller one.',
+    ar: 'هذه الصورة أكبر من حد الرفع. اختر صورة أصغر.',
+  },
+  'picture-unsafe': {
+    en: 'That file did not pass the safety check, so it was not saved.',
+    ar: 'لم يجتز هذا الملف فحص الأمان، فلم يُحفظ.',
+  },
+  'picture-scan-failed': {
+    en: 'The safety check could not finish. Try again in a moment.',
+    ar: 'تعذّر إكمال فحص الأمان. حاول مجددًا بعد قليل.',
+  },
+  'picture-unavailable': {
+    en: 'Picture uploads are not available right now.',
+    ar: 'رفع الصور غير متاح الآن.',
+  },
   // B5 — "request changes" needs a reason.
   NOTE_REQUIRED: {
     en: 'Say what should change before asking for changes.',

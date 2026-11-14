@@ -1,4 +1,5 @@
 import type React from 'react';
+import { PersonAvatar } from '../../../components/person-avatar';
 import Link from 'next/link';
 import { MoreDisclosure } from '../../../components/more-disclosure';
 import {
@@ -63,6 +64,15 @@ export interface ApprovalRow {
   readonly cover?: ApprovalCover | null | undefined;
   /** Round 3 — the row's second line: "From Omar · 2 hours ago". */
   readonly fromLabel?: string | undefined;
+  /** PR D (D-607) — who sent it, as a small avatar before that line. */
+  readonly requestedBy?: ApprovalPerson | undefined;
+}
+
+/** PR D (D-607) — a person in this screen: their photo, or their initials. */
+export interface ApprovalPerson {
+  readonly initials: string;
+  readonly src: string | null;
+  readonly index: number;
 }
 
 /** A post's first picture, as `firstPictures` resolves it. */
@@ -95,6 +105,8 @@ export interface ReviewSubjectView {
   readonly coverHeadline?: string | undefined;
   /** "From Omar · 2 hours ago" under the title. */
   readonly fromLabel?: string | undefined;
+  /** PR D (D-607) — who sent it, as a small avatar before that line. */
+  readonly requestedBy?: ApprovalPerson | undefined;
   /** The planned time ("Oct 16 · 10:00"), or the words for none. */
   readonly requestedTimeLabel?: string | undefined;
   /**
@@ -264,6 +276,14 @@ export function ApprovalsView({
                             {row.itemTitle}
                           </span>
                           <span className="bsp-apr-meta">
+                            {row.requestedBy ? (
+                              <PersonAvatar
+                                initials={row.requestedBy.initials}
+                                index={row.requestedBy.index}
+                                src={row.requestedBy.src}
+                                className="bsp-person-mini"
+                              />
+                            ) : null}
                             {row.fromLabel ??
                               `${t('approvals.requestedBy')} ${row.requestedByLabel} · ${row.requestedAtLabel}`}
                             {row.assignedToLabel ? (
@@ -437,6 +457,14 @@ export function ApprovalsView({
                   {review.itemTitle}
                 </div>
                 <div className="bsp-apr-sub">
+                  {review.requestedBy ? (
+                    <PersonAvatar
+                      initials={review.requestedBy.initials}
+                      index={review.requestedBy.index}
+                      src={review.requestedBy.src}
+                      className="bsp-person-mini"
+                    />
+                  ) : null}
                   {review.fromLabel ?? `${t('approvals.requestedBy')} ${review.requestedByLabel}`}
                 </div>
               </div>

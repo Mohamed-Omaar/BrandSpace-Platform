@@ -128,10 +128,7 @@ export default async function NotificationSettingsPage({
             neither the note's title nor its text is in it. The same row as
             above, in a card of its own because it is a different channel.
           */}
-          <section
-            className="bsp-xcard bsp-nt-card"
-            data-testid="notification-email-preferences"
-          >
+          <section className="bsp-xcard bsp-nt-card" data-testid="notification-email-preferences">
             <div className="bsp-nt-head" aria-hidden="true">
               <span>{t('notificationPrefs.colEvent')}</span>
               <span className="bsp-nt-c">{t('notificationPrefs.colEmail')}</span>

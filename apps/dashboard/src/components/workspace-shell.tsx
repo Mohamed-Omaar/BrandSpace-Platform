@@ -48,6 +48,7 @@ import { incomingMentions } from '../server/incoming-mentions';
 import { getCustomer, getSessionToken, listWorkspacesOnce } from '../server/customer-context';
 import { greetingName } from '../server/home';
 import { businessSwitcherModel } from '../server/business-switcher';
+import { avatarHref, logoVersions, ownAvatarVersion, workspaceLogoHref } from '../server/pictures';
 import {
   brandAllowance,
   brandUsage,
@@ -618,6 +619,17 @@ export async function WorkspaceShell({
           usage: accountFoot.allowed === null ? null : `${accountFoot.used}/${accountFoot.allowed}`,
         }
       : null;
+  /*
+   * PR D (D-607) — the workspace logo in the card and on each business in the
+   * menu, the letter where there is none. Each read in that workspace's own
+   * context; the list is the session's own memberships.
+   */
+  const logos = await logoVersions([
+    ...(me?.activeWorkspaceId ? [me.activeWorkspaceId] : []),
+    ...(switcher?.options.map((option) => option.id) ?? []),
+  ]);
+  const logoOf = (workspaceId: string | null | undefined) =>
+    workspaceId ? workspaceLogoHref(locale, workspaceId, logos.get(workspaceId) ?? null) : null;
   const usage =
     switcher && switcher.foot.kind !== 'none' && switcher.foot.kind !== 'unavailable'
       ? switcher.foot.allowed === null
@@ -703,12 +715,13 @@ export async function WorkspaceShell({
           </span>
         }
         current={{
+          pictureSrc: logoOf(me?.activeWorkspaceId),
           name: brandContext.brands[0]?.name ?? workspaceName,
           // The prototype's card reads "Active brand"; Role · Plan stays on each
           // business in the menu (review of #67, round 2).
           caption: brandContext.brands[0] ? t('brand.selectedCaption') : switcher.currentCaption,
         }}
-        options={switcher.options}
+        options={switcher.options.map((option) => ({ ...option, logoSrc: logoOf(option.id) }))}
         action={switchWorkspaceAction}
         hiddenFields={{ locale }}
         footer={
@@ -808,7 +821,11 @@ export async function WorkspaceShell({
     ) : brandContext.brands[0] ? (
       <PrototypeBrandCard
         label={t('brand.cardLabel')}
-        current={{ name: brandContext.brands[0].name, caption: t('brand.selectedCaption') }}
+        current={{
+          name: brandContext.brands[0].name,
+          caption: t('brand.selectedCaption'),
+          pictureSrc: logoOf(me?.activeWorkspaceId),
+        }}
         href={
           mayReadBrandProfile
             ? `/${locale}/settings/brand?brand=${brandContext.brands[0].id}`
@@ -1037,6 +1054,7 @@ export async function WorkspaceShell({
       email={personName ? personEmail : undefined}
       role={customerRoleName(roleName)}
       initials={initialsFrom(latinInitialsFrom ?? identity)}
+      avatarSrc={me ? avatarHref(locale, me.userId, await ownAvatarVersion()) : null}
     >
       {typeof counts.credits === 'number' && anyAi ? (
         /*

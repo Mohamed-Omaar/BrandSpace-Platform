@@ -26,7 +26,9 @@ import {
   type ReviewSubjectView,
 } from './approvals-view';
 import { decideApprovalAction, withdrawApprovalAction } from './actions';
+import { initialsFrom } from '@brandspace/ui';
 import { whenLabel } from '../../../server/prototype-dates';
+import { avatarHref, pictureVersions } from '../../../server/pictures';
 
 export const dynamic = 'force-dynamic';
 
@@ -308,6 +310,14 @@ export default async function ApprovalsPage({
     t('approvals.fromWhen')
       .replace('{name}', nameOf(userId))
       .replace('{when}', relativeTime(at, now, locale));
+  // PR D (D-607) — who sent each one, as their photo or their initials.
+  const requesters = [...memberNames.keys()];
+  const requesterAvatars = await pictureVersions(workspace.workspaceId, requesters);
+  const personOf = (userId: string) => ({
+    initials: initialsFrom(memberNames.get(userId) ?? '—'),
+    src: avatarHref(locale, userId, requesterAvatars.get(userId) ?? null),
+    index: Math.max(0, requesters.indexOf(userId)),
+  });
   const pictures = await firstPictures({
     locale,
     workspaceId: workspace.workspaceId,
@@ -361,6 +371,7 @@ export default async function ApprovalsPage({
       brandName: brandNames.get(row.brandId) ?? '—',
       status: row.status,
       requestedByLabel: nameOf(row.requestedByUserId),
+      requestedBy: personOf(row.requestedByUserId),
       requestedAtLabel: dateFormat.format(row.createdAt),
       cycle: row.cycle,
       requestNote: row.requestNote,
@@ -381,6 +392,7 @@ export default async function ApprovalsPage({
     brandName: brandNames.get(row.brandId) ?? '—',
     status: row.status,
     requestedByLabel: nameOf(row.requestedByUserId),
+    requestedBy: personOf(row.requestedByUserId),
     requestedAtLabel: dateFormat.format(row.createdAt),
     cycle: row.cycle,
     requestNote: row.requestNote,
@@ -427,6 +439,7 @@ export default async function ApprovalsPage({
         cycle: review.cycle,
         requestNote: review.requestNote,
         requestedByLabel: nameOf(review.requestedByUserId),
+        requestedBy: personOf(review.requestedByUserId),
         mayDecide: review.mayDecide,
         // Round 4 (5.1): the reason there are no verdicts, said where they would be.
         blockedAsSelf: queueRows.some((row) => row.id === review.approvalId && row.blockedAsSelf),

@@ -8,6 +8,7 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
+import { avatarHref, memberAvatarVersions } from '../server/pictures';
 import {
   NOTE_MANAGE_PERMISSION,
   type NoteSubject,
@@ -230,6 +231,8 @@ async function NoteThread({
   );
   const notes = await inNotes(locale, ({ service, actor }) => service.notesIn(threadId, actor));
   const names = new Map(members.map((member) => [member.userId, member.name]));
+  // PR D (D-607) — each author's photo, when they have one.
+  const avatars = await memberAvatarVersions(members.map((member) => member.userId));
   const assignee = thread.assignedToUserId ? names.get(thread.assignedToUserId) : null;
   const overdue = thread.dueAt !== null && status === 'OPEN' && thread.dueAt < now;
 
@@ -292,7 +295,18 @@ async function NoteThread({
             style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: spacingTokens.sm }}
           >
             <span aria-hidden="true" style={avatarStyle}>
-              {(names.get(note.authorUserId) ?? '?').slice(0, 1).toUpperCase()}
+              {avatars.has(note.authorUserId) ? (
+                <img
+                  className="bsp-pic"
+                  src={
+                    avatarHref(locale, note.authorUserId, avatars.get(note.authorUserId) ?? null) ??
+                    ''
+                  }
+                  alt=""
+                />
+              ) : (
+                (names.get(note.authorUserId) ?? '?').slice(0, 1).toUpperCase()
+              )}
             </span>
             <div style={{ display: 'grid', gap: spacingTokens['3xs'], minInlineSize: 0 }}>
               <p
@@ -498,6 +512,7 @@ const avatarStyle = {
   inlineSize: 'var(--bsp-rem-1-75)',
   blockSize: 'var(--bsp-rem-1-75)',
   borderRadius: '50%',
+  overflow: 'hidden',
   background: colorTokens.surfaceLavenderStrong,
   color: colorTokens.brandPurplePressed,
   ...typographyTokens.caption,
