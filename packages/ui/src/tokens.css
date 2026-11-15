@@ -3346,3 +3346,65 @@ button[data-pending] {
 .bs-cfg-issue-data > code {
   font-family: var(--bs-font-mono);
 }
+
+/*
+ * PR G — THE IMAGE COMPARISON BENCH (Control Center → AI & integrations →
+ * Image comparison). The form's fields in a wrapping row; the two results side
+ * by side, one under the other on a narrow screen; each image at the card's
+ * width.
+ */
+.bs-cmp-form {
+  display: grid;
+  gap: var(--bs-space-md);
+  margin-block: var(--bs-space-lg);
+}
+.bs-cmp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bs-space-md);
+}
+.bs-cmp-form button[type='submit'] {
+  justify-self: start;
+}
+.bs-cmp-grid {
+  display: flex;
+  gap: var(--bs-space-md);
+}
+.bs-cmp-grid > * {
+  flex: 1 1 0;
+  min-inline-size: 0;
+}
+@media (max-width: 767.98px) {
+  .bs-cmp-grid {
+    flex-direction: column;
+  }
+}
+.bs-cmp-side {
+  display: grid;
+  gap: var(--bs-space-sm);
+}
+.bs-cmp-model {
+  overflow-wrap: anywhere;
+}
+.bs-cmp-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--bs-space-xs) var(--bs-space-md);
+  margin: 0;
+}
+.bs-cmp-facts dt {
+  color: var(--bs-text-secondary);
+}
+.bs-cmp-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.bs-cmp-img {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  border-radius: var(--bs-radius-md);
+}
+.bs-cmp-failed {
+  color: var(--bs-danger);
+}

@@ -319,9 +319,10 @@ describe('D-573 · Test Connection reads, generates nothing, and says only the c
 
 describe('D-573 · one registry, pinned to the Control Center catalogue', () => {
   it('production registers every real adapter and no development double', () => {
-    expect([...registeredAiAdapterKeys(true)]).toEqual(['openai']);
+    // PR G (D-611): Google's image adapter is the second real one.
+    expect([...registeredAiAdapterKeys(true)]).toEqual(['openai', 'gemini']);
     expect(registeredAiAdapterKeys(false).has('mock')).toBe(true);
-    expect([...aiAdapterRegistry('PRODUCTION').keys()]).toEqual(['openai']);
+    expect([...aiAdapterRegistry('PRODUCTION').keys()]).toEqual(['openai', 'gemini']);
     expect(DEVELOPMENT_ONLY_AI_ADAPTERS.has('mock')).toBe(true);
     expect(DEVELOPMENT_ONLY_AI_ADAPTERS.has('openai')).toBe(false);
   });

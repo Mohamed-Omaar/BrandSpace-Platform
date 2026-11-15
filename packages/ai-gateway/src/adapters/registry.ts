@@ -1,6 +1,7 @@
 import type { AdapterRegistry, AiModality, AiProviderAdapter } from '../adapter';
 import { MockProviderAdapter } from './mock';
 import { OPENAI_DESCRIPTOR, OpenAiAdapter, type OpenAiAdapterOptions } from './openai';
+import { GEMINI_DESCRIPTOR, GeminiAdapter, type GeminiAdapterOptions } from './gemini';
 
 /**
  * D-573 — THE ADAPTER REGISTRY, IN ONE PLACE.
@@ -50,11 +51,14 @@ interface RealAdapter {
 /** Every real provider adapter. One line per provider. */
 const REAL_ADAPTERS: readonly RealAdapter[] = [
   { descriptor: OPENAI_DESCRIPTOR, create: (options) => new OpenAiAdapter(options.openai ?? {}) },
+  // PR G (D-611): Google's image models, a second image provider.
+  { descriptor: GEMINI_DESCRIPTOR, create: (options) => new GeminiAdapter(options.gemini ?? {}) },
 ];
 
 export interface AiAdapterRegistryOptions {
   /** A test injects a fake-server transport here; production never passes it. */
   readonly openai?: OpenAiAdapterOptions;
+  readonly gemini?: GeminiAdapterOptions;
   /** The development double's behaviour (E2E and local work). */
   readonly mock?: ConstructorParameters<typeof MockProviderAdapter>[0];
 }
@@ -100,3 +104,5 @@ export function aiAdapterDescriptor(key: string): AiAdapterDescriptor | undefine
 
 export { OpenAiAdapter, OPENAI_ADAPTER_KEY } from './openai';
 export type { OpenAiAdapterOptions } from './openai';
+export { GeminiAdapter, GEMINI_ADAPTER_KEY, geminiImageConfig } from './gemini';
+export type { GeminiAdapterOptions } from './gemini';
