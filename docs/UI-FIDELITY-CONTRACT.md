@@ -2718,3 +2718,13 @@ photo upload and no logo upload.
 - **Owner decision (D-468 (a))**: a post card's "created by" is the author's photo, not the
   written name; the name is its tooltip and accessible name.
 - **Proof**: `tests/e2e/pr-d-personal-notes-pictures.spec.ts`; screenshots in the PR.
+
+### 6.3.84 Copilot answers as Markdown (owner, 2026-11-14)
+
+The prototype draws an answer as one bubble of text and never shows Markdown, so how a heading, a
+list or a link looks inside the bubble is an extension. It composes only what the bubble already
+has: the bubble's own colour and type (everything inherits, so light and dark both hold), the brand
+purple for list markers and the link underline, the mono token for code, logical padding for list
+indents (markers on the right in Arabic) and an `--bsp-px-8` gap between blocks. "Worked on: …"
+moved out of the bubble's text to a caption line above it in `--bs-text-secondary`. No new colour,
+font, shadow or interaction.
