@@ -284,6 +284,9 @@ export const ADVANCED_SECTIONS: readonly ConsoleNavSection[] = [
         'spark',
       ),
       advanced('/routing', 'nav.routing', 'page.routing', 'platform.configuration.read', 'route'),
+      // PR G (D-611): the Platform Owner's bench — one brief on two image models.
+      // `platform.user.manage` is held by that role alone; the page checks the role too.
+      advanced('/ai-compare', 'nav.aiCompare', 'page.aiCompare', 'platform.user.manage', 'spark'),
     ],
   },
   {

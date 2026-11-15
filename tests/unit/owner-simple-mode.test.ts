@@ -210,6 +210,8 @@ describe('D-308 · two navigations', () => {
       ['/providers', 'nav-nav.providers', 'platform.configuration.read'],
       ['/ai-models', 'nav-nav.aiRegistry', 'platform.configuration.read'],
       ['/routing', 'nav-nav.routing', 'platform.configuration.read'],
+      // PR G (D-611): the Platform Owner's image comparison bench.
+      ['/ai-compare', 'nav-nav.aiCompare', 'platform.user.manage'],
       ['/audit', 'nav-nav.audit', 'platform.audit.read'],
       ['/ai-usage', 'nav-nav.aiUsage', 'platform.ai.usage.read'],
       ['/health', 'nav-nav.health', 'platform.workspace.read'],
@@ -234,6 +236,7 @@ describe('D-308 · two navigations', () => {
       '/providers',
       '/ai-models',
       '/routing',
+      '/ai-compare',
       '/audit',
       '/ai-usage',
     ]);

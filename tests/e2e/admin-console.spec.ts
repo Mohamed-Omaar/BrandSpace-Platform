@@ -829,3 +829,56 @@ test.describe('layout never overflows horizontally', () => {
     }
   });
 });
+
+test.describe('PR G · the image comparison bench (Platform Owner only)', () => {
+  for (const locale of ['en', 'ar'] as const) {
+    test(`one brief on two image models: time, cost and the images side by side (${locale})`, async ({
+      page,
+    }) => {
+      test.setTimeout(120_000);
+      await signIn(page, locale);
+      await page.getByTestId('nav-nav.aiCompare').click();
+      await expect(page).toHaveURL(new RegExp(`/${locale}/console/ai-compare`));
+      await page.getByTestId('compare-brief').fill('A cup of coffee on a wooden table');
+      await page.getByTestId('compare-format').selectOption('1080x1350');
+      await page.getByTestId('compare-run').click();
+      const results = page.getByTestId('compare-results');
+      await expect(results).toBeVisible({ timeout: 60_000 });
+      for (const index of [0, 1]) {
+        await expect(page.getByTestId(`compare-image-${index}`)).toBeVisible();
+        await expect(page.getByTestId(`compare-time-${index}`)).toHaveText(/^\d+\.\d s$/);
+        await expect(page.getByTestId(`compare-cost-${index}`)).toHaveText(/\d+\.\d{4} USD/);
+      }
+      if (locale === 'ar') {
+        await expect(page.getByText('الوقت').first()).toBeVisible();
+      }
+      // The run is audited: models, time and cost — never the brief.
+      const row = await withPlatformPrisma((prisma) =>
+        prisma.auditEvent.findFirst({
+          where: { action: 'platform.ai.image_comparison' },
+          orderBy: { occurredAt: 'desc' },
+          select: { reason: true },
+        }),
+      );
+      expect(row?.reason).toMatch(/Image comparison 1080x1350 medium: .* ok \d+ms cost/);
+      expect(row?.reason).not.toContain('coffee');
+    });
+  }
+
+  test('a read-only operator neither sees it nor opens it', async ({ page }) => {
+    const operator = credentials().operator;
+    if (!operator)
+      throw new Error('No read-only operator in the end-to-end credentials: run `pnpm e2e:seed`.');
+    await page.goto(`${ADMIN_BASE_URL}/en/login`);
+    await page.getByTestId('email').fill(operator.email);
+    await page.getByTestId('password').fill(operator.password);
+    await page.getByTestId('submit').click();
+    await expect(page).toHaveURL(`${ADMIN_BASE_URL}/en/mfa`);
+    await page.getByTestId('mfa-code').fill(totpCode(operator.totpSecret));
+    await page.getByTestId('submit').click();
+    await expect(page).toHaveURL(`${ADMIN_BASE_URL}/en/console`);
+    await expect(page.getByTestId('nav-nav.aiCompare')).toHaveCount(0);
+    const response = await page.goto(`${ADMIN_BASE_URL}/en/console/ai-compare`);
+    expect(response?.status()).toBe(404);
+  });
+});

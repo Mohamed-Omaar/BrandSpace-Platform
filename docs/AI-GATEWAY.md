@@ -1084,3 +1084,24 @@ Whether a request reasons is declared, never inferred from a model's name:
 The route's effort wins (`reasonsWith`). A request that reasons is sent no temperature. A route that
 names an effort sends it as `reasoning_effort`. A request that does not reason is sent its route's
 temperature as before.
+
+## 19. PR G (D-611) — Google Gemini, a second image provider
+
+- **Adapter:** `packages/ai-gateway/src/adapters/gemini.ts`, registered as `gemini` (one line in
+  `REAL_ADAPTERS`). Images only: `models/{model}:generateContent` with `responseModalities:
+["IMAGE"]`, the key in `x-goog-api-key`, through `egress.ts` (official host
+  `generativelanguage.googleapis.com` plus the owner's allow-list, pinned DNS, no redirects).
+- **Size:** the gateway's resolved `WIDTH×HEIGHT` becomes Google's closest aspect ratio and a size
+  class (1K / 2K / 4K by the longer edge). One request per image.
+- **Usage:** `imageCount`, plus Google's prompt tokens and output tokens (image + thinking), so the
+  bench and the request row show what a call really used. Priced by the model's entered per-image
+  rate, like any image model.
+- **Failures:** safety and policy stops are `CONTENT_FILTERED`; `MAX_TOKENS` is
+  `OUTPUT_TRUNCATED`; a wrong key (HTTP 400 "API key not valid") is `AUTH_ERROR`;
+  `RESOURCE_EXHAUSTED` is `RATE_LIMITED`, or `QUOTA_EXCEEDED` when the message says quota.
+- **Routing is unchanged.** Nothing routes to Gemini until the owner activates a model and a route
+  names it. Activation, prices and data terms: `docs/pricing/PR-G-GEMINI-ACTIVATION.md`.
+- **The image comparison bench** (Control Center → AI & integrations → Image comparison, Platform
+  Owner only): one brief on two image models at once, each through its own adapter with its saved
+  key; time, provider cost by the entered rates, reported tokens and the image, side by side.
+  Audited as `platform.ai.image_comparison` (models, time, cost; never the brief or the images).
