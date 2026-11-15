@@ -197,6 +197,19 @@ export default async function ConfigurationPage({
             value={editableVersion.lockVersion}
             data-testid="draft-lock-version"
           />
+          {/*
+            PR F — THE LAST VALIDATION OF THIS DRAFT, IN FULL: every error and
+            warning with the field it is about, so the text that blocks an
+            activation is read here, beside the JSON it points into.
+          */}
+          {editableVersion.validationReport ? (
+            <ValidationIssues
+              issues={editableVersion.validationReport.issues}
+              isArabic={isArabic}
+              testId="draft-validation"
+              open
+            />
+          ) : null}
           <Field
             label={
               isArabic
@@ -256,8 +269,6 @@ export default async function ConfigurationPage({
             ]}
           >
             {versions.map((version) => {
-              const errors =
-                version.validationReport?.issues.filter((i) => i.severity === 'error').length ?? 0;
               const high = version.impactPreview?.highImpactCount ?? 0;
               return (
                 <tr key={version.id} data-testid={`version-${version.versionNumber}`}>
@@ -267,13 +278,15 @@ export default async function ConfigurationPage({
                   </Cell>
                   <Cell>{version.changeReason}</Cell>
                   <Cell>
-                    {version.validationReport
-                      ? errors === 0
-                        ? isArabic
-                          ? 'صالح'
-                          : 'Valid'
-                        : `${errors} ${isArabic ? 'أخطاء' : 'errors'}`
-                      : '—'}
+                    {version.validationReport ? (
+                      <ValidationIssues
+                        issues={version.validationReport.issues}
+                        isArabic={isArabic}
+                        testId={`validation-${version.versionNumber}`}
+                      />
+                    ) : (
+                      '—'
+                    )}
                   </Cell>
                   <Cell>
                     {version.impactPreview ? (
@@ -462,3 +475,85 @@ export default async function ConfigurationPage({
  * from the design system, so the primary action here is ink like every other
  * primary action in the product.
  */
+
+/**
+ * PR F — EVERY VALIDATION ISSUE, NOT A COUNT.
+ *
+ * The Versions row used to say "3 errors" and nothing else, so an operator
+ * could not see what to fix (the ai.routing v7 draft). This lists each issue:
+ * its severity, the path in the document it is about, and the validator's own
+ * message. Errors first, then warnings. The words around them are in the
+ * operator's language; the path and the message are configuration data and
+ * read left to right, as the JSON editor does, in an Arabic interface too.
+ */
+function ValidationIssues({
+  issues,
+  isArabic,
+  testId,
+  open,
+}: {
+  readonly issues: readonly {
+    readonly severity: 'error' | 'warning';
+    readonly path: string;
+    readonly message: string;
+  }[];
+  readonly isArabic: boolean;
+  readonly testId: string;
+  readonly open?: boolean;
+}) {
+  const errors = issues.filter((issue) => issue.severity === 'error');
+  const warnings = issues.filter((issue) => issue.severity === 'warning');
+  if (issues.length === 0) {
+    return <span data-testid={testId}>{isArabic ? 'صالح' : 'Valid'}</span>;
+  }
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const summary = [
+    errors.length > 0
+      ? isArabic
+        ? count(errors.length, 'خطأ', 'أخطاء')
+        : count(errors.length, 'error', 'errors')
+      : null,
+    warnings.length > 0
+      ? isArabic
+        ? count(warnings.length, 'تحذير', 'تحذيرات')
+        : count(warnings.length, 'warning', 'warnings')
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <details
+      className="bs-cfg-issues"
+      data-testid={testId}
+      data-tone={errors.length > 0 ? 'error' : 'warning'}
+      open={open}
+    >
+      <summary>
+        {errors.length === 0 ? `${isArabic ? 'صالح' : 'Valid'} · ${summary}` : summary}
+      </summary>
+      <ol className="bs-cfg-issues-list">
+        {[...errors, ...warnings].map((issue, index) => (
+          <li
+            key={`${issue.severity}-${issue.path}-${index}`}
+            className="bs-cfg-issue"
+            data-testid={`${testId}-issue`}
+            data-severity={issue.severity}
+          >
+            <span className="bs-cfg-issue-sev">
+              {issue.severity === 'error'
+                ? isArabic
+                  ? 'خطأ'
+                  : 'Error'
+                : isArabic
+                  ? 'تحذير'
+                  : 'Warning'}
+            </span>{' '}
+            <span className="bs-cfg-issue-data" dir="ltr">
+              <code>{issue.path}</code> — {issue.message}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}

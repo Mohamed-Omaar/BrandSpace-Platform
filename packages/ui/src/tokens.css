@@ -3304,3 +3304,45 @@ button[data-pending] {
   gap: var(--bs-space-sm);
   cursor: progress;
 }
+
+/*
+ * PR F — A CONFIGURATION VERSION'S VALIDATION, IN FULL (Control Center →
+ * Configuration: the Versions row and the draft editor). The caption size the
+ * page's other details use; errors in the danger ink, warnings in the warning
+ * ink; the path and message are data and read left to right.
+ */
+.bs-cfg-issues > summary {
+  cursor: pointer;
+  font-size: var(--bsp-fs-9);
+  line-height: var(--bsp-rem-0-75);
+  font-weight: 700;
+  color: var(--bs-text-primary);
+}
+.bs-cfg-issues[data-tone='error'] > summary {
+  color: var(--bs-danger);
+}
+.bs-cfg-issues-list {
+  display: grid;
+  gap: var(--bs-space-xs);
+  margin: 0;
+  margin-block-start: var(--bs-space-sm);
+  padding-inline-start: var(--bs-space-md);
+}
+.bs-cfg-issue {
+  font-size: var(--bsp-fs-9);
+  line-height: var(--bsp-rem-0-75);
+  color: var(--bs-text-secondary);
+}
+.bs-cfg-issue-sev {
+  font-weight: 700;
+  color: var(--bs-warning);
+}
+.bs-cfg-issue[data-severity='error'] .bs-cfg-issue-sev {
+  color: var(--bs-danger);
+}
+.bs-cfg-issue-data {
+  unicode-bidi: isolate;
+}
+.bs-cfg-issue-data > code {
+  font-family: var(--bs-font-mono);
+}
