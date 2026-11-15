@@ -273,6 +273,9 @@ function darkColours(look: ThemeLook): Map<string, string> {
     '--bs-nav-pill-quiet',
     untilReadable(valueOf('--bs-nav-pill-quiet')!, out.get('--bs-text-primary')!, 4.5),
   );
+  // The floating Copilot button: nearly opaque in dark, so whatever passes
+  // under it (a pale post picture) cannot wash out its label.
+  out.set('--bs-fab-surface', formatColour({ ...parseColour(out.get('--bs-surface')!)!, a: 0.94 }));
   // Home's hero canvas and the ambient light behind the frame: soft on a dark
   // ground, soft enough that text over the brightest blob keeps 4.5:1.
   out.set('--bs-hero-blob-strength', '0.12');

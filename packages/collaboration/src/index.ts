@@ -30,3 +30,17 @@ export type {
   NoteThreadStatus,
   NoteThreadSummary,
 } from './notes';
+// PR D (D-609) — a person's own notes and reminders, private to them.
+export {
+  PersonalNotesService,
+  PERSONAL_NOTE_BODY_MAX,
+  PERSONAL_NOTE_LIST_MAX,
+  PERSONAL_NOTE_TITLE_MAX,
+  isReminderTimeZone,
+} from './personal-notes';
+export type {
+  PersonalNoteReminderView,
+  PersonalNoteView,
+  PersonalNotesOptions,
+  ReminderState,
+} from './personal-notes';

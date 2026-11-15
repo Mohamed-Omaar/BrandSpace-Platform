@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import {
   Banner,
@@ -75,6 +76,7 @@ export function GeneralFields({
   suggestedZones,
   brand,
   labels,
+  logoField,
 }: {
   readonly saved: {
     readonly name: string;
@@ -99,6 +101,8 @@ export function GeneralFields({
     readonly websiteUrl: string | null;
   } | null;
   readonly labels: GeneralFieldsLabels;
+  /** PR D (D-609): the business logo field, in the cell beside the time zone. */
+  readonly logoField?: ReactNode;
 }) {
   const [country, setCountry] = useState(saved.country);
   const [lastCountry, setLastCountry] = useState(saved.country);
@@ -255,6 +259,8 @@ export function GeneralFields({
           testId="settings-timezone"
         />
       </Field>
+
+      {logoField}
 
       {preview && (preview.kept > 0 || preview.unplanned.length > 0) ? (
         <div className="bsp-sg-span">

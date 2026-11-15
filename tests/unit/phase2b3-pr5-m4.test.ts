@@ -91,6 +91,9 @@ describe('M4 — the asks-first expiry index', () => {
       // PR A (D-605): the Copilot's "worked on" and images on a message.
       '20261111090000_copilot_message_activity',
       '20261114090000_creative_job_composition',
+      // PR D (D-609): personal notes and reminders, avatars, the workspace logo.
+      '20261114120000_personal_notes_avatars_workspace_logo',
+      '20261114120100_note_reminder_email_preference',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261013090000_brand_scope_not_null');
   });

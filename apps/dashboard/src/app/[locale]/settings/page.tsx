@@ -24,6 +24,8 @@ import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { saveSettingsAction } from './actions';
+import { PictureField } from '../../../components/picture-upload';
+import { logoVersions, workspaceLogoHref } from '../../../server/pictures';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,7 +93,14 @@ export default async function SettingsPage({
       };
     },
   );
+  // PR D (D-609): the business logo, a field of this form.
+  const logoSrc = workspaceLogoHref(
+    locale,
+    workspace.workspaceId,
+    (await logoVersions([workspace.workspaceId])).get(workspace.workspaceId) ?? null,
+  );
   const saved = {
+    logo: logoSrc,
     name: row.name,
     defaultLocale: row.defaultLocale,
     country: row.country,
@@ -217,6 +226,28 @@ export default async function SettingsPage({
                   timezoneKept: t('settings.timezoneKept'),
                   timezoneUnplanned: t('settings.timezoneUnplanned'),
                 }}
+                /*
+                  PR D (D-609) — THE BUSINESS LOGO, a field of this form in
+                  the cell beside the time zone: the one "Save changes" saves
+                  it, and the bar stays the column's last row.
+                */
+                logoField={
+                  <PictureField
+                    name="logo"
+                    removeName="removeLogo"
+                    currentSrc={logoSrc}
+                    fallback={Array.from(row.name.trim())[0]?.toUpperCase() ?? ''}
+                    shape="square"
+                    labels={{
+                      label: t('picture.logo.title'),
+                      choose: t('picture.choose'),
+                      remove: t('picture.removeLogo'),
+                      hint: t('picture.logo.hint'),
+                      preview: t('picture.preview'),
+                    }}
+                    testId="workspace-logo-upload"
+                  />
+                }
               />
             </div>
           </Card>

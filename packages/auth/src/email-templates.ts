@@ -192,6 +192,23 @@ const TEMPLATES: Readonly<Record<EmailTemplateKey, LocalisedTemplate>> = {
       body: 'استهلك طلب ذكاء اصطناعي أكثر من رصيده المحجوز بنسبة تتجاوز الهامش الذي حددته. لم يدفع العميل أكثر من السعر المعروض، وتحمّلت المنصة الفرق. افتح سجل التدقيق في مركز التحكم لمعرفة المهمة والنموذج.',
     },
   },
+  /*
+   * PR D (D-609) — the person's own note reminder. Generic on purpose: the
+   * note's title and body never leave the product in an email (owner
+   * condition 1). The link opens the person's notes, behind sign-in.
+   */
+  'note.reminder': {
+    EN: {
+      subject: 'A reminder from your Brandspace notes',
+      body: 'You asked Brandspace to remind you about one of your notes. Open your notes to see it.',
+      action: 'Open my notes',
+    },
+    AR: {
+      subject: 'تذكير من ملاحظاتك في Brandspace',
+      body: 'طلبت من Brandspace تذكيرك بإحدى ملاحظاتك. افتح ملاحظاتك لرؤيتها.',
+      action: 'فتح ملاحظاتي',
+    },
+  },
 };
 
 /** Escape for an HTML text node or a double-quoted attribute. */

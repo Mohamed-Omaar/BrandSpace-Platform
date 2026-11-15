@@ -136,6 +136,8 @@ import { createObjectStore } from '@brandspace/storage';
 import { connectionReauthNotifier } from '@brandspace/notifications';
 import { applicationResolver } from './routes/social';
 import { purgeAiApps } from './ai-apps/sweep';
+import { sendDueNoteReminders } from './note-reminders';
+import { deliverEmail } from './routes/internal-email';
 import { gateway as aiGateway } from './routes/phase7-context';
 import { AutomationAiExecutor, type RoutingRuleView } from './automation-ai-executor';
 import { WorkspaceDeletionService } from '@brandspace/onboarding';
@@ -2585,6 +2587,23 @@ export class MaintenanceScheduler {
     return purged;
   }
 
+  /**
+   * PR D (D-609) — the note reminders that are due: an in-app notification to
+   * the owner (no note text in it) and, when they asked for it, a generic email.
+   * See `note-reminders.ts`.
+   */
+  async sendNoteReminders(batch: number): Promise<number> {
+    return sendDueNoteReminders(
+      {
+        platform: getPlatformClient(),
+        clock: this.#clock,
+        email: { send: (message, workspaceId) => deliverEmail(message, workspaceId) },
+        dashboardBaseUrl: process.env['PUBLIC_DASHBOARD_BASE_URL'],
+      },
+      batch,
+    );
+  }
+
   /** One full pass of everything. Exposed so a test can run it deterministically. */
   async runOnce(): Promise<MaintenanceResult> {
     const cadence = await this.#cadence();
@@ -2721,6 +2740,10 @@ export class MaintenanceScheduler {
       const recovered = await this.recoverStuckIngestion(cadence.ingestionReconcileBatch);
       return recovered + (await this.reconcileIngestion(cadence.ingestionReconcileBatch));
     });
+    // PR D (D-609): due note reminders, on the reconciliation cadence (30 s by default).
+    every(cadence.ingestionReconcileSeconds, 'note-reminders', () =>
+      this.sendNoteReminders(cadence.ingestionReconcileBatch),
+    );
     every(cadence.retentionPurgeSeconds, 'retention-purge', async () => {
       const purged = await this.purgeRetention(cadence.retentionPurgeBatch);
       return purged.chat + purged.gateway;

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PersonAvatar } from '../../../components/person-avatar';
 import type { ReactNode } from 'react';
 import {
   AbstractMedia,
@@ -74,6 +75,12 @@ export interface LibraryCard {
   readonly updatedAt: string;
   readonly openNotes: number;
   readonly ownerName: string | null;
+  /** PR D (D-609) — the author's photo (or initials), shown instead of the name. */
+  readonly owner?: {
+    readonly initials: string;
+    readonly src: string | null;
+    readonly index: number;
+  } | null;
   /** The first image, as a grant URL, or a video/none marker. */
   readonly media:
     | { readonly kind: 'image'; readonly src: string; readonly count: number }
@@ -379,7 +386,27 @@ export function ContentLibrary({
         .join(' · ')}
       {' · '}
       <time dateTime={card.updatedAt}>{card.updatedLabel}</time>
-      {card.ownerName ? <span> · {card.ownerName}</span> : null}
+      {card.ownerName ? (
+        /*
+         * PR D (D-609) — "created by" as the author's avatar: the name is its
+         * tooltip and what a screen reader hears ("Created by Sara").
+         */
+        card.owner ? (
+          <span>
+            {' · '}
+            <PersonAvatar
+              className="bsp-person-mini"
+              initials={card.owner.initials}
+              index={card.owner.index}
+              src={card.owner.src}
+              label={t('person.createdBy').replace('{name}', card.ownerName)}
+              testId={`content-owner-${card.id}`}
+            />
+          </span>
+        ) : (
+          <span> · {card.ownerName}</span>
+        )
+      ) : null}
       {card.openNotes > 0 ? (
         <span data-testid={`content-notes-${card.id}`}>
           {' · '}

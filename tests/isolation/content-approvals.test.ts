@@ -120,13 +120,54 @@ const bystander = (): ApprovalActor => ({
   brandScope: [],
 });
 
+/**
+ * PR D — THE REVIEWER IS A REAL TEAMMATE. D-122 is the rule for a TEAM: with a
+ * solo business (one ACTIVE member) the author may decide their own review.
+ * Workspace A's only member used to be the owner, so the self-approval tests
+ * below were, without saying so, about a solo business; they run against a
+ * team again by giving `REVIEWER_ID` a user and an ACTIVE approver membership
+ * here, removed in `afterAll`. Their assertions are unchanged.
+ */
+async function setTeammate(status: 'ACTIVE' | 'SUSPENDED'): Promise<void> {
+  await platform.user.upsert({
+    where: { id: REVIEWER_ID },
+    create: {
+      id: REVIEWER_ID,
+      email: `reviewer-${REVIEWER_ID}@example.test`,
+      name: 'Teammate reviewer',
+      status: 'ACTIVE',
+      locale: 'EN',
+      timezone: 'UTC',
+    },
+    update: {},
+  });
+  const role = await platform.role.findFirstOrThrow({
+    where: { key: 'approver', realm: 'WORKSPACE' },
+  });
+  await platform.membership.upsert({
+    where: { workspaceId_userId: { workspaceId: fixtures.a.workspaceId, userId: REVIEWER_ID } },
+    create: {
+      workspaceId: fixtures.a.workspaceId,
+      userId: REVIEWER_ID,
+      roleId: role.id,
+      status,
+      brandScope: [],
+    },
+    update: { status },
+  });
+}
+
 beforeAll(async () => {
   app = appRoleClient();
   platform = platformRoleClient();
   fixtures = await createIsolationFixtures(app);
+  await setTeammate('ACTIVE');
 }, 60_000);
 
 afterAll(async () => {
+  await platform?.membership.deleteMany({
+    where: { workspaceId: fixtures.a.workspaceId, userId: REVIEWER_ID },
+  });
   await app?.$disconnect();
   await platform?.$disconnect();
 });
@@ -492,6 +533,76 @@ describe('D-122 — self-approval', () => {
     );
     expect(decided.status).toBe('APPROVED');
     expect(await statusOf()).toBe('APPROVED');
+  });
+});
+
+describe('PR D — a solo business approves its own posts', () => {
+  const authorWhoCanApprove = (): ApprovalActor => ({
+    ...author(),
+    permissionKeys: ['content.read', 'content.submit', 'content.approve'],
+  });
+
+  it('with ONE active member, the author may decide their own review, and the audit says why', async () => {
+    await setTeammate('SUSPENDED');
+    try {
+      const approval = await inA(({ approvals }) =>
+        approvals.submit({ itemId: itemId(), actor: author() }),
+      );
+      const subject = await inA(({ approvals }) =>
+        approvals.reviewSubject({ approvalId: approval.id, actor: authorWhoCanApprove() }),
+      );
+      expect(subject.mayDecide).toBe(true);
+      const decided = await inA(({ approvals }) =>
+        approvals.decide({
+          approvalId: approval.id,
+          verdict: 'APPROVE',
+          actor: authorWhoCanApprove(),
+        }),
+      );
+      expect(decided.status).toBe('APPROVED');
+      expect(await statusOf()).toBe('APPROVED');
+      const audit = await platform.auditEvent.findFirstOrThrow({
+        where: { resourceId: approval.id, action: 'content.approved' },
+      });
+      expect(audit.after).toMatchObject({ selfApproval: true, soloSelfApproval: true });
+    } finally {
+      await setTeammate('ACTIVE');
+    }
+  });
+
+  it('the moment a second person is active again, D-122 applies again', async () => {
+    await setTeammate('SUSPENDED');
+    const approval = await inA(({ approvals }) =>
+      approvals.submit({ itemId: itemId(), actor: author() }),
+    );
+    await setTeammate('ACTIVE');
+    await expect(
+      inA(({ approvals }) =>
+        approvals.decide({
+          approvalId: approval.id,
+          verdict: 'APPROVE',
+          actor: authorWhoCanApprove(),
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(await statusOf()).toBe('IN_REVIEW');
+  });
+
+  it('a solo member who may not approve still cannot: solo lifts the identity bar, not the permission', async () => {
+    await setTeammate('SUSPENDED');
+    try {
+      const approval = await inA(({ approvals }) =>
+        approvals.submit({ itemId: itemId(), actor: author() }),
+      );
+      await expect(
+        inA(({ approvals }) =>
+          approvals.decide({ approvalId: approval.id, verdict: 'APPROVE', actor: author() }),
+        ),
+      ).rejects.toThrow();
+      expect(await statusOf()).toBe('IN_REVIEW');
+    } finally {
+      await setTeammate('ACTIVE');
+    }
   });
 });
 

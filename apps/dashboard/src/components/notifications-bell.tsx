@@ -1,5 +1,6 @@
 'use client';
 
+import { PersonAvatar } from './person-avatar';
 import Link from 'next/link';
 import { useCallback, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { useDismissOnOutsidePointer, useOverlayBehaviour, usePresence } from '@brandspace/ui';
@@ -177,6 +178,14 @@ export function NotificationsBell({
                     {/* Review of #67 — unread is the row's dot and tint, as drawn;
                         the word stays for assistive technology. */}
                     <span className="bsp-ntf-m">
+                      {item.person ? (
+                        <PersonAvatar
+                          className="bsp-person-mini"
+                          initials={item.person.initials}
+                          src={item.person.src}
+                          index={0}
+                        />
+                      ) : null}
                       {item.unread ? <span className="bs-sr-only">{strings.unread} · </span> : null}
                       {[item.context, item.when].filter(Boolean).join(' · ')}
                     </span>

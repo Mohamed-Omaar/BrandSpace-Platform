@@ -12,6 +12,8 @@ import { relativeTime } from '../../../server/home';
 import { optionalMessage, statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { CONTENT_TYPES } from './content-types';
+import { initialsFrom } from '@brandspace/ui';
+import { avatarHref, pictureVersions } from '../../../server/pictures';
 import {
   ContentLibrary,
   type LibraryCard,
@@ -237,6 +239,9 @@ export default async function ContentPage({
     },
   );
 
+  // PR D (D-609) — each author's photo, for "created by".
+  const ownerAvatars = await pictureVersions(workspace.workspaceId, [...owners.keys()]);
+
   /*
    * THE FIRST PICTURE OF EACH POST, as an expiring grant — only for an asset
    * that is ready, clean and previewable inline (`firstPictures`).
@@ -421,6 +426,17 @@ export default async function ContentPage({
       updatedAt: item.updatedAt.toISOString(),
       openNotes: notes.get(item.id) ?? 0,
       ownerName: item.createdByUserId ? (owners.get(item.createdByUserId) ?? null) : null,
+      owner: item.createdByUserId
+        ? {
+            initials: initialsFrom(owners.get(item.createdByUserId) ?? '—'),
+            src: avatarHref(
+              locale,
+              item.createdByUserId,
+              ownerAvatars.get(item.createdByUserId) ?? null,
+            ),
+            index: Math.max(0, [...owners.keys()].indexOf(item.createdByUserId)),
+          }
+        : null,
       media: first ? { ...first, count: assetIds.length } : { kind: 'none' },
       excerpt: (primary?.body ?? '').slice(0, 280),
       // The headline the Studio draws on the first picture (its slide), if one was written.

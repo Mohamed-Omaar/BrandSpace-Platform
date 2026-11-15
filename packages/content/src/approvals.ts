@@ -472,7 +472,14 @@ export class ContentApprovalService {
        * composer offered.
        */
       const isSelf = chosen === input.actor.userId || chosen === item.createdByUserId;
-      if (!eligible || (isSelf && !policy.allowSelfApproval)) throw assigneeNotEligible();
+      const selfAllowed =
+        policy.allowSelfApproval ||
+        (isSelf &&
+          (await this.isSoloForBrand({
+            brandId: item.brandId,
+            barredUserIds: [input.actor.userId, item.createdByUserId],
+          })));
+      if (!eligible || (isSelf && !selfAllowed)) throw assigneeNotEligible();
     }
     /*
      * Q10 (D-325) — NOBODY CHOSEN MEANS THE DEFAULT REVIEWER, not nobody: the
@@ -653,7 +660,15 @@ export class ContentApprovalService {
     const isSelf =
       approval.requestedByUserId === input.actor.userId ||
       item.createdByUserId === input.actor.userId;
-    if (isSelf && !policy.allowSelfApproval) {
+    // PR D — unless nobody else could decide it: a solo business.
+    const soloSelfApproval =
+      isSelf &&
+      !policy.allowSelfApproval &&
+      (await this.isSoloForBrand({
+        brandId: approval.brandId,
+        barredUserIds: [approval.requestedByUserId, item.createdByUserId],
+      }));
+    if (isSelf && !policy.allowSelfApproval && !soloSelfApproval) {
       await this.#auditDenied(input.actor.userId, approval, 'self_approval');
       throw selfApprovalNotPermitted();
     }
@@ -745,6 +760,8 @@ export class ContentApprovalService {
         itemStatus: nextItem,
         cycle: approval.cycle,
         selfApproval: isSelf,
+        // PR D: allowed because nobody else may decide for this brand.
+        soloSelfApproval,
         hasNote: note !== null,
       },
     });
@@ -1117,6 +1134,20 @@ export class ContentApprovalService {
     });
     if (!item || item.deletedAt) throw contentItemNotFound();
 
+    const isSelf =
+      approval.requestedByUserId === input.actor.userId ||
+      item.createdByUserId === input.actor.userId;
+    // PR D — the solo exception `decide()` grants, so the card offers it too.
+    const selfAllowed =
+      policy.allowSelfApproval ||
+      (isSelf &&
+        mayReview &&
+        approval.status === 'PENDING' &&
+        (await this.isSoloForBrand({
+          brandId: item.brandId,
+          barredUserIds: [approval.requestedByUserId, item.createdByUserId],
+        })));
+
     return {
       approvalId: approval.id,
       itemId: item.id,
@@ -1141,11 +1172,7 @@ export class ContentApprovalService {
         mayReview &&
         approval.status === 'PENDING' &&
         // Q10 (D-325) — an assignment no longer limits who may decide.
-        !(
-          (approval.requestedByUserId === input.actor.userId ||
-            item.createdByUserId === input.actor.userId) &&
-          !policy.allowSelfApproval
-        ),
+        !(isSelf && !selfAllowed),
       variants: item.variants.map((v) => ({
         id: v.id,
         platformKey: v.platformKey,
@@ -1322,6 +1349,34 @@ export class ContentApprovalService {
         }),
       )
       .map((m) => m.userId);
+  }
+
+  /**
+   * PR D — A SOLO BUSINESS MAY APPROVE ITS OWN POSTS.
+   *
+   * D-122 bars the author and the requester from deciding so that a SECOND
+   * person reviews. A solo business has no second person: the workspace's one
+   * ACTIVE member is the barred one, so the bar could never get a review, only
+   * stop the post for ever. There it lifts. A team keeps D-122, including a
+   * team whose other members may not approve: the owner can give them the
+   * right. Asked fresh every time, like everything about WHO may decide — the
+   * moment a second person joins, the rule applies again.
+   */
+  async isSoloForBrand(input: {
+    brandId: string;
+    barredUserIds: readonly (string | null)[];
+  }): Promise<boolean> {
+    const active = await this.#db.membership.findMany({
+      where: { workspaceId: this.#workspaceId, status: 'ACTIVE' },
+      select: { userId: true },
+      take: 2,
+    });
+    if (active.length !== 1) return false;
+    const only = active[0]!.userId;
+    // The one member must be among the barred, and able to approve this brand.
+    if (!input.barredUserIds.includes(only)) return false;
+    const eligible = await this.eligibleReviewers({ brandId: input.brandId });
+    return eligible.includes(only);
   }
 
   /**

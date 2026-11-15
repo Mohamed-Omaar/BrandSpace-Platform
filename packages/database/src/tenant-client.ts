@@ -63,6 +63,42 @@ export async function withWorkspace<T>(
 }
 
 /**
+ * PR D (D-609) — THE WORKSPACE AND THE PERSON, for a person's private rows.
+ *
+ * `personal_note` and `personal_note_reminder` are readable only when BOTH
+ * `app.workspace_id` and `app.user_id` match the row. This sets the two, in
+ * the same transaction, before the callback runs: the same transaction-local
+ * `set_config(..., true)` as `withWorkspace`, so neither can outlive the
+ * transaction or leak across a pooled connection, and a transaction that never
+ * came through here has `app.user_id` unset — and sees no personal row.
+ *
+ * WHO CALLS IT, AND WITH WHAT. The caller passes the user id of the SIGNED-IN
+ * SESSION it has already resolved (the dashboard's `inPersonalNotes`, from
+ * `getCustomer()`), never a value taken from the request. Both ids are checked
+ * to be UUIDs first and passed as parameters, never interpolated.
+ */
+export async function withWorkspacePerson<T>(
+  workspaceId: string,
+  userId: string,
+  fn: (db: TenantScopedClient) => Promise<T>,
+  options: WithWorkspaceOptions = {},
+): Promise<T> {
+  assertValidWorkspaceId(workspaceId);
+  if (!UUID_PATTERN.test(userId)) {
+    throw new AppError('TENANT_CONTEXT_MISSING', 'Invalid user id for a personal context.');
+  }
+  const prisma = options.prisma ?? getPrisma();
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.workspace_id', ${workspaceId}, true)`;
+      await tx.$executeRaw`SELECT set_config('app.user_id', ${userId}, true)`;
+      return fn(tx as unknown as TenantScopedClient);
+    },
+    { timeout: options.timeoutMs ?? 15_000 },
+  );
+}
+
+/**
  * Authentication-only access, with NO workspace context.
  *
  * Needed because a login must resolve a user by email before any workspace is

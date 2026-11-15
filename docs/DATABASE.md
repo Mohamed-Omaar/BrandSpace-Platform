@@ -2260,3 +2260,24 @@ the credits charged, `attachedAt` and a `failureReason` key.
 - RLS forced; `tenant_isolation` for `brandspace_app`, `platform_access` for the sweep.
 - Retention: a finished row is deleted on the workspace's AI-content schedule, counted from
   `completedAt` (`purgeCreativeJobs`). Credits live in the ledger, never here.
+
+## 24. A person's own notes, photos and the workspace logo (D-609)
+
+- **`personal_note`** — `id`, `workspaceId`, `ownerUserId`, `title` (≤ 200), `body` (≤ 20,000),
+  `pinnedAt`, `createdAt`, `updatedAt`. Foreign keys to `workspace` and to the owner's `user` row
+  (both ON DELETE CASCADE); a title or a body is required. **RLS forced; readable and writable only when
+  `app.workspace_id` AND `app.user_id` match the row** (`withWorkspacePerson`). The platform role
+  holds **no privilege** on it.
+- **`personal_note_reminder`** — one per note (`noteId` unique): `remindAt`, `timeZone` (IANA),
+  `state` (`PENDING` | `SENT` | `DONE`), `sentAt`, `emailSentAt`, `doneAt`, `snoozeCount`. Same
+  RLS as the note; the platform role may only read and update (the API's due-reminder sweep). It
+  carries no note text. It goes with its note (a composite foreign key on `(workspaceId, noteId)`,
+  ON DELETE CASCADE).
+- **`notification_preference`** — the category `email.note_reminders` (one row, the person's own
+  opt-in to reminder emails; absence = off) joins the CHECK's list (migration
+  `20261114120100_note_reminder_email_preference`).
+- **`user.avatarKey`, `user.avatarUpdatedAt`** and **`workspace.logoKey`,
+  `workspace.logoUpdatedAt`** — object-store keys of a checked and scanned picture, and when it was
+  set (the cache-buster). The CHECKs fix the key shapes (`avatars/<user>/<uuid>.<png|jpeg|webp>`,
+  `workspaces/<id>/logo/<uuid>.<…>`) and that key and time are set together.
+- Removing a person's `user` row removes their notes and reminders in every workspace.
