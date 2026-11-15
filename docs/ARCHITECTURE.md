@@ -676,11 +676,23 @@ indistinguishable from one that is idle.
   charts, sliders, and progress bars are direction-aware. RTL is verified in E2E snapshots, not by eye.
 - **i18n:** message catalogs per locale, ICU pluralization, locale-aware dates/numbers, translation keys typed
   so a missing key fails the build.
+- **One language per page (B2, owner 2026-11-14).** The dashboard's dictionaries are
+  `apps/dashboard/src/i18n/dict/{en,ar}.ts` (and `both.ts` for the three sentences a page shows in both
+  languages); `i18n/messages.ts` gathers them for the server, and the language-independent logic is
+  `i18n/core.ts`. Client components never import `messages.ts`: they read their words from
+  `WordsProvider` (`i18n/words-context.tsx`), which loads only the page's language with `import()`, its own
+  cached script. `tests/unit/b2-one-language.test.ts` fails if any client module can reach a whole
+  dictionary again.
 - **Routing:** `/{locale}/…` on the public site; the dashboard scopes by workspace (`/w/{workspaceSlug}/…`)
   and brand (`/w/{ws}/b/{brand}/…`).
 - **Data:** TanStack Query with tenant-scoped cache keys; a workspace switch clears the cache.
 - **Performance:** server components by default, client components only for interactivity, route-level code
   splitting, image optimization, font subsetting for Arabic and Latin.
+- **Page changes (B2).** In-app links are `Link` and GET filter forms are `next/form`, so they navigate
+  without a full load. A press on a link to another page shows the loading panel (`CustomerPageLoading`)
+  after 150 ms, drawn by `CustomerFrameHost` in the browser only: there is deliberately no `loading.tsx`,
+  which would stream a `200` before a page could answer `404` (a missing or another tenant's record must
+  stay an identical `404`, §2.1 of CLAUDE.md).
 - **Accessibility:** semantic landmarks, focus management on route change, keyboard-complete flows,
   announced async states, contrast-checked tokens, automated axe checks in CI.
 

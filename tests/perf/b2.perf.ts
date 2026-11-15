@@ -119,20 +119,21 @@ test('B2: a click to another page — first visible answer, and the page', async
   });
 });
 
-test('B2: layout shift per page, pictures 1.5 s late', async ({ page }) => {
-  await page.route('**/assets/file/**', async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-    await route.continue();
-  });
-  for (const locale of ['en', 'ar'] as const) {
+for (const locale of ['en', 'ar'] as const) {
+  // One test per language: each signs in on a fresh page.
+  test(`B2: layout shift per page, pictures 1.5 s late (${locale})`, async ({ page }) => {
+    await page.route('**/assets/file/**', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      await route.continue();
+    });
     await signIn(page, locale);
     const shifts: Record<string, number> = {};
     for (const path of [...PAGES, 'calendar', 'analytics', 'approvals', 'publishing']) {
       shifts[path] = await layoutShift(page, `/${locale}/${path}`);
     }
     record(`cls:${locale}`, shifts);
-  }
-});
+  });
+}
 
 test('B2: the home hero, paints per second', async ({ page }) => {
   await page.addInitScript(() => {
