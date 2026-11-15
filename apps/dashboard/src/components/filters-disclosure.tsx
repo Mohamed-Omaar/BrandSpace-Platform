@@ -45,9 +45,17 @@ export function FiltersDisclosure({
       }
       if (!panel.contains(event.target as Node)) panel.open = false;
     };
+    // B2 — Apply now navigates in the page (`next/form`) instead of reloading
+    // it, so the panel closes itself on submit, as the reload used to close it.
+    const panel = ref.current;
+    const applied = () => {
+      if (panel) panel.open = false;
+    };
+    panel?.addEventListener('submit', applied);
     document.addEventListener('pointerdown', close);
     document.addEventListener('keydown', close);
     return () => {
+      panel?.removeEventListener('submit', applied);
       document.removeEventListener('pointerdown', close);
       document.removeEventListener('keydown', close);
     };
