@@ -9,6 +9,7 @@ import {
   sortByPrecedence,
   type PrecedenceSubject,
 } from '@brandspace/brand-brain';
+import { dashboardWordsSource } from '../support/dashboard-words-source';
 
 /**
  * PHASE 6 · P6-07 — THE FOUR-LAYER MODEL IS NOW VISIBLE, AND IT IS THE SAME
@@ -195,7 +196,7 @@ describe('P6-07 · the screen explains the rule rather than restating it', () =>
     'apps/dashboard/src/app/[locale]/brand-brain/area-drawer.tsx',
     'utf8',
   );
-  const MESSAGES = readFileSync('apps/dashboard/src/i18n/messages.ts', 'utf8');
+  const MESSAGES = dashboardWordsSource();
 
   it('reads the memory layer out of the database at all', () => {
     // The regression: `origin` was selected and `memory` was not, so half the

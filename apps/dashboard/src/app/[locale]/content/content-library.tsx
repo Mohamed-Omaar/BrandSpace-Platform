@@ -1,3 +1,4 @@
+import Form from 'next/form';
 import Link from 'next/link';
 import { PersonAvatar } from '../../../components/person-avatar';
 import type { ReactNode } from 'react';
@@ -512,8 +513,7 @@ export function ContentLibrary({
             active={activeFilters}
             testId="content-filters-toggle"
           >
-            <form
-              method="get"
+            <Form
               action={`/${locale}/content`}
               data-testid="content-filters"
               className="bsp-fdis-form"
@@ -562,7 +562,7 @@ export function ContentLibrary({
                   {t('content.filter.apply')}
                 </button>
               </div>
-            </form>
+            </Form>
           </FiltersDisclosure>
           {(options.channels ?? []).map((platform) => (
             <Link

@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseConfigPayload } from '@brandspace/config';
-import { optionalMessage } from '../../apps/dashboard/src/i18n/messages';
+import { optionalMessage, statusMessage } from '../../apps/dashboard/src/i18n/messages';
 import {
   awaitsReconnect,
   isBlocking,
@@ -112,8 +112,11 @@ describe('Q9 · a revoked channel is refused on the server, by every caller', ()
   it('the calendar says why, in both languages', () => {
     const actions = read('apps/dashboard/src/app/[locale]/calendar/actions.ts');
     expect(actions).toContain('CHANNEL_DISCONNECTED_REASON');
-    const messages = read('apps/dashboard/src/i18n/messages.ts');
-    expect(messages).toMatch(/CHANNEL_DISCONNECTED: \{\s+en: '[^']+',\s+ar: '[^']+'/);
+    // B2: one status table per language; the code reads in both.
+    const en = statusMessage('CHANNEL_DISCONNECTED', 'en');
+    const ar = statusMessage('CHANNEL_DISCONNECTED', 'ar');
+    expect(en).toMatch(/\w/);
+    expect(ar).toMatch(/[\u0600-\u06FF]/);
   });
 });
 

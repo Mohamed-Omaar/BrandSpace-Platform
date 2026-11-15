@@ -1,3 +1,4 @@
+import Form from 'next/form';
 import Link from 'next/link';
 import {
   Card,
@@ -112,8 +113,7 @@ export function RepurposePicker({
       description={t('create.repurpose.body')}
       testId="create-repurpose"
     >
-      <form
-        method="get"
+      <Form
         action={`/${locale}/content/compose`}
         style={{
           display: 'flex',
@@ -140,7 +140,7 @@ export function RepurposePicker({
         <button type="submit" className={buttonClass('neutral', 'sm')}>
           {t('content.filter.apply')}
         </button>
-      </form>
+      </Form>
       {options.length === 0 ? (
         <StateMessage
           title={t('create.repurpose.noneTitle')}

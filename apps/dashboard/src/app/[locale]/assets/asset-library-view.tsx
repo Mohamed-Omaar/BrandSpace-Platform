@@ -1,5 +1,6 @@
 'use client';
 
+import Form from 'next/form';
 import type React from 'react';
 import type { UploadRules } from '../../../components/upload-rules';
 import { PendingWatch } from '../../../components/pending-watch';
@@ -41,11 +42,11 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
+import type { MessageKey } from '../../../i18n/messages';
+import { useOptionalMessage, useT } from '../../../i18n/words-context';
 import { ASSET_VIEWS, type RightsState } from '../../../server/asset-views';
 import { formatBytes } from '../../../components/format-bytes';
 import { mediaStorageRemainder, type MediaStorageCategory } from '../../../server/media-storage';
-import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
 import { dayFormatter } from '../../../server/prototype-dates';
 
@@ -301,8 +302,8 @@ function filterHref(
 }
 
 export function AssetLibraryView(props: AssetLibraryViewProps) {
-  const messageLocale = useMessageLocale(props.locale);
-  const t = translator(messageLocale);
+  const t = useT();
+  const optionalMessage = useOptionalMessage();
   const { filters, can, actions } = props;
   /** D-305 — the standard business: one brand, so no brand or shelf choice to make. */
   const singleBrand = props.brands.length <= 1;
@@ -407,14 +408,14 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                     ? filters.view === 'ai'
                     : filters.kind === id && filters.view === undefined;
               return (
-                <a
+                <Link
                   key={id}
                   href={filterHref(props.locale, filters, change)}
                   className="bsp-chip"
                   aria-current={on ? 'true' : undefined}
                 >
                   {label}
-                </a>
+                </Link>
               );
             })}
         </nav>
@@ -497,8 +498,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                   }}
                 >
                   {/* Search gets its own lane instead of competing visually with every facet. */}
-                  <form
-                    method="get"
+                  <Form
                     action={`/${props.locale}/assets`}
                     style={{ display: 'flex', flex: '1 1 var(--bsp-rem-18)', minInlineSize: 0 }}
                   >
@@ -521,7 +521,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                       <input type="hidden" name="scope" value={filters.scope} />
                     ) : null}
                     <input type="hidden" name="sort" value={filters.sort} />
-                  </form>
+                  </Form>
 
                   <div style={{ flex: '0 1 auto', minInlineSize: 'var(--bsp-rem-12)' }}>
                     <FilterGroup
@@ -631,7 +631,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 }}
               >
                 {props.brandKit.logos.map((logo) => (
-                  <a
+                  <Link
                     key={logo.assetId}
                     href={filterHref(props.locale, filters, { asset: logo.assetId } as never)}
                     className={CONTROL_CLASS}
@@ -665,7 +665,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                         ? 'assets.kit.primaryLogo'
                         : 'assets.kit.secondaryLogo',
                     )}
-                  </a>
+                  </Link>
                 ))}
                 {props.brandKit.palette.length > 0 ? (
                   <div
@@ -727,7 +727,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                   </div>
                 ) : null}
               </div>
-              <a
+              <Link
                 href={`/${props.locale}/settings/brand`}
                 className={CONTROL_CLASS}
                 style={{
@@ -738,7 +738,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 }}
               >
                 {t('assets.kit.edit')}
-              </a>
+              </Link>
             </Card>
           ) : null}
         </FiltersDisclosure>
@@ -855,7 +855,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
         <span className="bsp-med-sto-acts">
           {/* Final walk: "Videos (largest)" only while there is a video to list. */}
           {props.storageCategories.some((row) => row.key === 'videos' && row.files > 0) ? (
-            <a
+            <Link
               href={filterHref(props.locale, filters, {
                 kind: 'VIDEO',
                 view: undefined,
@@ -865,7 +865,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               data-testid="assets-largest"
             >
               {t('assets.media.videosLargest')}
-            </a>
+            </Link>
           ) : null}
           {props.planHref ? (
             <a href={props.planHref} className="bsp-btn bsp-sm bsp-ghost" data-testid="assets-plan">
@@ -1051,7 +1051,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 </Link>
               ) : null}
               {props.hasMore && props.nextCursor ? (
-                <a
+                <Link
                   href={filterHref(props.locale, filters, {
                     cursor: props.nextCursor,
                   } as never)}
@@ -1070,7 +1070,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                   }}
                 >
                   {t('assets.loadMore')}
-                </a>
+                </Link>
               ) : null}
             </nav>
           ) : null}
@@ -1171,7 +1171,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                           refused
                             .map((one) => {
                               const why = one.reason
-                                ? optionalMessage(messageLocale, `assets.reason.${one.reason}`)
+                                ? optionalMessage(`assets.reason.${one.reason}`)
                                 : null;
                               return why ? `${one.name} (${why})` : one.name;
                             })
@@ -1402,7 +1402,7 @@ function FilterGroup({
         {[{ value: undefined, label: allLabel }, ...options].map((option) => {
           const active = option.value === current;
           return (
-            <a
+            <Link
               key={option.value ?? '__all__'}
               href={hrefFor(option.value)}
               className={CONTROL_CLASS}
@@ -1432,7 +1432,7 @@ function FilterGroup({
               }}
             >
               {option.label}
-            </a>
+            </Link>
           );
         })}
       </div>
@@ -1480,7 +1480,7 @@ function AssetTile({
   const stateLabel = t(stateLabelKey(asset.status, scanning));
   return (
     <div className="bsp-card bsp-med-tile" data-testid={`asset-tile-${asset.id}`}>
-      <a
+      <Link
         href={href}
         className="bsp-med-thumb"
         aria-label={asset.name}
@@ -1511,13 +1511,13 @@ function AssetTile({
             AI
           </span>
         ) : null}
-      </a>
+      </Link>
       <div className="bsp-med-foot">
-        <a href={href} className="bsp-med-name" title={asset.name}>
+        <Link href={href} className="bsp-med-name" title={asset.name}>
           {asset.name}
-        </a>
+        </Link>
         {mayUse && asset.selectable && (asset.kind === 'IMAGE' || asset.kind === 'VIDEO') ? (
-          <a
+          <Link
             href={`/${locale}/content/compose?${new URLSearchParams({
               mode: 'ai',
               asset: asset.id,
@@ -1527,7 +1527,7 @@ function AssetTile({
             aria-label={`${t('assets.media.use')} — ${asset.name}`}
           >
             {t('assets.media.use')}
-          </a>
+          </Link>
         ) : null}
       </div>
       {/*
@@ -1660,7 +1660,7 @@ function AssetDetail({
         {/* D-287 — what a person does with a file, first. */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.sm }}>
           {asset.selectable && can.use && (asset.kind === 'IMAGE' || asset.kind === 'VIDEO') ? (
-            <a
+            <Link
               href={`/${locale}/content/compose?${new URLSearchParams({
                 mode: 'ai',
                 asset: asset.id,
@@ -1677,7 +1677,7 @@ function AssetDetail({
               }}
             >
               {t('assets.action.useInPost')}
-            </a>
+            </Link>
           ) : null}
           {asset.downloadToken ? (
             <a
@@ -1773,13 +1773,13 @@ function AssetDetail({
             >
               {asset.uses.map((use) => (
                 <li key={use.contentItemId} data-testid={`asset-use-${use.contentItemId}`}>
-                  <a
+                  <Link
                     href={`/${locale}/content/compose?item=${use.contentItemId}`}
                     className={CONTROL_CLASS}
                     style={{ ...typographyTokens.label, color: colorTokens.brandPurple }}
                   >
                     {use.title}
-                  </a>
+                  </Link>
                   <span
                     style={{
                       display: 'block',

@@ -1,5 +1,6 @@
 'use client';
 
+import Form from 'next/form';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -722,8 +723,7 @@ export function CalendarView({
             >
               <div className="bsp-cal-filters" data-testid="calendar-filters">
                 {filterOptions ? (
-                  <form
-                    method="get"
+                  <Form
                     action={`/${locale}/calendar`}
                     data-testid="calendar-filter-form"
                     className="bsp-cal-filter-form"
@@ -766,7 +766,7 @@ export function CalendarView({
                     >
                       {t['calendar.filter.apply']}
                     </button>
-                  </form>
+                  </Form>
                 ) : null}
                 {/*
                   THE ZONE IS STATED, ALWAYS. Every time on this screen is a
@@ -1232,13 +1232,13 @@ export function CalendarView({
             ) : null}
 
             <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
-              <a
+              <Link
                 href={`/${locale}/content/compose?item=${openSlot.contentItemId}`}
                 data-testid="calendar-open-studio"
                 className={buttonClass('neutral')}
               >
                 {t['calendar.openInStudio']}
-              </a>
+              </Link>
               {/*
                 D-290 — REQUEST APPROVAL from where the post is being planned:
                 the one submit action, returning to this month. Offered for a

@@ -2,8 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { translator } from '../i18n/messages';
-import { useMessageLocale } from '../i18n/message-locale-context';
+import { useT } from '../i18n/words-context';
 import { PENDING_STOP_AFTER_MS, startPendingPoll } from './pending-poll';
 
 /**
@@ -23,18 +22,18 @@ import { PENDING_STOP_AFTER_MS, startPendingPoll } from './pending-poll';
  */
 
 export function PendingWatch({
-  locale,
   assets = [],
   sources = [],
   stopAfterMs = PENDING_STOP_AFTER_MS,
 }: {
+  /** The route locale (kept for callers; the words come from the page's provider). */
   readonly locale: string;
   readonly assets?: readonly string[];
   readonly sources?: readonly string[];
   readonly stopAfterMs?: number;
 }) {
   const router = useRouter();
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const [stopped, setStopped] = useState(false);
   const [round, setRound] = useState(0);
   const assetKey = [...assets].sort().join(',');

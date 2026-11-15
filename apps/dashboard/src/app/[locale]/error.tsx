@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Button, buttonClass, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
-import { translator } from '../../i18n/messages';
+import { useT } from '../../i18n/words-context';
 import { RouteState } from '../../components/route-state';
 
 /**
@@ -24,7 +24,7 @@ export default function RouteError({
 }) {
   const params = useParams<{ locale?: string }>();
   const locale = params?.locale === 'ar' ? 'ar' : 'en';
-  const t = translator(locale);
+  const t = useT();
   return (
     <RouteState
       kind="error"

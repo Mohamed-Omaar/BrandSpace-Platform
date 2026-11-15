@@ -187,9 +187,9 @@ export default async function BrandProfilePage({
                 data-testid="brand-add-name"
               />
             </label>
-            <a href={`/${locale}/settings/brand`} className="bsp-btn bsp-sec">
+            <Link href={`/${locale}/settings/brand`} className="bsp-btn bsp-sec">
               {t('brand.addDiscard')}
-            </a>
+            </Link>
             <SubmitButton className="bsp-btn bsp-pur" data-testid="brand-add-create">
               {t('brand.addCreate')}
             </SubmitButton>

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { canonicalHex, resolveColourTokens } from '../support/style-tokens';
-import { messages } from '../../apps/dashboard/src/i18n/messages';
+import { messages, statusMessage } from '../../apps/dashboard/src/i18n/messages';
 import { channelChart } from '../../apps/dashboard/src/server/performance-view';
 
 /**
@@ -130,8 +130,9 @@ describe('the beta never claims a scan it does not run (D-511)', () => {
       expect(text).toBeTruthy();
       expect(text).not.toMatch(/scan|فحص|يُفحص/i);
     }
-    expect(read('apps/dashboard/src/i18n/messages.ts')).toContain(
-      "en: 'New version uploaded. It replaces the current file once it is ready.',",
+    // B2: the status sentences are one table per language; read the sentence itself.
+    expect(statusMessage('ASSET_VERSION_CREATED', 'en')).toBe(
+      'New version uploaded. It replaces the current file once it is ready.',
     );
   });
 });
@@ -168,7 +169,8 @@ describe('small defects the walk found', () => {
     expect(page).toContain('page.total === null || page.total === 0');
     const view = read('apps/dashboard/src/app/[locale]/assets/asset-library-view.tsx');
     expect(view).toMatch(
-      /props\.storageCategories\.some\(\(row\) => row\.key === 'videos' && row\.files > 0\) \? \(\s*<a/,
+      // B2: an in-app link (`Link`, a client-side navigation).
+      /props\.storageCategories\.some\(\(row\) => row\.key === 'videos' && row\.files > 0\) \? \(\s*<Link/,
     );
   });
 

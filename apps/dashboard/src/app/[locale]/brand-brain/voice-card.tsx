@@ -3,7 +3,7 @@
 import { useId } from 'react';
 import Link from 'next/link';
 import { CONTROL_CLASS, buttonClass, colorTokens, typographyTokens } from '@brandspace/ui';
-import { translator } from '../../../i18n/messages';
+import { inLanguage, useT } from '../../../i18n/words-context';
 import type { AreaItemData, VoiceData } from './brand-brain-view';
 import { archiveKnowledgeAction, createKnowledgeAction, updateKnowledgeAction } from './actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
@@ -50,7 +50,7 @@ export function VoiceCard({
   aiOff?: boolean;
 }) {
   const messageLocale = useMessageLocale(locale);
-  const t = translator(messageLocale);
+  const t = useT();
   // The reader's language: its list of words is the one shown and changed here.
   const language: 'en' | 'ar' = messageLocale === 'ar' ? 'ar' : 'en';
   const own = voice.words
@@ -67,8 +67,8 @@ export function VoiceCard({
       ['brandId', brandId],
       ['area', 'TONE_OF_VOICE'],
       ['tab', 'look'],
-      ['titleEn', translator('en')('bb.voice.words')],
-      ['titleAr', translator('ar')('bb.voice.words')],
+      ['titleEn', inLanguage('en', 'bb.voice.words')],
+      ['titleAr', inLanguage('ar', 'bb.voice.words')],
       ['bodyEn', language === 'en' ? text : (voice.words?.edit.bodyEn ?? '')],
       ['bodyAr', language === 'ar' ? text : (voice.words?.edit.bodyAr ?? '')],
     ] as const) {
@@ -253,7 +253,7 @@ function RuleList({
   open?: { readonly onOpen: () => void; readonly pending: number } | null;
 }) {
   const messageLocale = useMessageLocale(locale);
-  const t = translator(messageLocale);
+  const t = useT();
   return (
     <section data-testid={testId} style={sectionStyle}>
       {open ? (
@@ -372,7 +372,7 @@ function OneFieldRow({
   submitTestId: string;
   inputTestId: (language: 'en' | 'ar') => string;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const first: 'en' | 'ar' = locale === 'ar' ? 'ar' : 'en';
   const second: 'en' | 'ar' = first === 'ar' ? 'en' : 'ar';
   const otherId = useId();

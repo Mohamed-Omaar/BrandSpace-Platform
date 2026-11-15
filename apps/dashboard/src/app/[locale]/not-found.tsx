@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { buttonClass } from '@brandspace/ui';
-import { translator } from '../../i18n/messages';
+import { useT } from '../../i18n/words-context';
 import { RouteState } from '../../components/route-state';
 
 /**
@@ -21,7 +21,7 @@ import { RouteState } from '../../components/route-state';
 export default function NotFound() {
   const params = useParams<{ locale?: string }>();
   const locale = params?.locale === 'ar' ? 'ar' : 'en';
-  const t = translator(locale);
+  const t = useT();
   return (
     <RouteState
       kind="empty"

@@ -12,7 +12,8 @@ import {
   uploadTexts,
 } from '../../../components/upload-field';
 import { Button, CONTROL_CLASS, Dialog, colorValues, visuallyHiddenStyle } from '@brandspace/ui';
-import { translator, type MessageKey } from '../../../i18n/messages';
+import type { MessageKey } from '../../../i18n/messages';
+import { inLanguage, useT } from '../../../i18n/words-context';
 import {
   addBrandFontAction,
   attachBrandLogoAction,
@@ -24,7 +25,6 @@ import {
   saveBrandTypographyAction,
   uploadBrandLogoAction,
 } from './look-actions';
-import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { MoreDisclosure } from '../../../components/more-disclosure';
 import { PendingWatch } from '../../../components/pending-watch';
 import { LogoAttach } from '../onboarding/logo-attach';
@@ -153,7 +153,7 @@ export function LookCard({
   /** The Voice card, which the prototype sets between the colours and the fonts. */
   children?: React.ReactNode;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   /*
    * THE PROTOTYPE'S LOOK & VOICE GRID (`Main.dc.html` lines 869–876): Logo and
    * Colours across the top (its third card, templates, is left out — the
@@ -267,7 +267,7 @@ function Colours({
   /** PR C — the logo the page shows, read for suggested colours. */
   logoUrl?: string | null;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const [colours, setColours] = useState<string[]>([...palette]);
   // PR C — colours read from the logo's pixels, in this browser; offered only.
   const [suggested, setSuggested] = useState<string[] | null>(null);
@@ -480,7 +480,7 @@ function Logo({
   canManage: boolean;
   canUpload: boolean;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const headingId = useId();
   const pickId = useId();
   const [picked, setPicked] = useState<string | null>(null);
@@ -620,7 +620,7 @@ function Fonts({
   canManage: boolean;
   canUpload: boolean;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const headingId = useId();
   const formId = useId();
   const [chosen, setChosen] = useState<Record<string, string>>(() =>
@@ -743,7 +743,7 @@ function Fonts({
                 data-testid={`look-slot-preview-${language}-heading`}
                 data-font-family={drawn(language, 'heading')}
               >
-                {translator(language)('bb.look.sample.heading')}
+                {inLanguage(language, 'bb.look.sample.heading')}
               </span>
               <span
                 className="bsp-lk-sample-b"
@@ -751,7 +751,7 @@ function Fonts({
                 data-testid={`look-slot-preview-${language}-body`}
                 data-font-family={drawn(language, 'body')}
               >
-                {translator(language)('bb.look.sample.body')}
+                {inLanguage(language, 'bb.look.sample.body')}
               </span>
             </div>
             {ROLES.map((role) => {
@@ -814,7 +814,7 @@ function LanguageFonts({
   look: LookViewData;
   canUpload: boolean;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const nameId = useId();
   const [picked, setPicked] = useState<string | null>(null);
   const fonts = look.fonts.filter((font) => font.language === language);
@@ -908,7 +908,7 @@ function FontRow({
   rules: UploadRules;
   canUpload: boolean;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const [confirming, setConfirming] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const renameId = useId();

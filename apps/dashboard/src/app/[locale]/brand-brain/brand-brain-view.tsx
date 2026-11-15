@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { MoreDisclosure } from '../../../components/more-disclosure';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { translator, type MessageKey } from '../../../i18n/messages';
+import type { MessageKey } from '../../../i18n/messages';
+import { useT } from '../../../i18n/words-context';
 import { BrandOrb, type OrbNode } from './brand-orb';
 import { AreaDrawer, type DrawerPrefill, type QuestionFocus } from './area-drawer';
 import { ReviewInbox, type ConfidentPreviewEntry } from './review-inbox';
@@ -29,7 +30,6 @@ import {
 } from '../../../components/upload-field';
 import { CopilotLink, OPEN_COPILOT_EVENT } from '../../../components/copilot-link';
 import { useRouter } from 'next/navigation';
-import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { SubmitButton } from '../../../components/pending-submit';
 
 /**
@@ -323,7 +323,7 @@ export function BrandBrainView({
     readonly prompt: string;
   } | null;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const [tab, setTabState] = useState<BrandBrainTab>(initialTab);
   const [openArea, setOpenArea] = useState<string | null>(
     initialFocus?.area ?? drawerStart?.area ?? initialArea ?? null,
@@ -1132,7 +1132,7 @@ function ConfidentCard({
   onCancel: () => void;
   onOneByOne: () => void;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   return (
     <section className="bsp-card bsp-bb-bulk" data-testid="accept-confident-dialog">
       {confident.length > 0 ? (
@@ -1199,7 +1199,7 @@ function DuplicatesCard({
   brandId: string;
   count: number;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const [confirming, setConfirming] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
   return (

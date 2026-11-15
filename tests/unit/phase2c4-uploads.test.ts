@@ -15,7 +15,7 @@ import {
   type ExtractionLimits,
   type TextExtractor,
 } from '@brandspace/brand-brain';
-import { optionalMessage } from '../../apps/dashboard/src/i18n/messages';
+import { optionalMessage, statusMessage } from '../../apps/dashboard/src/i18n/messages';
 import { contentTypesFor, docxPackage, pptxPackage } from '../support/ooxml';
 
 /**
@@ -308,12 +308,14 @@ describe('every failure reason reads in both languages, and nothing leaks', () =
   });
 
   it('the status codes a refused or repeated upload lands on read in both languages', () => {
+    // B2: the status sentences live in one table per language now; what
+    // matters is that each code READS, in both, and not the file's layout.
     for (const code of ['SOURCE_REFUSED', 'SOURCE_ALREADY_FAILED', 'SOURCE_READ_AGAIN']) {
-      const file = readFileSync(
-        path.join(__dirname, '../../apps/dashboard/src/i18n/messages.ts'),
-        'utf8',
-      );
-      expect(file).toContain(`${code}: {`);
+      const en = statusMessage(code, 'en');
+      const ar = statusMessage(code, 'ar');
+      expect(en, code).toMatch(/\w/);
+      expect(ar, code).toMatch(/[\u0600-\u06FF]/);
+      expect(ar).not.toBe(en);
     }
   });
 });

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { dashboardWordsSource } from '../support/dashboard-words-source';
 
 /**
  * PHASE 6 · P6-04 — THE RAIL SAYS WHAT ITS PARTS ARE FOR.
@@ -27,7 +28,7 @@ import { describe, expect, it } from 'vitest';
  */
 
 const SHELL = readFileSync('apps/dashboard/src/components/workspace-shell.tsx', 'utf8');
-const MESSAGES = readFileSync('apps/dashboard/src/i18n/messages.ts', 'utf8');
+const MESSAGES = dashboardWordsSource();
 
 /** Strip comments, for the reason `phase6-control-consistency.test.ts` records. */
 function code(source: string): string {

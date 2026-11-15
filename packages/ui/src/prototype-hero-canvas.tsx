@@ -89,6 +89,14 @@ const BLOBS: readonly Blob[] = [
   },
 ];
 
+/**
+ * B2 (performance, owner 2026-11-14) — at most 30 frames a second. The blobs
+ * move on the clock (`t`), so their speed and path are the prototype's; only
+ * the number of repaints halves. Off screen or in a hidden tab, no frame at all.
+ */
+const HERO_MAX_FPS = 30;
+const FRAME_MS = 1000 / HERO_MAX_FPS;
+
 export function PrototypeHeroCanvas({ className }: { readonly className?: string }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
@@ -100,6 +108,9 @@ export function PrototypeHeroCanvas({ className }: { readonly className?: string
     let height = 0;
     let raf = 0;
     let alive = true;
+    let last = -Infinity;
+    // B2: painted only while some of it is on screen.
+    let onScreen = true;
     // LF: the ground and the blobs' strength are tokens, so the Look & feel
     // dark palette darkens them; unset, the canvas's own values. PR E: read
     // again whenever the page's scheme changes (the Appearance item, or the
@@ -122,10 +133,15 @@ export function PrototypeHeroCanvas({ className }: { readonly className?: string
       canvas.height = Math.round(height * ratio);
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     };
+    const running = () => alive && !reduce && !document.hidden && onScreen;
     const draw = (t: number) => {
       if (!alive) return;
-      const now = canvas.getBoundingClientRect();
-      if (Math.abs(now.width - width) > 1 || Math.abs(now.height - height) > 1) size();
+      // B2: a frame closer than 1/30 s to the last is skipped, not painted.
+      if (!reduce && t - last < FRAME_MS - 1) {
+        raf = running() ? requestAnimationFrame(draw) : 0;
+        return;
+      }
+      last = t;
       ctx.clearRect(0, 0, width, height);
       ctx.fillStyle = ground;
       ctx.fillRect(0, 0, width, height);
@@ -151,12 +167,24 @@ export function PrototypeHeroCanvas({ className }: { readonly className?: string
         ctx.fill();
         ctx.restore();
       }
-      raf = !reduce && !document.hidden ? requestAnimationFrame(draw) : 0;
+      raf = running() ? requestAnimationFrame(draw) : 0;
     };
     const visible = () => {
-      if (!reduce && !document.hidden && alive && !raf) raf = requestAnimationFrame(draw);
+      if (running() && !raf) raf = requestAnimationFrame(draw);
     };
     document.addEventListener('visibilitychange', visible);
+    // B2: scrolled away, it stops; back in view, it carries on from the clock.
+    const seen = new IntersectionObserver(([entry]) => {
+      onScreen = entry?.isIntersecting ?? true;
+      visible();
+    });
+    seen.observe(canvas);
+    // B2: its size is watched, not measured on every frame (a forced layout each time).
+    const resized = new ResizeObserver(() => {
+      size();
+      if (reduce) draw(0);
+    });
+    resized.observe(canvas);
     const rescheme = () => {
       readTokens();
       // Under reduced motion the canvas is drawn once; draw it again.
@@ -176,6 +204,8 @@ export function PrototypeHeroCanvas({ className }: { readonly className?: string
       alive = false;
       cancelAnimationFrame(raf);
       document.removeEventListener('visibilitychange', visible);
+      seen.disconnect();
+      resized.disconnect();
       schemeAttribute.disconnect();
       device.removeEventListener('change', rescheme);
     };

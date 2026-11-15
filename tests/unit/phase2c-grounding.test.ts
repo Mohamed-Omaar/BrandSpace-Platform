@@ -326,7 +326,9 @@ const SWITCH_EDITORS: ReadonlyMap<string, string> = new Map([
   ['apps/dashboard/src/app/[locale]/settings/ai/page.tsx', 'Settings → AI shows the switch'],
   ['apps/dashboard/src/app/[locale]/settings/ai/actions.ts', 'Settings → AI saves the switch'],
   ['apps/dashboard/src/server/publishing-defaults.ts', 'the audited write of the switch'],
-  ['apps/dashboard/src/i18n/messages.ts', 'the switch’s label and hint'],
+  // B2: the words live in one dictionary per language (`i18n/dict/`).
+  ['apps/dashboard/src/i18n/dict/en.ts', 'the switch’s label and hint, in English'],
+  ['apps/dashboard/src/i18n/dict/ar.ts', 'the switch’s label and hint, in Arabic'],
 ]);
 
 /** Every generative path that puts Brand Brain knowledge in front of a model. */
