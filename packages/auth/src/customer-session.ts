@@ -641,6 +641,58 @@ export class CustomerAuthService {
    * Read through the same session scope as `listWorkspaces`: only workspaces
    * where this person holds an ACTIVE membership are visible to it at all.
    */
+  /**
+   * B1 (performance) — MAY THIS SESSION READ FROM ITS ACTIVE WORKSPACE, for a
+   * request that only serves bytes (an image on screen). The same answers as
+   * `resolve` + `listWorkspaces` + the page's gate — a live session, an
+   * active user who passed their second factor, this workspace as the
+   * session's ACTIVE one, an active membership in an operable workspace not
+   * pending deletion, the workspace's two-step rule, the role's permission —
+   * in three reads and no write. The session's sliding expiry is left to the
+   * page requests around it.
+   */
+  async canReadInActiveWorkspace(
+    token: string,
+    workspaceId: string,
+    permissionKey: string,
+  ): Promise<boolean> {
+    if (!token) return false;
+    const tokenHash = hashSessionToken(token);
+    const now = this.#clock.now();
+    const session = await this.#prisma.customerSession.findFirst({
+      where: {
+        tokenHash,
+        revokedAt: null,
+        expiresAt: { gt: now },
+        absoluteExpiresAt: { gt: now },
+        activeWorkspaceId: workspaceId,
+        user: { status: 'ACTIVE', deletedAt: null },
+      },
+      select: { mfaVerifiedAt: true, user: { select: { mfaEnabled: true } } },
+    });
+    if (!session) return false;
+    if (session.user.mfaEnabled && !session.mfaVerifiedAt) return false;
+    const memberships = await this.#scope(tokenHash, (db) =>
+      db.membership.findMany({
+        where: {
+          workspaceId,
+          status: 'ACTIVE',
+          workspace: {
+            status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE'] },
+            deletedAt: null,
+            deletionScheduledFor: null,
+          },
+        },
+        include: { workspace: true },
+      }),
+    );
+    const membership = memberships[0];
+    if (!membership || memberships.length !== 1) return false;
+    if (membership.workspace.requireMfa && !session.user.mfaEnabled) return false;
+    const role = roleOfMembership(await this.#rolesFor(memberships), membership);
+    return role !== undefined && role !== null && role.permissionKeys.includes(permissionKey);
+  }
+
   async listBusinesses(token: string): Promise<CustomerBusiness[]> {
     if (!token) return [];
     const tokenHash = hashSessionToken(token);

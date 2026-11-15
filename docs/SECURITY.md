@@ -1236,6 +1236,21 @@ another workspace — all produce **the same `404`**, shaped identically to a ge
 message for the fourth case would confirm that the asset exists, which is the same inference §2.1
 forbids at the database layer.
 
+**B1 (performance, owner 2026-11-14) — an image on screen is cached, and checked lightly.** An
+`inline` grant's expiry is rounded **up** to a shared 10-minute window
+(`INLINE_SHARE_WINDOW_SECONDS`), so the same picture issued again within it gets the same URL and the
+browser keeps it: `Cache-Control: private, max-age=<seconds left on the grant>` — this browser only,
+never a shared cache, and never past the grant. A grant is never shorter than its configured lifetime.
+Attachments (downloads) are not shared. The image route verifies the signature and expiry first, with
+no database work, and then makes one light check, `canReadInActiveWorkspace`: the session is live and
+not past its absolute expiry; the person is active; two-step was passed if it is on; the grant's
+workspace is the session's **active** workspace; the membership is active; the workspace is not
+suspended, deleted or scheduled for deletion; a workspace that requires two-step has it; and the role
+holds `assets.read`. Anything else is the same `404`. So the session still decides the workspace,
+exactly as before (`tests/isolation/b1-image-light-check.test.ts`). The status route `/api/pending`
+answers only for ids visible to the caller (RLS and brand scope); any other id answers "not pending",
+the same as a finished or unknown one.
+
 ### 21.3 The hostile-input surface
 
 Each of these has a test that asserts the refusal, not merely the absence of a crash:

@@ -2728,3 +2728,11 @@ purple for list markers and the link underline, the mono token for code, logical
 indents (markers on the right in Arabic) and an `--bsp-px-8` gap between blocks. "Worked on: …"
 moved out of the bubble's text to a caption line above it in `--bs-text-secondary`. No new colour,
 font, shadow or interaction.
+
+### 6.3.85 B1 — "Still working — refresh to check" (owner, 2026-11-14)
+
+A file still being checked or read is followed by a small status question that backs off and stops
+after ten minutes (`PendingWatch`). When it stops it says so, in the place the page already shows that
+file's state: the existing hint line (`bsp-st-hint`, `role="status"`) with the existing small button
+(`bsp-btn bsp-sm`) "Refresh". The prototype draws no such state. Nothing new is drawn: no new colour,
+font, size or interaction.

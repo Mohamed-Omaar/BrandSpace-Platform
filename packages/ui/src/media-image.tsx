@@ -15,10 +15,16 @@ export function MediaImage({
   src,
   alt,
   style,
+  eager = false,
 }: {
   readonly src: string;
   readonly alt: string;
   readonly style: CSSProperties;
+  /**
+   * B1 — an image in the first screenful is fetched at once (it may be the
+   * page's largest paint); the rest wait until they near the screen.
+   */
+  readonly eager?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   const ref = useRef<HTMLImageElement>(null);
@@ -31,5 +37,17 @@ export function MediaImage({
     if (image && image.complete) image.decode().catch(() => setFailed(true));
   }, [src]);
   if (failed) return null;
-  return <img ref={ref} src={src} alt={alt} style={style} onError={() => setFailed(true)} />;
+  // B1 (performance): a tile below the fold is fetched when it nears the
+  // screen (the first screenful is `eager`), and decoded off the main thread.
+  return (
+    <img
+      ref={ref}
+      src={src}
+      alt={alt}
+      style={style}
+      loading={eager ? 'eager' : 'lazy'}
+      decoding="async"
+      onError={() => setFailed(true)}
+    />
+  );
 }

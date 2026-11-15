@@ -83,6 +83,12 @@ function invalidGrant(): AppError {
 
 const SEPARATOR = '.';
 
+/** B1 — an expiry rounded up to the next boundary of a shared window. */
+export function sharedExpiry(expiresAt: number, windowSeconds: number | undefined): number {
+  if (!windowSeconds || windowSeconds <= 0) return expiresAt;
+  return Math.ceil(expiresAt / windowSeconds) * windowSeconds;
+}
+
 function encodeClaims(claims: DownloadGrantClaims): string {
   return Buffer.from(
     JSON.stringify([
@@ -141,6 +147,13 @@ export class DownloadGrantIssuer {
     readonly ttlSeconds: number;
     readonly disposition: DownloadDisposition;
     readonly contentType: string;
+    /**
+     * B1 (performance) — round the expiry UP to a shared window of this many
+     * seconds, so the same object issued again within it gets the SAME token
+     * (and URL) and a browser can keep the image it already has. Never
+     * shorter than `ttlSeconds`. Used for images shown on screen only.
+     */
+    readonly shareWindowSeconds?: number;
   }): DownloadGrant {
     if (!Number.isInteger(input.ttlSeconds) || input.ttlSeconds <= 0) {
       throw new AppError('VALIDATION_FAILED', 'A download window is a positive whole number.');
@@ -157,7 +170,10 @@ export class DownloadGrantIssuer {
     const claims: DownloadGrantClaims = {
       storageKey: input.storageKey,
       workspaceId: input.workspaceId,
-      expiresAt: Math.floor(this.#clock.now().getTime() / 1_000) + input.ttlSeconds,
+      expiresAt: sharedExpiry(
+        Math.floor(this.#clock.now().getTime() / 1_000) + input.ttlSeconds,
+        input.shareWindowSeconds,
+      ),
       disposition: input.disposition,
       contentType: input.contentType,
     };
@@ -166,13 +182,11 @@ export class DownloadGrantIssuer {
   }
 
   /**
-   * Verify a token and return what it authorises.
-   *
-   * `workspaceId` is the workspace the REDEEMER is acting in. A grant issued in
-   * another workspace is refused even with a perfect signature, so a leaked
-   * token is useless to anyone outside the tenant it was minted for.
+   * B1 — THE SIGNATURE AND THE EXPIRY ONLY, before any database work: what a
+   * grant claims, or the same refusal `redeem` gives. The caller must then
+   * check the session against `claims.workspaceId` itself.
    */
-  redeem(token: string, workspaceId: string): DownloadGrantClaims {
+  verify(token: string): DownloadGrantClaims {
     const index = token.lastIndexOf(SEPARATOR);
     if (index <= 0) throw invalidGrant();
 
@@ -187,9 +201,20 @@ export class DownloadGrantIssuer {
 
     const claims = decodeClaims(encoded);
     if (!claims) throw invalidGrant();
-    if (claims.workspaceId !== workspaceId) throw invalidGrant();
     if (claims.expiresAt * 1_000 <= this.#clock.now().getTime()) throw invalidGrant();
+    return claims;
+  }
 
+  /**
+   * Verify a token and return what it authorises.
+   *
+   * `workspaceId` is the workspace the REDEEMER is acting in. A grant issued in
+   * another workspace is refused even with a perfect signature, so a leaked
+   * token is useless to anyone outside the tenant it was minted for.
+   */
+  redeem(token: string, workspaceId: string): DownloadGrantClaims {
+    const claims = this.verify(token);
+    if (claims.workspaceId !== workspaceId) throw invalidGrant();
     return claims;
   }
 }

@@ -1379,7 +1379,15 @@ export default async function OverviewPage({
                               </span>
                             </span>
                             <span style={ART} aria-hidden="true">
-                              {thumb ? <img src={thumb} alt="" style={ART_IMG} /> : null}
+                              {thumb ? (
+                                <img
+                                  src={thumb}
+                                  alt=""
+                                  style={ART_IMG}
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                              ) : null}
                             </span>
                             <span style={ROW_TEXT}>
                               <span style={ROW_TITLE}>{slot.item?.title ?? '—'}</span>

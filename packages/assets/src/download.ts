@@ -35,6 +35,12 @@ export interface AssetDownloadServiceOptions {
   readonly issuer: DownloadGrantIssuer;
 }
 
+/**
+ * B1 — how long an on-screen image keeps the same URL (the grant's expiry is
+ * rounded up to this window), so the browser reuses the image it has.
+ */
+export const INLINE_SHARE_WINDOW_SECONDS = 600;
+
 export class AssetDownloadService {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
@@ -77,6 +83,10 @@ export class AssetDownloadService {
       workspaceId: this.#workspaceId,
       ttlSeconds: this.#policy.download.grantTtlSeconds,
       disposition: input.disposition,
+      // B1 — an image on screen keeps one URL for a while, so it is cached.
+      ...(input.disposition === 'inline'
+        ? { shareWindowSeconds: INLINE_SHARE_WINDOW_SECONDS }
+        : {}),
       /*
        * THE TYPE IS THE ONE THE SIGNATURE PROVED AT UPLOAD, pinned into the
        * grant. Serving a stored value rather than sniffing at read time means a
@@ -87,6 +97,39 @@ export class AssetDownloadService {
     });
 
     return { asset, grant };
+  }
+
+  /**
+   * B1 — AN INLINE GRANT FOR A ROW THE CALLER ALREADY LOADED, with the same
+   * checks `grantFor` makes (permission, deleted, selectable, the brand scope)
+   * but no second read of the row. For a page that lists assets and shows
+   * each one: one query for the page, not one per tile.
+   */
+  inlineGrantForLoaded(
+    asset: Pick<
+      Asset,
+      'storageKey' | 'mimeType' | 'brandId' | 'status' | 'scanStatus' | 'deletedAt' | 'workspaceId'
+    >,
+    actor: AssetActor,
+  ): DownloadGrant | null {
+    assertPermission(actor, 'assets.read');
+    if (asset.workspaceId !== this.#workspaceId) return null;
+    if (asset.deletedAt !== null || !isSelectable(asset)) return null;
+    if (
+      actor.brandScope.length > 0 &&
+      asset.brandId !== null &&
+      !actor.brandScope.includes(asset.brandId)
+    ) {
+      return null;
+    }
+    return this.#issuer.issue({
+      storageKey: asset.storageKey,
+      workspaceId: this.#workspaceId,
+      ttlSeconds: this.#policy.download.grantTtlSeconds,
+      disposition: 'inline',
+      contentType: asset.mimeType,
+      shareWindowSeconds: INLINE_SHARE_WINDOW_SECONDS,
+    });
   }
 
   /**

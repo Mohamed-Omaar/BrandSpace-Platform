@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { DownloadGrantIssuer } from '@brandspace/storage';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
-import { requireWorkspace } from '../../../../../server/customer-context';
+import { getCustomerAuth, getSessionToken } from '../../../../../server/customer-context';
 import { downloadSigningKey, objectStore } from '../../../../../server/assets-context';
 import { servedUploadDisposition } from '../../../../../server/served-upload';
 
@@ -43,15 +43,29 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ locale: string; token: string }> },
 ): Promise<Response> {
-  const { locale, token } = await context.params;
+  const { token } = await context.params;
 
-  // The SESSION decides the workspace; the token never does. A grant naming
-  // another workspace is refused below even with a perfect signature.
-  const { workspace } = await requireWorkspace(locale, 'assets.read');
-
+  let workspaceId: string | null = null;
   try {
+    /*
+     * B1 (performance) — THE GRANT FIRST, THEN A LIGHT CHECK OF THE SESSION.
+     * An image used to resolve the whole session and every workspace on each
+     * request (dozens of statements, and a session write), for every tile on
+     * a page. Now: the signature and expiry, with no database work; then one
+     * light check that the session is live and that the grant's workspace is
+     * the session's ACTIVE workspace, with `assets.read` there
+     * (`canReadInActiveWorkspace`). So the SESSION still decides the
+     * workspace: a grant naming any other workspace is refused, even with a
+     * perfect signature.
+     */
     const issuer = new DownloadGrantIssuer({ signingKey: downloadSigningKey() });
-    const claims = issuer.redeem(token, workspace.workspaceId);
+    const claims = issuer.verify(token);
+    workspaceId = claims.workspaceId;
+    const session = (await getSessionToken()) ?? '';
+    const allowed = await getCustomerAuth()
+      .canReadInActiveWorkspace(session, claims.workspaceId, 'assets.read')
+      .catch(() => false);
+    if (!allowed) return new NextResponse(null, { status: 404 });
 
     const bytes = await objectStore().get(claims.storageKey);
     // The row said the object exists and it does not. The same 404 as every
@@ -86,8 +100,16 @@ export async function GET(
          */
         'content-security-policy':
           "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'none'; script-src 'none'; sandbox",
-        // A grant is short-lived and per-viewer; a shared cache must not keep it.
-        'cache-control': 'private, no-store',
+        /*
+         * B1 — THIS BROWSER MAY KEEP IT UNTIL THE GRANT ENDS; NO SHARED CACHE
+         * EVER MAY. An on-screen image keeps one URL for its window
+         * (`INLINE_SHARE_WINDOW_SECONDS`), so a re-render or a repeat visit
+         * reuses the bytes instead of fetching every tile again.
+         */
+        'cache-control': `private, max-age=${Math.max(
+          0,
+          claims.expiresAt - Math.floor(Date.now() / 1_000),
+        )}`,
       },
     });
   } catch (error: unknown) {
@@ -95,7 +117,7 @@ export async function GET(
     // capability, so writing it to a log sink would leak the very thing it
     // authorises (docs/SECURITY.md §5.1).
     log.warn('a download grant was refused', {
-      workspaceId: workspace.workspaceId,
+      workspaceId,
       ...internalErrorFields(error),
     });
     return new NextResponse(null, { status: 404 });

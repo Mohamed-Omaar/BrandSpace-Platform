@@ -17,6 +17,7 @@ export { createObjectStore, readS3Configuration, type S3EnvironmentConfiguration
 export {
   contentDispositionHeader,
   DownloadGrantIssuer,
+  sharedExpiry,
   type DownloadDisposition,
   type DownloadGrant,
   type DownloadGrantClaims,

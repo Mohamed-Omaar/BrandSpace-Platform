@@ -1252,6 +1252,8 @@ export default async function AnalyticsPage({
                               className="bsp-pf-art"
                               src={cover.src}
                               alt=""
+                              loading="lazy"
+                              decoding="async"
                               data-testid={`analytics-post-cover-${post.contentItemId}`}
                             />
                           ) : (

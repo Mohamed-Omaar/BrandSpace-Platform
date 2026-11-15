@@ -88,10 +88,8 @@ export async function listMediaOptions(input: {
             !rightsLapsed(asset.rightsExpiryAt),
         )
         .map(async (asset): Promise<MediaOption> => {
-          const token = await download
-            .grantFor({ assetId: asset.id, actor, disposition: 'inline' })
-            .then((issued) => issued.grant.token)
-            .catch(() => null);
+          // B1 — from the row already loaded: no second read per tile.
+          const token = download.inlineGrantForLoaded(asset, actor)?.token ?? null;
           return {
             id: asset.id,
             name: asset.name,

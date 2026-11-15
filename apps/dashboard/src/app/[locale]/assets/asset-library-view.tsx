@@ -2,7 +2,7 @@
 
 import type React from 'react';
 import type { UploadRules } from '../../../components/upload-rules';
-import { RefreshWhile } from '../../../components/refresh-while';
+import { PendingWatch } from '../../../components/pending-watch';
 import { FormButton } from '../../../components/pending-submit';
 import {
   UploadFileInput,
@@ -1010,10 +1010,12 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                   )
                 }
               >
-                {props.cards.map((asset) => (
+                {props.cards.map((asset, index) => (
                   <AssetTile
                     key={asset.id}
                     asset={asset}
+                    // B1: the first screenful loads at once; the rest lazily.
+                    eager={index < EAGER_TILES}
                     locale={props.locale}
                     href={filterHref(props.locale, filters, { asset: asset.id } as never)}
                     bulkFormId={canBulk ? bulkFormId : null}
@@ -1115,13 +1117,16 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
       ) : null}
 
       {/* Batch 7 (A3): a file being checked moves on screen until it is ready or refused. */}
-      <RefreshWhile
-        active={props.cards.some(
-          (card) =>
-            card.status === 'UPLOADING' ||
-            card.status === 'PROCESSING' ||
-            card.scanStatus === 'PENDING',
-        )}
+      <PendingWatch
+        locale={props.locale}
+        assets={props.cards
+          .filter(
+            (card) =>
+              card.status === 'UPLOADING' ||
+              card.status === 'PROCESSING' ||
+              card.scanStatus === 'PENDING',
+          )
+          .map((card) => card.id)}
       />
 
       {/* --- Upload ------------------------------------------------------ */}
@@ -1444,8 +1449,12 @@ function FilterGroup({
  * an expiring grant, never a storage key. Everything else gets the typed
  * placeholder tile the design system already draws.
  */
+/** B1 — the tiles in the first screenful (two rows on a wide screen). */
+const EAGER_TILES = 8;
+
 function AssetTile({
   asset,
+  eager,
   locale,
   href,
   bulkFormId,
@@ -1455,6 +1464,7 @@ function AssetTile({
   t,
 }: {
   readonly asset: AssetCardData;
+  readonly eager: boolean;
   readonly locale: string;
   readonly href: string;
   /** The bulk form this tile's checkbox belongs to, when bulk actions exist. */
@@ -1481,12 +1491,13 @@ function AssetTile({
            * A PLAIN `img`, NOT `next/image`, and the reason is the grant. The
            * optimiser rewrites a source into its own cached URL, which would
            * mean a short-lived per-viewer capability being stored and re-served
-           * by a shared cache — exactly what `cache-control: private, no-store`
-           * on the download route forbids.
+           * by a shared cache — exactly what `cache-control: private` on the
+           * download route forbids (B1: this browser may keep it, no one else).
            */
           <MediaImage
             src={`/${locale}/assets/file/${asset.previewToken}`}
             alt={asset.name}
+            eager={eager}
             style={{ inlineSize: '100%', blockSize: '100%', objectFit: 'cover' }}
           />
         ) : (

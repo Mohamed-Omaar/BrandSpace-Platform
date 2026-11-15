@@ -594,7 +594,7 @@ export function DraftEditor({
    * asked for an answer instead of a redirect. One save at a time; a pause
    * of 0.9 s after the last change; a tag still being typed waits for "Add".
    * The local copy is re-keyed to the saved version, so nothing typed during
-   * the save is lost, and the page is re-read for the rest (checks, preview).
+   * the save is lost; the page is not re-read (B1).
    */
   const [autosave, setAutosave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const savingRef = useRef(false);
@@ -725,18 +725,14 @@ export function DraftEditor({
     // The pending version's words are the dependency: each change restarts the pause.
   }, [pendingAutosave?.id, pendingAutosave ? JSON.stringify(live(pendingAutosave)) : '']);
   /*
-   * The page is re-read (checks, preview, the saved line) once the saves have
-   * gone quiet — not after each one, which under a slow link queued a full
-   * page behind every pause in typing.
+   * B1 (performance, owner 2026-11-14) — A SAVE NO LONGER RE-READS THE PAGE.
+   * It used to, once the saves went quiet: a whole page render (and every
+   * link in the rail re-fetched) for words already on screen. Nothing needed
+   * it: the checks and the preview are worked out here from the words shown,
+   * the saved line is `autosave`, and the version a save answers with re-keys
+   * the local copy (`savedAs`, `edits`). Discrete events — a new shape, an
+   * image that landed — still re-read the page.
    */
-  const quiet = autosave === 'saved' && !pendingAutosave;
-  useEffect(() => {
-    if (!quiet) return undefined;
-    const timer = window.setTimeout(() => {
-      if (!savingRef.current && pendingRef.current().length === 0) router.refresh();
-    }, 600);
-    return () => window.clearTimeout(timer);
-  }, [quiet, router]);
   /*
    * Leaving the Studio inside the pause (a rail link, the back button) saves
    * what is waiting: a layout cleanup, so the forms are still in the page.

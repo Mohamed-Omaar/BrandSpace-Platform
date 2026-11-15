@@ -482,6 +482,23 @@ export default defineConfig({
      * finish. The intent is now implemented rather than described:
      * `pnpm e2e:screenshots` sets the flag, and nothing else runs it.
      */
+    /*
+     * B1/B2 — PERFORMANCE MEASUREMENTS, run by hand and never in CI (like the
+     * visual review above): `BRANDSPACE_PERF=1 PERF_OUT=out.jsonl playwright
+     * test --project=perf`. One worker, so nothing else touches the database
+     * while statements are counted.
+     */
+    ...(process.env['BRANDSPACE_PERF'] === '1'
+      ? [
+          {
+            name: 'perf',
+            testDir: './tests/perf',
+            testMatch: /\.perf\.ts$/,
+            fullyParallel: false,
+            use: { ...devices['Desktop Chrome'], launchOptions },
+          },
+        ]
+      : []),
     ...(process.env['BRANDSPACE_VISUAL_REVIEW'] === '1'
       ? [
           {
