@@ -275,6 +275,63 @@ const OPENAI_ENTRY: IntegrationDefinition = {
     'النصوص والصور عبر بوابة الذكاء الاصطناعي. الاختبار يقرأ قائمة النماذج ولا يولّد شيئًا. اضبط مدة احتفاظ المزود بالبيانات على أقصر مدة يتيحها، وأعد إصدار المفتاح بعد تدوير أسرار المنصة.',
 };
 
+/*
+ * PR G (D-611) — Google's Gemini image models, a second image provider. The
+ * adapter is `gemini` in `@brandspace/ai-gateway`. Images only: text stays
+ * where it is. Routing is unchanged until the owner points a route at one of
+ * its models.
+ */
+const GEMINI_ENTRY: IntegrationDefinition = {
+  providerKey: 'gemini',
+  displayNameEn: 'Google Gemini',
+  displayNameAr: 'Gemini من Google',
+  category: 'ai',
+  supportedEnvironments: INTEGRATION_ENVIRONMENTS,
+  capabilities: {
+    text: false,
+    image: true,
+    moderation: false,
+    embeddings: false,
+    streaming: false,
+  },
+  credentialFields: [
+    {
+      key: 'apiKey',
+      labelEn: 'API key',
+      labelAr: 'مفتاح الواجهة',
+      secret: true,
+      required: true,
+      helpEn:
+        'A Gemini API key from a Google Cloud project with billing turned on (paid tier: Google does not use the prompts to improve its products). Entered once and never shown again — only a mask, a fingerprint and the date it was set.',
+      helpAr:
+        'مفتاح Gemini API من مشروع Google Cloud مفعَّل فيه الدفع (الفئة المدفوعة: لا تستخدم Google الطلبات لتحسين منتجاتها). يُدخل مرة واحدة ولا يُعرض مجددًا — يظهر القناع والبصمة وتاريخ الضبط فقط.',
+    },
+  ],
+  settingFields: [
+    {
+      key: 'baseUrl',
+      labelEn: 'API address',
+      labelAr: 'عنوان الواجهة',
+      secret: false,
+      required: true,
+      kind: 'url',
+      helpEn:
+        'Leave the provider’s own address unless you have a reason. Another host is accepted only if it is on the AI host allow-list; https only, never a private address.',
+      helpAr:
+        'اترك عنوان المزود نفسه ما لم يكن لديك سبب. لا يُقبل مضيف آخر إلا إن كان في قائمة المضيفين المسموح بهم للذكاء الاصطناعي؛ https فقط، ولا عنوان خاص أبدًا.',
+    },
+  ],
+  adapterAvailable: true,
+  testable: true,
+  developmentOnly: false,
+  officialHosts: ['generativelanguage.googleapis.com'],
+  defaultSettings: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta' },
+  noteEn:
+    'Images through the AI gateway. Test reads the model list and generates nothing. Use a project with billing on: Google treats unpaid use differently.',
+  noteAr:
+    'الصور عبر بوابة الذكاء الاصطناعي. الاختبار يقرأ قائمة النماذج ولا يولّد شيئًا. استخدم مشروعًا مفعَّلًا فيه الدفع: تعامل Google الاستخدام غير المدفوع بشكل مختلف.',
+};
+
 /**
  * The providers BrandSpace can actually talk to today.
  *
@@ -291,6 +348,7 @@ const OPENAI_ENTRY: IntegrationDefinition = {
  */
 export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
   OPENAI_ENTRY,
+  GEMINI_ENTRY,
   {
     providerKey: 'mock',
     displayNameEn: 'Deterministic AI (development)',
