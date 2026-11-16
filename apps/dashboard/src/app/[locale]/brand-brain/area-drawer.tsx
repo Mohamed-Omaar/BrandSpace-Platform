@@ -11,7 +11,7 @@ import {
   UploadSubmitButton,
 } from '../../../components/upload-field';
 import { prefersReducedMotion, visuallyHiddenStyle } from '@brandspace/ui';
-import { translator } from '../../../i18n/messages';
+import { useT } from '../../../i18n/words-context';
 import type { AreaCardData, BrandBrainPermissions, CandidateData } from './brand-brain-view';
 import {
   archiveKnowledgeAction,
@@ -19,7 +19,6 @@ import {
   updateKnowledgeAction,
   uploadSourceAction,
 } from './actions';
-import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { SubmitButton } from '../../../components/pending-submit';
 
 /** Q19 — the key question a person chose to answer: its fact key and its words. */
@@ -92,7 +91,7 @@ export function AreaDrawer({
   prefill?: DrawerPrefill | null;
   startEditing?: string | null;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   // The question being answered: from "What's missing", or chosen here.
   const [chosen, setChosen] = useState<QuestionFocus | null>(focus);
   const [editing, setEditing] = useState<string | null>(startEditing);

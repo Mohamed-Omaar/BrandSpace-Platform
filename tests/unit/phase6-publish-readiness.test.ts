@@ -8,6 +8,7 @@ import {
   publishReadiness,
   type ChannelReadinessState,
 } from '../../apps/dashboard/src/server/publish-readiness';
+import { dashboardWordsSource } from '../support/dashboard-words-source';
 
 /**
  * PHASE 6 · P6-10 — A SCHEDULED POST WITH NOWHERE TO GO SAYS SO.
@@ -373,7 +374,7 @@ describe('P6-10 · BrandScope is a query predicate that intersects', () => {
 describe('P6-10 · the answer reaches the screen, and the old claim is gone', () => {
   const PAGE = readFileSync('apps/dashboard/src/app/[locale]/calendar/page.tsx', 'utf8');
   const VIEW = readFileSync('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx', 'utf8');
-  const MESSAGES = readFileSync('apps/dashboard/src/i18n/messages.ts', 'utf8');
+  const MESSAGES = dashboardWordsSource();
 
   it('no longer tells the planner that nothing publishes', () => {
     /*

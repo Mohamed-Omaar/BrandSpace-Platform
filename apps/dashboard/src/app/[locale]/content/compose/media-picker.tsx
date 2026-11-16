@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { AssetThumb, MediaChip, colorTokens, radiusTokens, spacingTokens } from '@brandspace/ui';
 
@@ -111,9 +112,9 @@ export function MediaPicker({
       {options.length === 0 ? (
         <p className="cs-hint" data-testid={`${testId}-empty`}>
           {labels.empty}{' '}
-          <a href={`/${locale}/assets`} className="cs-inline-link">
+          <Link href={`/${locale}/assets`} className="cs-inline-link">
             {labels.uploadHint}
-          </a>
+          </Link>
         </p>
       ) : (
         <>

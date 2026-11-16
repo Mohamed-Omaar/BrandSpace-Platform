@@ -20,7 +20,8 @@ import {
   type CopilotProposedAction,
   type CopilotToolRun,
 } from '@brandspace/ui';
-import { messages as catalogue, statusMessage, type MessageKey } from '../../../i18n/messages';
+import type { MessageKey } from '../../../i18n/messages';
+import { useStatusMessage, useWords } from '../../../i18n/words-context';
 import { type DateFormatterLike, whenFormatter } from '../../../server/prototype-dates';
 import { aiLimitMessage } from '../../../components/ai-limit';
 import { ConversationFoot, ConversationTools } from './conversation-tools';
@@ -296,7 +297,9 @@ export function CopilotView({
    * function. A server component may pass this client component only
    * SERIALIZABLE props, and a translator is a closure.
    */
-  const dictionary = locale === 'ar' ? catalogue.ar : catalogue.en;
+  const words = useWords();
+  const statusMessage = useStatusMessage();
+  const dictionary = words.dictionary;
   const t = (key: MessageKey): string => dictionary[key];
   /** A key that may not exist (a machine value's label): the value itself if not. */
   const tOr = (key: string, fallback: string): string =>
@@ -983,7 +986,7 @@ export function CopilotView({
             { 'ai.limit.daily': t('ai.limit.daily'), 'ai.limit.monthly': t('ai.limit.monthly') },
             locale,
           ) ??
-            statusMessage(errorCode, locale) ??
+            statusMessage(errorCode) ??
             t('copilot.failed')}
         </Banner>
       ) : null}
@@ -1046,7 +1049,7 @@ export function CopilotView({
               locale={locale}
               brandId={brand.id}
               canReview={sources?.review ?? false}
-              labels={sourceCardLabels(t, locale)}
+              labels={sourceCardLabels(t, statusMessage)}
               onDone={() => undefined}
             />
           ) : null}
@@ -1428,7 +1431,7 @@ export function CopilotView({
                   locale={locale}
                   brandId={brand.id}
                   canReview={sources.review}
-                  labels={sourceCardLabels(t, locale)}
+                  labels={sourceCardLabels(t, statusMessage)}
                   onAdded={() => setFileAdded(true)}
                   onDone={() => setAttached(null)}
                 />
@@ -1782,7 +1785,10 @@ function digest(value: string): string {
 }
 
 /** PR B — the Add card's words, in the reader's language. */
-function sourceCardLabels(t: (key: MessageKey) => string, locale: string): SourceCardLabels {
+function sourceCardLabels(
+  t: (key: MessageKey) => string,
+  statusMessage: (code: string) => string | null,
+): SourceCardLabels {
   return {
     askTitle: t('copilot.source.askTitle'),
     askBody: t('copilot.source.askBody'),
@@ -1813,7 +1819,7 @@ function sourceCardLabels(t: (key: MessageKey) => string, locale: string): Sourc
     websiteAsk: t('copilot.website.ask'),
     websiteBody: t('copilot.website.body'),
     websiteRead: t('copilot.website.read'),
-    websiteFailure: (code) => statusMessage(code, locale) ?? t('copilot.website.failed'),
+    websiteFailure: (code) => statusMessage(code) ?? t('copilot.website.failed'),
     rejectAll: t('copilot.source.rejectAll'),
     rejected: t('copilot.source.rejected'),
     alreadyAdded: t('copilot.source.alreadyAdded'),

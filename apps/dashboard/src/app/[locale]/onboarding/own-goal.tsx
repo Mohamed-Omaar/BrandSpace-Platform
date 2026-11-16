@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { OWN_GOAL_MAX } from '../../../server/setup-wizard-state';
+import { OWN_GOAL_MAX } from '../../../server/own-goal-limit';
 
 /**
  * D-496 (Auth 8) — "+ ADD YOUR OWN" GOAL (`Auth.dc.html` L183–185, logic

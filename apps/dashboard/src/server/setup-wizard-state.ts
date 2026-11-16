@@ -286,8 +286,7 @@ export function goalKnowledge(goal: SetupGoal): {
   return { title: { en, ar }, body: { en: sentence('en', en), ar: sentence('ar', ar) } };
 }
 
-/** D-496 (Auth 8) — the longest goal a person may type in setup. */
-export const OWN_GOAL_MAX = 120;
+export { OWN_GOAL_MAX } from './own-goal-limit';
 
 /**
  * D-496 (Auth 8) — A GOAL THE PERSON TYPED, as knowledge: their own words as

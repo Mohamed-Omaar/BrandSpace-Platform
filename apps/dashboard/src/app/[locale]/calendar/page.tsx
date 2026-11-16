@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {
   RESCHEDULABLE_SLOT_STATUSES,
   calendarMarkers,
@@ -832,9 +833,12 @@ export default async function CalendarPage({
           {workspace.permissionKeys.includes('integrations.manage') ? (
             <>
               {' '}
-              <a href={`/${locale}/publishing?tab=accounts`} data-testid="calendar-readiness-fix">
+              <Link
+                href={`/${locale}/publishing?tab=accounts`}
+                data-testid="calendar-readiness-fix"
+              >
                 {translate('calendar.readinessFix')}
-              </a>
+              </Link>
             </>
           ) : null}
         </CustomerBanner>

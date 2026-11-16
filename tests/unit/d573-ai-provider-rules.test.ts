@@ -26,6 +26,7 @@ import {
 import { draftIdeasPrompt } from '@brandspace/automation';
 import { withAiKeyRotation } from '../../apps/admin/src/server/owner-readiness';
 import { statusMessage } from '../../apps/dashboard/src/i18n/messages';
+import { dashboardWordsSource } from '../support/dashboard-words-source';
 
 /**
  * D-573 — the platform's own AI provider: the rules that need no database.
@@ -596,7 +597,7 @@ describe('F-109 · credit rules are priced in whole credits per action', () => {
 
 describe('F-108 · the Studio names the language, not a dialect (D-474)', () => {
   it('reads "اللغة" in Arabic and "Language" in English', () => {
-    const messages = read('apps/dashboard/src/i18n/messages.ts');
+    const messages = dashboardWordsSource();
     expect(messages).toContain("'content.composer.dialect': 'اللغة'");
     expect(messages).toContain("'content.composer.dialect': 'Language'");
     expect(messages).not.toContain("'content.composer.dialect': 'اللهجة'");

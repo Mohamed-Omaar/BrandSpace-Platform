@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect, useId, useState, type Ref } from 'react';
-import { translator } from '../../../i18n/messages';
+import { useT } from '../../../i18n/words-context';
 import type { CandidateData } from './brand-brain-view';
 import { reviewCandidateAction } from './actions';
-import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { SubmitButton } from '../../../components/pending-submit';
 
 /**
@@ -69,7 +68,7 @@ export function ReviewInbox({
   onEditFact: (area: string) => void;
   onClose: () => void;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const [index, setIndex] = useState(() =>
     Math.max(
       0,

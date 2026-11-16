@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 import { currentColourScheme } from '../../server/colour-scheme';
 import { ColourSchemeSync } from '../../components/colour-scheme-sync';
+import { WordsProvider } from '../../i18n/words-context';
+import { translator } from '../../i18n/messages';
 import {
   CustomerFrameHost,
   SUPPORTED_LOCALES,
@@ -106,7 +108,15 @@ export default async function LocaleLayout({
           so the rail a page's shell publishes stays mounted from page to page
           and its pill glides, as the Control Center's does from its layout.
         */}
-        <CustomerFrameHost>{children}</CustomerFrameHost>
+        {/*
+          B2 — ONE LANGUAGE PER PAGE: the words of this page's language only;
+          the browser loads only this language's dictionary (`i18n/words-context.tsx`).
+        */}
+        <WordsProvider locale={locale}>
+          <CustomerFrameHost loadingLabel={translator(locale)('common.loading')}>
+            {children}
+          </CustomerFrameHost>
+        </WordsProvider>
       </body>
     </html>
   );

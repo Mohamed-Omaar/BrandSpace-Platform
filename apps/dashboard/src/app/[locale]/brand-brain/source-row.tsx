@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { translator } from '../../../i18n/messages';
+import { useT } from '../../../i18n/words-context';
 import { readAgainSourceAction, removeSourceAction } from './actions';
-import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { SubmitButton } from '../../../components/pending-submit';
 
 /**
@@ -63,7 +62,7 @@ export function SourceRow({
   /** `brand_brain.upload` AND `brand_brain.edit` — "Drop its facts". */
   readonly canDrop: boolean;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const t = useT();
   const detailId = useId();
   const [open, setOpen] = useState(false);
   const [removing, setRemoving] = useState(false);

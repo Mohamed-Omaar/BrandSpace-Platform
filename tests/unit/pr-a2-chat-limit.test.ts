@@ -37,7 +37,9 @@ describe('PR A2 — the AI budget message in Copilot and Brand Brain chat', () =
       'apps/dashboard/src/app/[locale]/copilot/copilot-view.tsx',
       'utf8',
     );
-    expect(copilot).toMatch(/aiLimitMessage\([\s\S]*statusMessage\(errorCode, locale\)/);
+    // B2: the page's own language comes from its words provider, so the
+    // status sentence no longer takes the locale.
+    expect(copilot).toMatch(/aiLimitMessage\([\s\S]*statusMessage\(errorCode\)/);
     expect(copilot).toContain('setErrorDetails(result.error.details ?? null)');
     // PR B (D-594) — Brand Brain's chat is retired: its questions are the
     // Copilot's, so the Copilot's own reading above is the one that answers.

@@ -14273,3 +14273,19 @@ select.bs-select.bsp-chevron {
 .bs-cp-open:hover {
   background: var(--bs-surface-soft);
 }
+
+/*
+ * B2 — A PAGE ON ITS WAY (`CustomerPageLoading`): the panel's own cards as
+ * skeletons, in the old panel's place; the old panel is hidden, not removed.
+ */
+.bs-shell[data-nav-away] > .bs-panel:not(.bsp-loading-panel) {
+  display: none;
+}
+.bsp-loading-page {
+  display: grid;
+  gap: var(--bsp-px-22);
+  align-content: start;
+}
+.bsp-loading-card {
+  padding: var(--bsp-px-22);
+}

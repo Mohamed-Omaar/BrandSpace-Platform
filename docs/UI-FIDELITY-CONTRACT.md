@@ -2736,3 +2736,12 @@ after ten minutes (`PendingWatch`). When it stops it says so, in the place the p
 file's state: the existing hint line (`bsp-st-hint`, `role="status"`) with the existing small button
 (`bsp-btn bsp-sm`) "Refresh". The prototype draws no such state. Nothing new is drawn: no new colour,
 font, size or interaction.
+
+### 6.3.86 B2 — a page on its way (owner, 2026-11-14)
+
+The prototype draws no state between two pages. When a link leads to another page and it takes longer
+than 150 ms, the panel shows `CustomerPageLoading`: the panel's own header row and three `bsp-card`
+cards drawn with the shared `Skeleton` lines, under the shared progress line (`WorkingStatus`, "Loading…",
+in the page's language). The rail stays exactly as it is. Nothing new is drawn: no new colour, font,
+shadow or interaction. The Overview hero's blobs move on the same clock and path as the prototype's; it
+repaints at most 30 times a second, and not at all off screen or in a hidden tab.

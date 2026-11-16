@@ -1,3 +1,4 @@
+import Form from 'next/form';
 import Link from 'next/link';
 import {
   Card,
@@ -164,7 +165,7 @@ export default async function ActivityPage({
                 actually occur within the reader's scope, so the filter cannot
                 be used to probe for events they may not see.
               */}
-                <form method="get" style={filterFormStyle}>
+                <Form action={`/${locale}/activity`} style={filterFormStyle}>
                   <label htmlFor="activity-action" style={labelStyle}>
                     {t('activity.filterAction')}
                   </label>
@@ -195,7 +196,7 @@ export default async function ActivityPage({
                   <button type="submit" className={buttonClass('ghost')}>
                     {t('activity.filterAction')}
                   </button>
-                </form>
+                </Form>
 
                 {page.entries.length === 0 ? (
                   <StateMessage

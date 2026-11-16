@@ -31,6 +31,8 @@ import { LinkPendingMark, usePrefetchOnIntent } from './prefetch-link';
 import { PrototypeIcon } from './prototype-icons';
 import { colorTokens, motionMs, radiusTokens, shadowTokens, spacingTokens } from './tokens';
 import { Backdrop } from './backdrop';
+import { SkeletonLines, Skeleton } from './feedback';
+import { WorkingStatus } from './progress';
 
 /**
  * THE CUSTOMER APPLICATION'S SHELL, PORTED FROM `prototype-2026-09-27` (D-468).
@@ -759,12 +761,15 @@ function CustomerFrame({
   collapse,
   contentLang,
   after,
+  away,
   children,
 }: {
   readonly rail: CustomerRailModel | null;
   readonly collapse: SidebarCollapse;
   readonly contentLang?: string | undefined;
   readonly after?: ReactNode;
+  /** B2 — the page on its way: shown in the panel's place, the old panel hidden. */
+  readonly away?: ReactNode;
   readonly children: ReactNode;
 }) {
   const on = rail !== null;
@@ -794,9 +799,11 @@ function CustomerFrame({
             ? ({ '--bs-shell-sidebar-width': sidebarWidth } as CSSProperties)
             : { display: 'contents' }
         }
+        data-nav-away={on && away ? '' : undefined}
       >
         {on ? <RailAside rail={rail} collapse={collapse} /> : null}
         {children}
+        {on ? away : null}
       </div>
       {on ? rail.floating : null}
       {after}
@@ -810,10 +817,60 @@ function CustomerFrame({
  * `CustomerShell` publishes a rail, and then keeps that one rail — its `nav`,
  * its pill, its scroll and its collapse state — for every page that follows.
  */
-export function CustomerFrameHost({ children }: { readonly children: ReactNode }) {
+export function CustomerFrameHost({
+  loadingLabel,
+  children,
+}: {
+  /** B2 — "Loading…" in the page's language, for a page on its way. */
+  readonly loadingLabel?: string;
+  readonly children: ReactNode;
+}) {
   const [store] = useState(createFrameStore);
   const rail = useSyncExternalStore(store.subscribe, store.get, noRail);
   const collapse = useSidebarCollapse();
+  /*
+   * B2 — A PAGE ON ITS WAY. A press on a link to another page shows the
+   * loading panel in the old one's place — after 150 ms, so a quick change
+   * never flashes — until the new page arrives (its path is the frame's), or
+   * after 10 s. Only the browser's view changes: the server answers exactly
+   * as before, with its own status (a missing record is still a 404).
+   */
+  const pathname = usePathname();
+  const [heading, setHeading] = useState<string | null>(null);
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    setHeading(null);
+  }, [pathname]);
+  useEffect(() => {
+    if (heading === null) {
+      setAway(false);
+      return undefined;
+    }
+    const show = window.setTimeout(() => setAway(true), 150);
+    const giveUp = window.setTimeout(() => setHeading(null), 10_000);
+    return () => {
+      window.clearTimeout(show);
+      window.clearTimeout(giveUp);
+    };
+  }, [heading]);
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target instanceof Element ? event.target : null;
+      const anchor = target?.closest<HTMLAnchorElement>('a[href]');
+      if (!anchor || (anchor.target && anchor.target !== '_self')) return;
+      if (anchor.hasAttribute('download')) return;
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname) return;
+      setHeading(url.pathname);
+    };
+    // Captured, before `Link` takes the click over (it cancels the browser's
+    // own navigation to run the app's, so a cancelled click is the normal case).
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, []);
   /*
    * PR D (review of #75) — THE HOST TAKES OVER AT THE VISIT'S FIRST PAGE
    * CHANGE, never on loading. Until then the page's shell draws its own rail,
@@ -865,7 +922,12 @@ export function CustomerFrameHost({ children }: { readonly children: ReactNode }
   return (
     <FrameContext.Provider value={store}>
       <FrameCollapseContext.Provider value={collapse}>
-        <CustomerFrame rail={rail} collapse={collapse} contentLang={rail?.contentLang}>
+        <CustomerFrame
+          rail={rail}
+          collapse={collapse}
+          contentLang={rail?.contentLang}
+          away={away && loadingLabel ? <CustomerPageLoading label={loadingLabel} /> : null}
+        >
           {children}
         </CustomerFrame>
       </FrameCollapseContext.Provider>
@@ -1177,5 +1239,42 @@ export function CustomerShell({
         </main>
       </div>
     </CustomerFrame>
+  );
+}
+
+/**
+ * B2 (performance, owner 2026-11-14) — A PAGE ON ITS WAY, SHOWN AT ONCE.
+ *
+ * When a link leads to another page, the frame (`CustomerFrameHost`) shows
+ * this in the panel's place until the page arrives, so a click answers at
+ * once instead of leaving the old page up. It is the panel's own geometry —
+ * the header row, then cards — drawn as skeletons with the shared progress
+ * line ("Loading…", and how long so far), so nothing jumps when the page
+ * comes. The rail stays as it is.
+ */
+export function CustomerPageLoading({ label }: { readonly label: string }) {
+  const [since] = useState(() => Date.now());
+  return (
+    <div
+      className="bs-panel bsp-main bsp-loading-panel"
+      aria-busy="true"
+      data-testid="page-loading"
+    >
+      <header className="bs-topbar bsp-header">
+        <div className="bsp-header-title">
+          <Skeleton width="var(--bsp-rem-12)" height="var(--bsp-rem-1-75)" />
+        </div>
+      </header>
+      <main className="bsp-scroll">
+        <div className="bsp-page bsp-loading-page">
+          <WorkingStatus label={label} since={since} testId="page-loading-status" />
+          {[0, 1, 2].map((card) => (
+            <section key={card} className="bsp-card bsp-loading-card">
+              <SkeletonLines lines={3} />
+            </section>
+          ))}
+        </div>
+      </main>
+    </div>
   );
 }
