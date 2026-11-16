@@ -51,7 +51,17 @@ export interface CopilotPruneResult {
   readonly sessionsArchived: number;
   /** PR B — rolling summaries cleared because what they cover expired. */
   readonly summariesPurged: number;
+  /** C2 — plans left EXECUTING by a process that stopped mid-plan, ended FAILED. */
+  readonly plansInterrupted: number;
 }
+
+/**
+ * C2 (F-112) — how long a plan may stay EXECUTING before it is taken to have
+ * been interrupted. A confirmed plan now runs in short transactions, so a
+ * process that stops between them (a deploy, a crash) leaves it EXECUTING;
+ * ten minutes is far past any step's own deadline.
+ */
+export const INTERRUPTED_PLAN_AFTER_MS = 10 * 60 * 1_000;
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
@@ -154,5 +164,46 @@ export async function pruneCopilot(input: {
   // Kept in the result's shape for the scheduler's log; nothing archives now.
   const sessionsArchived = 0;
 
-  return { messageBodiesPurged, plansExpired, sessionsArchived, summariesPurged };
+  /*
+   * C2 (F-112) — A PLAN THAT STOPPED MID-WAY ENDS FAILED, never "running"
+   * forever. Its step that was running is FAILED `interrupted` with it; the
+   * steps that had finished keep their outcome. No undo is offered: what a
+   * stopped step left behind (a draft) is the person's to keep or delete.
+   */
+  const interrupted = await input.prisma.copilotActionPlan.findMany({
+    where: {
+      status: 'EXECUTING',
+      startedAt: { lt: new Date(now.getTime() - INTERRUPTED_PLAN_AFTER_MS) },
+    },
+    select: { id: true },
+    take: batch,
+  });
+  let plansInterrupted = 0;
+  if (interrupted.length > 0) {
+    const ids = interrupted.map((row) => row.id);
+    await input.prisma.copilotToolCall.updateMany({
+      where: { planId: { in: ids }, status: 'RUNNING' },
+      data: { status: 'FAILED', failureCode: 'interrupted', finishedAt: now },
+    });
+    plansInterrupted = (
+      await input.prisma.copilotActionPlan.updateMany({
+        // Still EXECUTING: a plan that finished in the meantime is left alone.
+        where: { id: { in: ids }, status: 'EXECUTING' },
+        data: {
+          status: 'FAILED',
+          failureCode: 'interrupted',
+          completedAt: now,
+          undoStatus: 'NOT_APPLICABLE',
+        },
+      })
+    ).count;
+  }
+
+  return {
+    messageBodiesPurged,
+    plansExpired,
+    sessionsArchived,
+    summariesPurged,
+    plansInterrupted,
+  };
 }

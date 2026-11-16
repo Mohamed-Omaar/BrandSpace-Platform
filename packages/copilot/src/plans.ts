@@ -129,6 +129,30 @@ export interface CreatedPlan {
   readonly confirmationToken: string | null;
 }
 
+/**
+ * C2 (F-112) — WHAT ONE EXECUTION CARRIES between its short transactions
+ * (`begin`, `runSteps`, `finishPaused`, `complete`). Held by the caller, in
+ * memory, for one request.
+ */
+export interface ExecutionState {
+  readonly plan: CopilotActionPlan;
+  readonly steps: readonly StoredStep[];
+  authorization: LiveAuthorization;
+  readonly toolCalls: CopilotToolCall[];
+  creditsChargedMilli: bigint;
+  failed: boolean;
+  /** The index in `steps` of the next step to run. */
+  next: number;
+}
+
+/** C2 — a step checked, recorded RUNNING, and handed to the caller to run outside. */
+export interface PausedStep {
+  readonly step: StoredStep;
+  readonly idempotencyKey: string;
+  readonly callId: string;
+  readonly startedAt: Date;
+}
+
 export interface ExecutionResult {
   readonly plan: CopilotActionPlan;
   readonly toolCalls: readonly CopilotToolCall[];
@@ -652,6 +676,21 @@ export class CopilotPlanService {
     /** Asked before every step that spends credits or changes state. */
     entitlements?: EntitlementGate | undefined;
   }): Promise<ExecutionResult> {
+    const state = await this.begin({ planId: input.planId, userId: input.userId });
+    await this.runSteps(state, { context: input.context, entitlements: input.entitlements });
+    return this.complete(state);
+  }
+
+  /**
+   * C2 (F-112) — THE FIRST PART OF AN EXECUTION: the plan is checked, the
+   * live membership resolved, and the plan claimed (CONFIRMED → EXECUTING).
+   * `execute` runs the whole plan in one transaction; the Copilot's confirm
+   * route instead runs it in SHORT transactions — `begin` and `runSteps` in
+   * one, a step that calls a model (`pauseAt`) with no transaction open, and
+   * `finishPaused`, more `runSteps` and `complete` in the next — carrying this
+   * state between them.
+   */
+  async begin(input: { planId: string; userId: string }): Promise<ExecutionState> {
     const plan = await this.#requirePlan(input.planId, input.userId);
 
     if (plan.status === 'COMPLETED' || plan.status === 'EXECUTING') throw planAlreadyExecuted();
@@ -687,22 +726,68 @@ export class CopilotPlanService {
     });
     if (claimed.count === 0) throw planAlreadyExecuted();
 
-    const steps = (plan.steps as unknown as StoredStep[]) ?? [];
-    const context = input.context(authorization, plan);
-    const toolCalls: CopilotToolCall[] = [];
-    let creditsChargedMilli = 0n;
-    let failed = false;
+    return {
+      plan,
+      steps: (plan.steps as unknown as StoredStep[]) ?? [],
+      authorization,
+      toolCalls: [],
+      creditsChargedMilli: 0n,
+      failed: false,
+      next: 0,
+    };
+  }
 
-    for (const step of steps) {
-      if (failed) {
-        toolCalls.push(await this.#recordCall(plan, step, { status: 'SKIPPED' }));
+  /**
+   * C2 — THE LIVE MEMBERSHIP, READ AGAIN at the start of a later short
+   * transaction. Gone since the last one: the step that was running and every
+   * step after it are not run, and the plan ends FAILED.
+   */
+  async refreshAuthorization(state: ExecutionState): Promise<boolean> {
+    const authorization = await resolveLiveAuthorization(
+      this.#db,
+      this.#workspaceId,
+      state.authorization.userId,
+    );
+    if (!authorization) {
+      state.failed = true;
+      return false;
+    }
+    state.authorization = authorization;
+    return true;
+  }
+
+  /**
+   * Run the plan's steps, in order, from `state.next`.
+   *
+   * WHAT HAPPENS BEFORE EVERY SINGLE STEP is described on `execute`. With
+   * `pauseAt`, a step whose tool is listed is checked and recorded RUNNING
+   * exactly as any other, and then NOT run: it is returned, so the caller can
+   * run it with no transaction open and hand the outcome to `finishPaused`.
+   */
+  async runSteps(
+    state: ExecutionState,
+    input: {
+      context: (authorization: LiveAuthorization, plan: CopilotActionPlan) => ExecutorContext;
+      entitlements?: EntitlementGate | undefined;
+      pauseAt?: ReadonlySet<string> | undefined;
+    },
+  ): Promise<PausedStep | null> {
+    const { plan, steps } = state;
+    const authorization = state.authorization;
+    const context = input.context(authorization, plan);
+
+    while (state.next < steps.length) {
+      const step = steps[state.next]!;
+      state.next += 1;
+      if (state.failed) {
+        state.toolCalls.push(await this.#recordCall(plan, step, { status: 'SKIPPED' }));
         continue;
       }
 
       const tool = findTool(step.toolKey);
       if (!tool) {
-        failed = true;
-        toolCalls.push(
+        state.failed = true;
+        state.toolCalls.push(
           await this.#recordCall(plan, step, { status: 'FAILED', failureCode: 'unknown_tool' }),
         );
         continue;
@@ -710,8 +795,8 @@ export class CopilotPlanService {
 
       // (1) THE PERMISSION, AGAINST THE LIVE MEMBERSHIP.
       if (!holds(authorization, tool.permission)) {
-        failed = true;
-        toolCalls.push(
+        state.failed = true;
+        state.toolCalls.push(
           await this.#recordCall(plan, step, {
             status: 'REFUSED',
             failureCode: 'permission_denied',
@@ -742,8 +827,8 @@ export class CopilotPlanService {
             brandScope: authorization.brandScope,
           })
         ) {
-          failed = true;
-          toolCalls.push(
+          state.failed = true;
+          state.toolCalls.push(
             await this.#recordCall(plan, step, {
               status: 'REFUSED',
               failureCode: 'brand_out_of_scope',
@@ -757,8 +842,8 @@ export class CopilotPlanService {
       if (input.entitlements && tool.entitlementKey !== undefined) {
         const allowed = await input.entitlements.allows(tool.entitlementKey);
         if (!allowed) {
-          failed = true;
-          toolCalls.push(
+          state.failed = true;
+          state.toolCalls.push(
             await this.#recordCall(plan, step, {
               status: 'REFUSED',
               failureCode: 'entitlement_denied',
@@ -784,7 +869,7 @@ export class CopilotPlanService {
         where: { workspaceId: this.#workspaceId, idempotencyKey },
       });
       if (existing && existing.status === 'SUCCEEDED') {
-        toolCalls.push(existing);
+        state.toolCalls.push(existing);
         continue;
       }
 
@@ -795,6 +880,11 @@ export class CopilotPlanService {
         startedAt,
       });
 
+      // C2 — a step that calls a model is run by the caller, outside.
+      if (input.pauseAt?.has(step.toolKey)) {
+        return { step, idempotencyKey, callId: call.id, startedAt };
+      }
+
       try {
         const executor = TOOL_EXECUTORS[step.toolKey];
         /* c8 ignore next -- every registry key has an executor; asserted by a test. */
@@ -804,57 +894,86 @@ export class CopilotPlanService {
           { ...context, idempotencyKey },
           step.arguments,
         );
-        creditsChargedMilli += result.creditsChargedMilli ?? 0n;
-
-        const updated = await this.#db.copilotToolCall.update({
-          where: { id: call.id },
-          data: {
-            status: 'SUCCEEDED',
-            resultJson: result.result,
-            resourceType: result.resourceType ?? null,
-            resourceId: result.resourceId ?? null,
-            resourceVersionBefore: result.resourceVersionBefore ?? null,
-            resourceVersionAfter: result.resourceVersionAfter ?? null,
-            compensation: result.compensation ?? Prisma.DbNull,
-            aiRequestId: result.aiRequestId ?? null,
-            finishedAt: this.#clock.now(),
-            durationMs: Math.max(0, this.#clock.now().getTime() - startedAt.getTime()),
-          },
-        });
-        toolCalls.push(updated);
-
-        await writeAuditEvent(this.#db, this.#workspaceId, {
-          action: `copilot.tool.${step.toolKey}`,
-          actorType: 'COPILOT',
-          actorId: authorization.userId,
-          resourceType: result.resourceType ?? 'CopilotToolCall',
-          resourceId: result.resourceId ?? updated.id,
-          ...(plan.brandId ? { brandId: plan.brandId } : {}),
-          traceId: plan.correlationId,
-          after: { planId: plan.id, ordinal: step.ordinal, actionClass: step.actionClass },
-        });
+        await this.#succeed(state, { step, idempotencyKey, callId: call.id, startedAt }, result);
       } catch (error: unknown) {
-        failed = true;
-        /*
-         * A STABLE CODE, NEVER THE MESSAGE. An `AppError` already carries one; an
-         * unexpected throw becomes `internal`, because the message could carry a
-         * provider string, a hostname or a fragment of customer content, and this
-         * row is read back into a conversation.
-         */
-        const failureCode = error instanceof AppError ? error.code.toLowerCase() : 'internal';
-        const updated = await this.#db.copilotToolCall.update({
-          where: { id: call.id },
-          data: {
-            status: 'FAILED',
-            failureCode,
-            finishedAt: this.#clock.now(),
-            durationMs: Math.max(0, this.#clock.now().getTime() - startedAt.getTime()),
-          },
-        });
-        toolCalls.push(updated);
+        await this.#fail(state, { step, idempotencyKey, callId: call.id, startedAt }, error);
       }
     }
+    return null;
+  }
 
+  /**
+   * C2 — THE OUTCOME OF A STEP THAT RAN OUTSIDE (`runSteps`' `pauseAt`),
+   * recorded exactly as an inline step's would be: SUCCEEDED with its result,
+   * credits and undo, or FAILED with a stable code.
+   */
+  async finishPaused(
+    state: ExecutionState,
+    paused: PausedStep,
+    outcome: { readonly result: ExecutorResult } | { readonly error: unknown },
+  ): Promise<void> {
+    if ('result' in outcome) await this.#succeed(state, paused, outcome.result);
+    else await this.#fail(state, paused, outcome.error);
+  }
+
+  async #succeed(state: ExecutionState, paused: PausedStep, result: ExecutorResult): Promise<void> {
+    const { plan } = state;
+    const { step, startedAt } = paused;
+    state.creditsChargedMilli += result.creditsChargedMilli ?? 0n;
+
+    const updated = await this.#db.copilotToolCall.update({
+      where: { id: paused.callId },
+      data: {
+        status: 'SUCCEEDED',
+        resultJson: result.result,
+        resourceType: result.resourceType ?? null,
+        resourceId: result.resourceId ?? null,
+        resourceVersionBefore: result.resourceVersionBefore ?? null,
+        resourceVersionAfter: result.resourceVersionAfter ?? null,
+        compensation: result.compensation ?? Prisma.DbNull,
+        aiRequestId: result.aiRequestId ?? null,
+        finishedAt: this.#clock.now(),
+        durationMs: Math.max(0, this.#clock.now().getTime() - startedAt.getTime()),
+      },
+    });
+    state.toolCalls.push(updated);
+
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: `copilot.tool.${step.toolKey}`,
+      actorType: 'COPILOT',
+      actorId: state.authorization.userId,
+      resourceType: result.resourceType ?? 'CopilotToolCall',
+      resourceId: result.resourceId ?? updated.id,
+      ...(plan.brandId ? { brandId: plan.brandId } : {}),
+      traceId: plan.correlationId,
+      after: { planId: plan.id, ordinal: step.ordinal, actionClass: step.actionClass },
+    });
+  }
+
+  async #fail(state: ExecutionState, paused: PausedStep, error: unknown): Promise<void> {
+    state.failed = true;
+    /*
+     * A STABLE CODE, NEVER THE MESSAGE. An `AppError` already carries one; an
+     * unexpected throw becomes `internal`, because the message could carry a
+     * provider string, a hostname or a fragment of customer content, and this
+     * row is read back into a conversation.
+     */
+    const failureCode = error instanceof AppError ? error.code.toLowerCase() : 'internal';
+    const updated = await this.#db.copilotToolCall.update({
+      where: { id: paused.callId },
+      data: {
+        status: 'FAILED',
+        failureCode,
+        finishedAt: this.#clock.now(),
+        durationMs: Math.max(0, this.#clock.now().getTime() - paused.startedAt.getTime()),
+      },
+    });
+    state.toolCalls.push(updated);
+  }
+
+  /** The last part of an execution: the plan COMPLETED or FAILED, its undo window, its audit. */
+  async complete(state: ExecutionState): Promise<ExecutionResult> {
+    const { plan, steps, toolCalls, failed, creditsChargedMilli } = state;
     const now = this.#clock.now();
     const completed = await this.#db.copilotActionPlan.update({
       where: { id: plan.id },
@@ -876,7 +995,7 @@ export class CopilotPlanService {
     await writeAuditEvent(this.#db, this.#workspaceId, {
       action: failed ? 'copilot.plan_failed' : 'copilot.plan_executed',
       actorType: 'COPILOT',
-      actorId: authorization.userId,
+      actorId: state.authorization.userId,
       resourceType: 'CopilotActionPlan',
       resourceId: plan.id,
       ...(plan.brandId ? { brandId: plan.brandId } : {}),
