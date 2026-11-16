@@ -415,8 +415,9 @@ and the log; no customer API returns them.
 
 **No provider call holds a tenant transaction (H-4).** Every AI service runs as read → call → write: its
 `…With(run, input)` entry receives a runner that opens a SHORT `withWorkspace` per step, so the provider is
-called with no tenant transaction open. One interim exception remains: a confirmed Copilot plan's
-"draft a post" step (F-112).
+called with no tenant transaction open. A confirmed Copilot plan too (C2, D-611): `runConfirmedPlan`
+commits the confirmation and the steps before a model in one short transaction, runs the model step with
+none (the studio's own `generateWith`), and records its outcome and the steps after it in the next.
 
 ### 7.4 The three guarantees
 

@@ -1286,7 +1286,8 @@ export class MaintenanceScheduler {
       pruned.insights +
       copilot.messageBodiesPurged +
       copilot.plansExpired +
-      copilot.sessionsArchived
+      copilot.sessionsArchived +
+      copilot.plansInterrupted
     );
   }
 

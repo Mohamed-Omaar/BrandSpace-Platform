@@ -9,6 +9,8 @@ import type {
   CampaignService,
   ContentCalendarService,
   ContentStudioService,
+  GenerateInput,
+  GenerationResult,
 } from '@brandspace/content';
 import { type RetentionInput } from '@brandspace/content';
 import { brandIdQueryFilter, currentEnvironment, type Clock } from '@brandspace/shared';
@@ -535,24 +537,37 @@ const campaignUpdate: ToolExecutor = async (context, args) => {
   };
 };
 
-const contentDraft: ToolExecutor = async (context, args) => {
-  // A SURFACE THAT CANNOT SPEND CREDITS CANNOT DRAFT. Absent rather than
-  // throwing late: the plan builder filters this tool out where the studio is
-  // not wired, so the model never proposes a step that cannot run.
-  if (!context.studio) throw externalActionUnavailable();
-
-  const generation = await context.studio.generate({
+/**
+ * C2 (F-112) — `content.draft` IN TWO HALVES, so the Copilot's confirm route
+ * can call the model with NO transaction open: the studio's generation input
+ * (run outside, through `ContentStudioService.generateWith`), then the step's
+ * result from what was generated (inside the next short transaction). The
+ * executor below runs both halves in a row, for every caller that runs a plan
+ * inline.
+ */
+export function contentDraftInput(
+  context: Pick<ExecutorContext, 'authorization' | 'planKey' | 'retention'>,
+  args: Readonly<Record<string, unknown>>,
+  idempotencyKey: string,
+): GenerateInput {
+  return {
     brandId: String(args['brandId']),
     brief: String(args['brief']),
     locale: (args['locale'] as 'AR' | 'EN') ?? 'EN',
     platformKeys: (args['platformKeys'] as string[]) ?? [],
-    idempotencyKey: context.idempotencyKey,
+    idempotencyKey,
     actorUserId: context.authorization.userId,
     planKey: context.planKey,
     actorBrandScope: context.authorization.brandScope,
     retention: context.retention,
-  });
+  };
+}
 
+export async function contentDraftResult(
+  context: Pick<ExecutorContext, 'authorization' | 'campaigns'>,
+  args: Readonly<Record<string, unknown>>,
+  generation: GenerationResult,
+): Promise<ExecutorResult> {
   if (args['campaignId']) {
     await context.campaigns.setContentCampaign({
       contentItemId: generation.item.id,
@@ -587,6 +602,17 @@ const contentDraft: ToolExecutor = async (context, args) => {
       requireStatusIn: ['DRAFT'],
     },
   };
+}
+
+const contentDraft: ToolExecutor = async (context, args) => {
+  // A SURFACE THAT CANNOT SPEND CREDITS CANNOT DRAFT. Absent rather than
+  // throwing late: the plan builder filters this tool out where the studio is
+  // not wired, so the model never proposes a step that cannot run.
+  if (!context.studio) throw externalActionUnavailable();
+  const generation = await context.studio.generate(
+    contentDraftInput(context, args, context.idempotencyKey),
+  );
+  return contentDraftResult(context, args, generation);
 };
 
 const postCreateDraft: ToolExecutor = async (context, args) => {

@@ -13,7 +13,9 @@ import {
   CopilotPlanService,
   CopilotUndoService,
   TenantCopilotPolicySource,
+  contentDraftInput,
   findTool,
+  runConfirmedPlan,
   resolveLiveAuthorization,
   type CopilotSubjectType,
   type CopilotSurface,
@@ -30,6 +32,7 @@ import {
   TenantContentPolicySource,
   resolveContentExpiry,
   resolveContentPolicy,
+  type StudioRun,
 } from '@brandspace/content';
 import {
   PublishPipelineService,
@@ -409,8 +412,11 @@ export function externalActions(db: TenantScopedClient): ExternalActionPort {
   };
 }
 
-/** H-4 interim: above the AI route deadline, for a plan whose step generates. */
-const COPILOT_CONFIRM_TRANSACTION_MS = 90_000;
+/**
+ * C2 (F-112) — the steps whose tool calls a model. The confirm route runs them
+ * with no transaction open (see `/v1/copilot/confirm`).
+ */
+const GENERATING_TOOLS: ReadonlySet<string> = new Set(['content.draft']);
 
 export function registerCopilotRoutes(app: FastifyInstance): void {
   route(
@@ -927,49 +933,67 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
 
       try {
         const facts = await workspaceFacts(caller.workspaceId);
+        const workspaceId = caller.workspaceId;
 
-        const outcome = await withWorkspace(
-          caller.workspaceId,
-          async (db) => {
-            const policy = await new TenantCopilotPolicySource(db, currentEnvironment()).load();
-            const plans = new CopilotPlanService({
+        const contentPolicy = await resolveContentPolicy(
+          configurationService(),
+          currentEnvironment(),
+        );
+        /*
+         * C2 (F-112) — CONFIRMED AND RUN IN SHORT TRANSACTIONS; A MODEL IS NEVER
+         * CALLED INSIDE ONE (`runConfirmedPlan`). A `content.draft` step runs
+         * through the studio's own short steps, exactly as the Studio's
+         * Generate does (`studioRun` in ./content.ts).
+         */
+        const studioRun: StudioRun = (fn) =>
+          withWorkspace(
+            workspaceId,
+            async (db) =>
+              fn(
+                new ContentStudioService({
+                  db,
+                  workspaceId,
+                  policy: contentPolicy,
+                  gateway: gateway(),
+                }),
+              ),
+            { prisma: getPrisma() },
+          );
+        const outcome = await runConfirmedPlan({
+          planId: body.planId,
+          planHash: body.planHash,
+          token: body.token,
+          userId: caller.userId,
+          run: (fn) => withWorkspace(workspaceId, fn, { prisma: getPrisma() }),
+          services: async (db) => ({
+            plans: new CopilotPlanService({
               db,
-              workspaceId: caller.workspaceId,
-              policy,
+              workspaceId,
+              policy: await new TenantCopilotPolicySource(db, currentEnvironment()).load(),
               // A REFUSED CONFIRMATION MUST OUTLIVE THE TRANSACTION THAT REFUSED
               // IT. See `copilotDenialSink`.
-              denialSink: copilotDenialSink(caller.workspaceId),
-            });
-
-            await plans.confirm({
-              planId: body.planId,
-              planHash: body.planHash,
-              token: body.token,
-              userId: caller.userId,
-            });
-
-            return plans.execute({
-              planId: body.planId,
-              userId: caller.userId,
-              entitlements: entitlementGate(db, caller.workspaceId),
-              context: await executionContextFor({
-                db,
-                workspaceId: caller.workspaceId,
-                planKey: facts.planKey,
-                retention: facts,
-                correlationId: body.planId,
-              }),
-            });
-          },
-          /*
-           * PR A (check-up H-4) — INTERIM, AND SAID SO. A confirmed plan's
-           * "draft a post" step still calls the provider inside this
-           * transaction (the plan executes its steps atomically). Until PR B
-           * moves AI steps out of it, the transaction outlives the AI route
-           * deadline (30 s by default) instead of expiring under it at 15 s.
-           */
-          { prisma: getPrisma(), timeoutMs: COPILOT_CONFIRM_TRANSACTION_MS },
-        );
+              denialSink: copilotDenialSink(workspaceId),
+            }),
+            entitlements: entitlementGate(db, workspaceId),
+            context: await executionContextFor({
+              db,
+              workspaceId,
+              planKey: facts.planKey,
+              retention: facts,
+              correlationId: body.planId,
+            }),
+          }),
+          generating: GENERATING_TOOLS,
+          generate: (paused, state) =>
+            ContentStudioService.generateWith(
+              studioRun,
+              contentDraftInput(
+                { authorization: state.authorization, planKey: facts.planKey, retention: facts },
+                paused.step.arguments,
+                paused.idempotencyKey,
+              ),
+            ),
+        });
 
         // PR A (D-605) — a confirmed image starts now that its job row is committed.
         for (const call of outcome.toolCalls) {

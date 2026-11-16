@@ -47,7 +47,7 @@ export {
 } from './policy';
 export type { CopilotCatalogueReader, CopilotPolicy } from './policy';
 
-export { TOOL_EXECUTORS, buildPreview } from './executors';
+export { TOOL_EXECUTORS, buildPreview, contentDraftInput, contentDraftResult } from './executors';
 export type {
   ExecutorContext,
   ExecutorResult,
@@ -62,11 +62,14 @@ export type {
 } from './executors';
 
 export { CopilotPlanService } from './plans';
+export { runConfirmedPlan, type ConfirmRunServices } from './confirm-run';
 export type {
   CopilotDenialSink,
   CreatedPlan,
   EntitlementGate,
   ExecutionResult,
+  ExecutionState,
+  PausedStep,
   PlanServiceOptions,
   ProposedStep,
   StoredStep,
